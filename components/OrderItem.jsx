@@ -55,11 +55,13 @@ const OrderItem = ({ order }) => {
 
                 <td className="text-left space-y-2 text-sm max-md:hidden">
                     <div
-                        className={`flex items-center justify-center gap-1 rounded-full p-1 ${order.status === 'confirmed'
+                        className={`flex items-center justify-center gap-1 rounded-full p-1 ${order.status === 'PROCESSING'
                             ? 'text-yellow-500 bg-yellow-100'
-                            : order.status === 'delivered'
+                            : order.status === 'DELIVERED'
                                 ? 'text-green-500 bg-green-100'
-                                : 'text-slate-500 bg-slate-100'
+                                : order.status === 'SHIPPED'
+                                    ? 'text-blue-500 bg-blue-100'
+                                    : 'text-slate-500 bg-slate-100'
                             }`}
                     >
                         <DotIcon size={10} className="scale-250" />

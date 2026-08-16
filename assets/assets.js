@@ -50,7 +50,6 @@ export const productDummyData = [
         price: 24,
         images: [product_img1, product_img2, product_img3, product_img4],
         category: "Decoration",
-
         inStock: true,
 
         rating: dummyRatingsData,
@@ -64,7 +63,6 @@ export const productDummyData = [
         mrp: 50,
         price: 35,
         images: [product_img2],
-
         inStock: true,
 
         category: "Speakers",
@@ -232,7 +230,7 @@ export const couponDummyData = [
     { code: "NEW10", description: "10% Off for New Users", discount: 10, forNewUser: true, forMember: false, isPublic: false, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:35:50.653Z" },
     { code: "OFF20", description: "20% Off for All Users", discount: 20, forNewUser: false, forMember: false, isPublic: false, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:42:00.811Z" },
     { code: "OFF10", description: "10% Off for All Users", discount: 10, forNewUser: false, forMember: false, isPublic: false, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:42:21.279Z" },
-    { code: "PLUS10", description: "20% Off for Members", discount: 10, forNewUser: false, forMember: true, isPublic: false, expiresAt: "2027-03-06T00:00:00.000Z", createdAt: "2025-08-22T11:38:20.194Z" }
+    { code: "PLUS10", description: "10% Off for Members", discount: 10, forNewUser: false, forMember: true, isPublic: false, expiresAt: "2027-03-06T00:00:00.000Z", createdAt: "2025-08-22T11:38:20.194Z" }
 ]
 
 export const dummyUserData = {
