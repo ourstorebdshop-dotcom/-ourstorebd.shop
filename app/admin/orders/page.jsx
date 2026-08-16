@@ -1,24 +1,50 @@
 'use client'
+
 import { useEffect, useState } from "react"
 import Loading from "@/components/Loading"
 import { orderDummyData } from "@/assets/assets"
+import toast from "react-hot-toast"
+import { 
+    SearchIcon, 
+    Trash2Icon, 
+    EyeIcon, 
+    XIcon, 
+    ShoppingBagIcon, 
+    CheckCircle2Icon, 
+    ClockIcon, 
+    TruckIcon, 
+    PackageCheckIcon,
+    FilterIcon 
+} from "lucide-react"
 
 export default function AdminOrders() {
     const [orders, setOrders] = useState([])
     const [loading, setLoading] = useState(true)
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
-
+    const [deletingOrderId, setDeletingOrderId] = useState(null)
+    const [search, setSearch] = useState("")
+    const [statusFilter, setStatusFilter] = useState("ALL")
 
     const fetchOrders = async () => {
-       setOrders(orderDummyData)
-       setLoading(false)
+        setOrders(orderDummyData)
+        setLoading(false)
     }
 
-    const updateOrderStatus = async (orderId, status) => {
-        // Logic to update the status of an order
+    const updateOrderStatus = (orderId, newStatus) => {
+        setOrders(prev => prev.map(order => {
+            if (order.id === orderId) {
+                toast.success(`Order status updated to ${newStatus}`)
+                return { ...order, status: newStatus }
+            }
+            return order
+        }))
+    }
 
-
+    const confirmDeleteOrder = () => {
+        setOrders(prev => prev.filter(o => o.id !== deletingOrderId))
+        toast.success("Order deleted successfully!")
+        setDeletingOrderId(null)
     }
 
     const openModal = (order) => {
@@ -37,123 +63,267 @@ export default function AdminOrders() {
 
     if (loading) return <Loading />
 
+    // Filter orders
+    const filteredOrders = orders.filter(order => {
+        const matchesSearch = (order.user?.name || "").toLowerCase().includes(search.toLowerCase()) ||
+                              (order.user?.email || "").toLowerCase().includes(search.toLowerCase()) ||
+                              (order.id || "").toLowerCase().includes(search.toLowerCase())
+        const matchesStatus = statusFilter === "ALL" || order.status === statusFilter
+        return matchesSearch && matchesStatus
+    })
+
+    const getStatusBadge = (status) => {
+        switch (status) {
+            case "DELIVERED":
+                return <span className="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">DELIVERED</span>
+            case "SHIPPED":
+                return <span className="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">SHIPPED</span>
+            case "PROCESSING":
+                return <span className="px-2.5 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">PROCESSING</span>
+            default:
+                return <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-semibold">ORDER PLACED</span>
+        }
+    }
+
     return (
-        <>
-            <h1 className="text-2xl text-slate-500 mb-5">All <span className="text-slate-800 font-medium">Orders</span></h1>
-            {orders.length === 0 ? (
-                <p>No orders found</p>
-            ) : (
-                <div className="overflow-x-auto max-w-4xl rounded-md shadow border border-gray-200">
-                    <table className="w-full text-sm text-left text-gray-600">
-                        <thead className="bg-gray-50 text-gray-700 text-xs uppercase tracking-wider">
-                            <tr>
-                                {["Sr. No.", "Customer", "Total", "Payment", "Coupon", "Status", "Date"].map((heading, i) => (
-                                    <th key={i} className="px-4 py-3">{heading}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {orders.map((order, index) => (
-                                <tr
-                                    key={order.id}
-                                    className="hover:bg-gray-50 transition-colors duration-150 cursor-pointer"
-                                    onClick={() => openModal(order)}
-                                >
-                                    <td className="pl-6 text-green-600" >
-                                        {index + 1}
-                                    </td>
-                                    <td className="px-4 py-3">{order.user?.name}</td>
-                                    <td className="px-4 py-3 font-medium text-slate-800">${order.total}</td>
-                                    <td className="px-4 py-3">{order.paymentMethod}</td>
-                                    <td className="px-4 py-3">
-                                        {order.isCouponUsed ? (
-                                            <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">
-                                                {order.coupon?.code}
-                                            </span>
-                                        ) : (
-                                            "—"
-                                        )}
-                                    </td>
-                                    <td className="px-4 py-3" onClick={(e) => { e.stopPropagation() }}>
-                                        <select
-                                            value={order.status}
-                                            onChange={e => updateOrderStatus(order.id, e.target.value)}
-                                            className="border-gray-300 rounded-md text-sm focus:ring focus:ring-blue-200"
-                                        >
-                                            <option value="ORDER_PLACED">ORDER_PLACED</option>
-                                            <option value="PROCESSING">PROCESSING</option>
-                                            <option value="SHIPPED">SHIPPED</option>
-                                            <option value="DELIVERED">DELIVERED</option>
-                                        </select>
-                                    </td>
-                                    <td className="px-4 py-3 text-gray-500">
-                                        {new Date(order.createdAt).toLocaleString()}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+        <div className="text-slate-700 mb-28 max-w-6xl">
+            {/* Header */}
+            <div className="mb-6">
+                <h1 className="text-2xl sm:text-3xl font-semibold text-slate-800">
+                    All <span className="text-green-600">Orders</span>
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                    Manage customer orders, track delivery status, and inspect order details
+                </p>
+            </div>
+
+            {/* Filter Tabs & Search */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 mb-6 flex flex-col sm:flex-row gap-4 justify-between items-center shadow-xs">
+                <div className="relative w-full sm:w-80">
+                    <SearchIcon size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        placeholder="Search by customer name, email..."
+                        className="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition"
+                    />
+                    {search && (
+                        <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                            <XIcon size={16} />
+                        </button>
+                    )}
                 </div>
-            )}
 
-            {/* Modal */}
+                <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
+                    {["ALL", "ORDER_PLACED", "PROCESSING", "SHIPPED", "DELIVERED"].map((status) => (
+                        <button
+                            key={status}
+                            onClick={() => setStatusFilter(status)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap ${
+                                statusFilter === status
+                                    ? "bg-slate-800 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                        >
+                            {status === "ALL" ? "All Orders" : status.replace("_", " ")}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Orders Table */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
+                {filteredOrders.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400">
+                        No orders match your filter criteria.
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm text-left text-slate-600">
+                            <thead className="bg-slate-50 text-slate-700 text-xs uppercase tracking-wider border-b border-slate-200">
+                                <tr>
+                                    <th className="px-4 py-3.5">#</th>
+                                    <th className="px-4 py-3.5">Customer</th>
+                                    <th className="px-4 py-3.5">Total Amount</th>
+                                    <th className="px-4 py-3.5">Payment</th>
+                                    <th className="px-4 py-3.5">Coupon</th>
+                                    <th className="px-4 py-3.5">Status</th>
+                                    <th className="px-4 py-3.5">Date</th>
+                                    <th className="px-4 py-3.5 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {filteredOrders.map((order, index) => (
+                                    <tr
+                                        key={order.id}
+                                        className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                                        onClick={() => openModal(order)}
+                                    >
+                                        <td className="px-4 py-4 font-bold text-green-600">
+                                            {index + 1}
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <p className="font-semibold text-slate-800">{order.user?.name}</p>
+                                            <p className="text-xs text-slate-400">{order.user?.email}</p>
+                                        </td>
+                                        <td className="px-4 py-4 font-bold text-slate-800">
+                                            ${order.total}
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-semibold rounded">
+                                                {order.paymentMethod}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            {order.isCouponUsed ? (
+                                                <span className="bg-green-100 text-green-700 text-xs px-2.5 py-1 rounded-full font-mono font-semibold">
+                                                    {order.coupon?.code}
+                                                </span>
+                                            ) : (
+                                                "—"
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                                            <select
+                                                value={order.status}
+                                                onChange={(e) => updateOrderStatus(order.id, e.target.value)}
+                                                className="border border-slate-200 rounded-lg text-xs py-1.5 px-2 font-medium bg-white focus:ring-2 focus:ring-green-100 outline-none"
+                                            >
+                                                <option value="ORDER_PLACED">ORDER PLACED</option>
+                                                <option value="PROCESSING">PROCESSING</option>
+                                                <option value="SHIPPED">SHIPPED</option>
+                                                <option value="DELIVERED">DELIVERED</option>
+                                            </select>
+                                        </td>
+                                        <td className="px-4 py-4 text-xs text-slate-400">
+                                            {new Date(order.createdAt).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
+                                            <div className="flex items-center justify-center gap-1">
+                                                <button
+                                                    onClick={() => openModal(order)}
+                                                    className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                                                    title="View Details"
+                                                >
+                                                    <EyeIcon size={17} />
+                                                </button>
+                                                <button
+                                                    onClick={() => setDeletingOrderId(order.id)}
+                                                    className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition"
+                                                    title="Delete Order"
+                                                >
+                                                    <Trash2Icon size={17} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {/* ORDER DETAILS MODAL */}
             {isModalOpen && selectedOrder && (
-                <div onClick={closeModal} className="fixed inset-0 flex items-center justify-center bg-black/50 text-slate-700 text-sm backdrop-blur-xs z-50" >
-                    <div onClick={e => e.stopPropagation()} className="bg-white rounded-lg shadow-lg max-w-2xl w-full p-6 relative">
-                        <h2 className="text-xl font-semibold text-slate-900 mb-4 text-center">
-                            Order Details
-                        </h2>
+                <div onClick={closeModal} className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+                    <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-2xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
+                        <button onClick={closeModal} className="absolute right-4 top-4 p-1 text-slate-400 hover:text-slate-600 rounded-lg">
+                            <XIcon size={20} />
+                        </button>
 
-                        {/* Customer Details */}
-                        <div className="mb-4">
-                            <h3 className="font-semibold mb-2">Customer Details</h3>
-                            <p><span className="text-green-700">Name:</span> {selectedOrder.user?.name}</p>
-                            <p><span className="text-green-700">Email:</span> {selectedOrder.user?.email}</p>
-                            <p><span className="text-green-700">Phone:</span> {selectedOrder.address?.phone}</p>
-                            <p><span className="text-green-700">Address:</span> {`${selectedOrder.address?.street}, ${selectedOrder.address?.city}, ${selectedOrder.address?.state}, ${selectedOrder.address?.zip}, ${selectedOrder.address?.country}`}</p>
+                        <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-800">Order Details</h2>
+                                <p className="text-xs text-slate-400">ID: {selectedOrder.id}</p>
+                            </div>
+                            {getStatusBadge(selectedOrder.status)}
                         </div>
 
-                        {/* Products */}
+                        {/* Customer & Address Details */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl mb-4 text-xs">
+                            <div>
+                                <h3 className="font-semibold text-slate-800 mb-1.5 text-sm">Customer Info</h3>
+                                <p><strong className="text-slate-700">Name:</strong> {selectedOrder.user?.name}</p>
+                                <p><strong className="text-slate-700">Email:</strong> {selectedOrder.user?.email}</p>
+                                <p><strong className="text-slate-700">Phone:</strong> {selectedOrder.address?.phone}</p>
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-slate-800 mb-1.5 text-sm">Shipping Address</h3>
+                                <p className="text-slate-600 leading-relaxed">
+                                    {selectedOrder.address?.street}, {selectedOrder.address?.city}, {selectedOrder.address?.state} {selectedOrder.address?.zip}, {selectedOrder.address?.country}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Ordered Items */}
                         <div className="mb-4">
-                            <h3 className="font-semibold mb-2">Products</h3>
+                            <h3 className="font-semibold text-slate-800 mb-3 text-sm">Ordered Products</h3>
                             <div className="space-y-2">
                                 {selectedOrder.orderItems.map((item, i) => (
-                                    <div key={i} className="flex items-center gap-4 border border-slate-100 shadow rounded p-2">
+                                    <div key={i} className="flex items-center gap-3 border border-slate-200 rounded-xl p-3 bg-white">
                                         <img
-                                            src={item.product.images?.[0].src || item.product.images?.[0]}
+                                            src={item.product?.images?.[0]?.src || item.product?.images?.[0]}
                                             alt={item.product?.name}
-                                            className="w-16 h-16 object-cover rounded"
+                                            className="w-14 h-14 object-cover rounded-lg border border-slate-100 shrink-0"
                                         />
                                         <div className="flex-1">
-                                            <p className="text-slate-800">{item.product?.name}</p>
-                                            <p>Qty: {item.quantity}</p>
-                                            <p>Price: ${item.price}</p>
+                                            <p className="font-semibold text-slate-800 text-sm">{item.product?.name}</p>
+                                            <p className="text-xs text-slate-400">Quantity: {item.quantity}</p>
+                                        </div>
+                                        <div className="text-right font-bold text-slate-800 text-sm">
+                                            ${item.price}
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Payment & Status */}
-                        <div className="mb-4">
-                            <p><span className="text-green-700">Payment Method:</span> {selectedOrder.paymentMethod}</p>
-                            <p><span className="text-green-700">Paid:</span> {selectedOrder.isPaid ? "Yes" : "No"}</p>
-                            {selectedOrder.isCouponUsed && (
-                                <p><span className="text-green-700">Coupon:</span> {selectedOrder.coupon.code} ({selectedOrder.coupon.discount}% off)</p>
-                            )}
-                            <p><span className="text-green-700">Status:</span> {selectedOrder.status}</p>
-                            <p><span className="text-green-700">Order Date:</span> {new Date(selectedOrder.createdAt).toLocaleString()}</p>
+                        {/* Summary & Actions */}
+                        <div className="flex justify-between items-center pt-4 border-t border-slate-100 text-sm">
+                            <div>
+                                <p className="text-xs text-slate-500">Payment: <span className="font-bold text-slate-700">{selectedOrder.paymentMethod}</span></p>
+                                <p className="text-xs text-slate-500">Order Date: <span className="text-slate-700">{new Date(selectedOrder.createdAt).toLocaleDateString()}</span></p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xs text-slate-400">Total Amount</p>
+                                <p className="text-2xl font-bold text-green-600">${selectedOrder.total}</p>
+                            </div>
                         </div>
+                    </div>
+                </div>
+            )}
 
-                        {/* Actions */}
-                        <div className="flex justify-end">
-                            <button onClick={closeModal} className="px-4 py-2 bg-slate-200 rounded hover:bg-slate-300" >
-                                Close
+            {/* DELETE CONFIRMATION MODAL */}
+            {deletingOrderId && (
+                <div onClick={() => setDeletingOrderId(null)} className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+                    <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-sm w-full p-6 text-center">
+                        <div className="w-12 h-12 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Trash2Icon size={24} />
+                        </div>
+                        <h3 className="text-lg font-bold text-slate-800">Delete Order?</h3>
+                        <p className="text-sm text-slate-500 mt-2">
+                            Are you sure you want to delete this order?
+                        </p>
+
+                        <div className="flex gap-3 justify-center mt-6">
+                            <button
+                                onClick={() => setDeletingOrderId(null)}
+                                className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDeleteOrder}
+                                className="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition shadow-xs"
+                            >
+                                Delete
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-        </>
+        </div>
     )
 }
