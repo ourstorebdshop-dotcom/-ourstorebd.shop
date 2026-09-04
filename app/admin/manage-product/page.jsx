@@ -1,10 +1,9 @@
 'use client'
-
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { toast } from "react-hot-toast"
 import Image from "next/image"
-import Loading from "@/components/Loading"
-import { productDummyData } from "@/assets/assets"
+import { useDispatch, useSelector } from "react-redux"
+import { updateProduct, deleteProduct as deleteProductAction, toggleProductStock } from "@/lib/features/product/productSlice"
 import { 
     SearchIcon, 
     PencilIcon, 
@@ -16,14 +15,24 @@ import {
     ShoppingBagIcon,
     CheckCircle2Icon,
     XCircleIcon,
-    TagIcon
+    TagIcon,
+    CheckIcon,
+    Clock,
+    TrendingUp
 } from "lucide-react"
 
 export default function AdminManageProducts() {
-    const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '$'
+    const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
+    const dispatch = useDispatch()
+    const products = useSelector(state => state.product.list)
 
-    const [loading, setLoading] = useState(true)
-    const [products, setProducts] = useState([])
+    // Dynamic categories from Redux store
+    const reduxCategories = useSelector(state => state.category?.categories || [])
+    const categoryList = [...reduxCategories]
+        .filter(c => c.visible)
+        .sort((a, b) => a.order - b.order)
+        .map(c => c.name)
+
     const [search, setSearch] = useState("")
     const [selectedCategory, setSelectedCategory] = useState("All")
 
@@ -32,52 +41,77 @@ export default function AdminManageProducts() {
     const [viewingProduct, setViewingProduct] = useState(null)
     const [deletingProductId, setDeletingProductId] = useState(null)
 
-    const categories = ["All", ...new Set(productDummyData.map(p => p.category))]
-
-    const fetchProducts = async () => {
-        setProducts(productDummyData)
-        setLoading(false)
-    }
+    const categories = ["All", ...new Set(products.flatMap(p => {
+        if (p.categories && Array.isArray(p.categories) && p.categories.length > 0) return p.categories
+        if (p.category) return [p.category]
+        return []
+    }))]
 
     // Toggle product stock
     const toggleStock = (productId) => {
-        setProducts(prev => prev.map(p => {
-            if (p.id === productId) {
-                const updated = !p.inStock
-                toast.success(`Product "${p.name}" marked as ${updated ? 'In Stock' : 'Out of Stock'}`)
-                return { ...p, inStock: updated }
-            }
-            return p
-        }))
+        const p = products.find(p => p.id === productId)
+        dispatch(toggleProductStock(productId))
+        toast.success(`Product "${p?.name}" marked as ${!p?.inStock ? 'In Stock' : 'Out of Stock'}`)
     }
 
     // Handle Edit Submit
     const handleEditSubmit = (e) => {
         e.preventDefault()
-        setProducts(prev => prev.map(p => p.id === editingProduct.id ? editingProduct : p))
-        toast.success(`"${editingProduct.name}" updated successfully!`)
+
+        const mrpVal = parseFloat(editingProduct.mrp)
+        const priceVal = parseFloat(editingProduct.price)
+
+        if (!mrpVal || mrpVal <= 0) {
+            toast.error('সঠিক Actual Price দিন')
+            return
+        }
+        if (!priceVal || priceVal <= 0) {
+            toast.error('সঠিক Offer Price দিন')
+            return
+        }
+        if (priceVal > mrpVal) {
+            toast.error('Offer Price, Actual Price-এর চেয়ে বেশি হতে পারে না')
+            return
+        }
+
+        const editedCategories = editingProduct.categories || (editingProduct.category ? [editingProduct.category] : [])
+        if (editedCategories.length === 0) {
+            toast.error('অন্তত একটি ক্যাটাগরি সিলেক্ট করুন')
+            return
+        }
+
+        if (!editingProduct.name.trim()) {
+            toast.error('প্রোডাক্টের নাম দিন')
+            return
+        }
+
+        dispatch(updateProduct({
+            ...editingProduct,
+            name: editingProduct.name.trim(),
+            description: editingProduct.description.trim(),
+            mrp: mrpVal,
+            price: priceVal,
+            categories: editedCategories,
+            category: editedCategories[0] || '',
+            updatedAt: new Date().toISOString()
+        }))
+        toast.success(`"${editingProduct.name}" সফলভাবে আপডেট হয়েছে!`)
         setEditingProduct(null)
     }
 
     // Handle Delete Confirm
     const handleDeleteConfirm = () => {
         const prod = products.find(p => p.id === deletingProductId)
-        setProducts(prev => prev.filter(p => p.id !== deletingProductId))
+        dispatch(deleteProductAction(deletingProductId))
         toast.success(`Product "${prod?.name || ''}" deleted successfully!`)
         setDeletingProductId(null)
     }
 
-    useEffect(() => {
-        fetchProducts()
-    }, [])
-
-    if (loading) return <Loading />
-
     // Filter products
     const filteredProducts = products.filter(p => {
-        const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase()) || 
-                              p.description.toLowerCase().includes(search.toLowerCase())
-        const matchesCategory = selectedCategory === "All" || p.category === selectedCategory
+        const matchesSearch = p.name?.toLowerCase().includes(search.toLowerCase()) || 
+                              p.description?.toLowerCase().includes(search.toLowerCase())
+        const matchesCategory = selectedCategory === "All" || (p.categories && Array.isArray(p.categories) ? p.categories.includes(selectedCategory) : p.category === selectedCategory)
         return matchesSearch && matchesCategory
     })
 
@@ -198,8 +232,8 @@ export default function AdminManageProducts() {
                                                     width={48}
                                                     height={48}
                                                     className="w-12 h-12 object-cover border border-slate-200 rounded-lg p-1 shrink-0 bg-slate-50"
-                                                    src={product.images[0]}
-                                                    alt={product.name}
+                                                    src={product.images?.[0] || '/placeholder.png'}
+                                                    alt={product.name || 'Product'}
                                                 />
                                                 <div>
                                                     <p className="font-semibold text-slate-800">{product.name}</p>
@@ -208,9 +242,13 @@ export default function AdminManageProducts() {
                                             </div>
                                         </td>
                                         <td className="px-5 py-4 hidden md:table-cell">
-                                            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-medium">
-                                                {product.category}
-                                            </span>
+                                            <div className="flex flex-wrap gap-1">
+                                                {(product.categories && Array.isArray(product.categories) ? product.categories : [product.category]).map(cat => (
+                                                    <span key={cat} className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[11px] font-medium">
+                                                        {cat}
+                                                    </span>
+                                                ))}
+                                            </div>
                                         </td>
                                         <td className="px-5 py-4 hidden md:table-cell text-slate-400 line-through">
                                             {currency} {product.mrp?.toLocaleString()}
@@ -264,7 +302,7 @@ export default function AdminManageProducts() {
                             ) : (
                                 <tr>
                                     <td colSpan={6} className="text-center py-12 text-slate-400">
-                                        No products match your search/filter criteria.
+                                        কোনো প্রোডাক্ট পাওয়া যায়নি। অন্য কিওয়ার্ড দিয়ে অনুসন্ধান করুন।
                                     </td>
                                 </tr>
                             )}
@@ -276,7 +314,7 @@ export default function AdminManageProducts() {
             {/* EDIT PRODUCT MODAL */}
             {editingProduct && (
                 <div onClick={() => setEditingProduct(null)} className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-                    <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-lg w-full p-6 relative animate-in fade-in zoom-in-95 duration-150">
+                    <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-lg w-full p-6 relative animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
                         <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
                             <h3 className="text-lg font-bold text-slate-800">Edit Product</h3>
                             <button onClick={() => setEditingProduct(null)} className="p-1 text-slate-400 hover:text-slate-600 rounded-lg">
@@ -330,15 +368,106 @@ export default function AdminManageProducts() {
                                 </div>
                             </div>
 
+                            {/* Homepage Section Selection */}
                             <div>
-                                <label className="block font-medium text-slate-700 mb-1">Category</label>
-                                <input
-                                    type="text"
-                                    value={editingProduct.category}
-                                    onChange={(e) => setEditingProduct({ ...editingProduct, category: e.target.value })}
-                                    className="w-full px-3.5 py-2 border border-slate-200 rounded-lg outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100"
-                                    required
-                                />
+                                <label className="block font-medium text-slate-700 mb-2">হোমপেজ সেকশন</label>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const sections = editingProduct.sections || []
+                                            const updated = sections.includes('latest')
+                                                ? sections.filter(s => s !== 'latest')
+                                                : [...sections, 'latest']
+                                            setEditingProduct({ ...editingProduct, sections: updated })
+                                        }}
+                                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer border ${
+                                            (editingProduct.sections || []).includes('latest')
+                                                ? 'bg-blue-50 border-blue-300 text-blue-700 shadow-sm'
+                                                : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                                        }`}
+                                    >
+                                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                                            (editingProduct.sections || []).includes('latest') ? 'bg-blue-600 border-blue-600' : 'border-slate-300'
+                                        }`}>
+                                            {(editingProduct.sections || []).includes('latest') && <CheckIcon size={10} className="text-white" strokeWidth={3} />}
+                                        </div>
+                                        <Clock size={13} />
+                                        Latest Products
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const sections = editingProduct.sections || []
+                                            const updated = sections.includes('bestSelling')
+                                                ? sections.filter(s => s !== 'bestSelling')
+                                                : [...sections, 'bestSelling']
+                                            setEditingProduct({ ...editingProduct, sections: updated })
+                                        }}
+                                        className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer border ${
+                                            (editingProduct.sections || []).includes('bestSelling')
+                                                ? 'bg-orange-50 border-orange-300 text-orange-700 shadow-sm'
+                                                : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
+                                        }`}
+                                    >
+                                        <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-all ${
+                                            (editingProduct.sections || []).includes('bestSelling') ? 'bg-orange-500 border-orange-500' : 'border-slate-300'
+                                        }`}>
+                                            {(editingProduct.sections || []).includes('bestSelling') && <CheckIcon size={10} className="text-white" strokeWidth={3} />}
+                                        </div>
+                                        <TrendingUp size={13} />
+                                        Best Selling
+                                    </button>
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-1.5">হোমপেজের কোন সেকশনে দেখাবে সিলেক্ট করুন</p>
+                            </div>
+
+                            {/* Multi-Category Selection */}
+                            <div>
+                                <label className="block font-medium text-slate-700 mb-2">
+                                    ক্যাটাগরি সিলেক্ট করুন
+                                    {(editingProduct.categories || []).length > 0 && (
+                                        <span className="ml-2 text-[10px] font-normal text-green-600 bg-green-50 px-1.5 py-0.5 rounded-full">
+                                            {(editingProduct.categories || []).length}টি
+                                        </span>
+                                    )}
+                                </label>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {categoryList.map((catName) => {
+                                        const cats = editingProduct.categories || (editingProduct.category ? [editingProduct.category] : [])
+                                        const isSelected = cats.includes(catName)
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={catName}
+                                                onClick={() => {
+                                                    const currentCats = editingProduct.categories || (editingProduct.category ? [editingProduct.category] : [])
+                                                    const updatedCats = isSelected
+                                                        ? currentCats.filter(c => c !== catName)
+                                                        : [...currentCats, catName]
+                                                    setEditingProduct({
+                                                        ...editingProduct,
+                                                        categories: updatedCats,
+                                                        category: updatedCats[0] || ''
+                                                    })
+                                                }}
+                                                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 cursor-pointer border ${
+                                                    isSelected
+                                                        ? 'bg-green-50 border-green-400 text-green-700 shadow-sm'
+                                                        : 'bg-white border-slate-200 text-slate-500 hover:border-green-300'
+                                                }`}
+                                            >
+                                                <div className={`w-3.5 h-3.5 rounded border-[1.5px] flex items-center justify-center transition-all shrink-0 ${
+                                                    isSelected ? 'bg-green-600 border-green-600' : 'border-slate-300'
+                                                }`}>
+                                                    {isSelected && <CheckIcon size={9} className="text-white" strokeWidth={3} />}
+                                                </div>
+                                                {catName}
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-1.5">একাধিক ক্যাটাগরি সিলেক্ট করতে পারবেন</p>
                             </div>
 
                             <div className="flex items-center gap-3 pt-2">
@@ -352,6 +481,70 @@ export default function AdminManageProducts() {
                                     <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
                                 </label>
                                 <span className="text-sm font-medium text-slate-700">In Stock Available</span>
+                            </div>
+
+                            {/* Colors Edit */}
+                            <div>
+                                <label className="block font-medium text-slate-700 mb-1">Colors</label>
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                    {(editingProduct.colors || []).map((color) => (
+                                        <span key={color} className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-full pl-1 pr-1.5 py-0.5">
+                                            <span className="w-4 h-4 rounded-full border border-slate-300" style={{ backgroundColor: color }} />
+                                            <button type="button" onClick={() => setEditingProduct({ ...editingProduct, colors: (editingProduct.colors || []).filter(c => c !== color) })} className="text-slate-400 hover:text-red-500">
+                                                <XIcon size={12} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input type="color" id="editColorPicker" defaultValue="#000000" className="w-8 h-8 rounded cursor-pointer border border-slate-200 p-0.5" />
+                                    <button type="button" onClick={() => {
+                                        const picker = document.getElementById('editColorPicker')
+                                        const color = picker.value
+                                        if (!(editingProduct.colors || []).includes(color)) {
+                                            setEditingProduct({ ...editingProduct, colors: [...(editingProduct.colors || []), color] })
+                                        }
+                                    }} className="text-xs bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-900 transition flex items-center gap-1">
+                                        <PlusIcon size={12} /> Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Sizes Edit */}
+                            <div>
+                                <label className="block font-medium text-slate-700 mb-1">Sizes</label>
+                                <div className="flex flex-wrap gap-1.5 mb-2">
+                                    {(editingProduct.sizes || []).map((size) => (
+                                        <span key={size} className="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-full px-2 py-0.5 text-xs">
+                                            {size}
+                                            <button type="button" onClick={() => setEditingProduct({ ...editingProduct, sizes: (editingProduct.sizes || []).filter(s => s !== size) })} className="text-slate-400 hover:text-red-500">
+                                                <XIcon size={12} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input type="text" id="editSizeInput" placeholder="e.g. S, M, L" className="w-32 px-2 py-1 text-xs border border-slate-200 rounded-lg outline-none" onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault()
+                                            const val = e.target.value.trim()
+                                            if (val && !(editingProduct.sizes || []).includes(val)) {
+                                                setEditingProduct({ ...editingProduct, sizes: [...(editingProduct.sizes || []), val] })
+                                                e.target.value = ''
+                                            }
+                                        }
+                                    }} />
+                                    <button type="button" onClick={() => {
+                                        const input = document.getElementById('editSizeInput')
+                                        const val = input.value.trim()
+                                        if (val && !(editingProduct.sizes || []).includes(val)) {
+                                            setEditingProduct({ ...editingProduct, sizes: [...(editingProduct.sizes || []), val] })
+                                            input.value = ''
+                                        }
+                                    }} className="text-xs bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-900 transition flex items-center gap-1">
+                                        <PlusIcon size={12} /> Add
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
@@ -386,32 +579,95 @@ export default function AdminManageProducts() {
                             <Image
                                 width={80}
                                 height={80}
-                                src={viewingProduct.images[0]}
-                                alt={viewingProduct.name}
+                                src={viewingProduct.images?.[0] || '/placeholder.png'}
+                                alt={viewingProduct.name || 'Product'}
                                 className="w-20 h-20 object-cover border border-slate-200 rounded-xl p-1 bg-slate-50 shrink-0"
                             />
                             <div>
-                                <span className="px-2.5 py-0.5 bg-green-50 text-green-700 rounded-full text-xs font-semibold">
-                                    {viewingProduct.category}
-                                </span>
-                                <h3 className="text-xl font-bold text-slate-800 mt-1">{viewingProduct.name}</h3>
+                                <div className="flex flex-wrap gap-1 mb-1">
+                                    {(viewingProduct.categories && Array.isArray(viewingProduct.categories) && viewingProduct.categories.length > 0
+                                        ? viewingProduct.categories
+                                        : [viewingProduct.category]
+                                    ).filter(Boolean).map(cat => (
+                                        <span key={cat} className="px-2 py-0.5 bg-green-50 text-green-700 rounded-full text-[11px] font-semibold">
+                                            {cat}
+                                        </span>
+                                    ))}
+                                </div>
+                                <h3 className="text-xl font-bold text-slate-800">{viewingProduct.name}</h3>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <span className="text-lg font-bold text-slate-800">{currency} {viewingProduct.price}</span>
-                                    <span className="text-sm text-slate-400 line-through">{currency} {viewingProduct.mrp}</span>
+                                    <span className="text-lg font-bold text-slate-800">{currency} {viewingProduct.price?.toLocaleString()}</span>
+                                    {viewingProduct.mrp && viewingProduct.mrp > viewingProduct.price && (
+                                        <span className="text-sm text-slate-400 line-through">{currency} {viewingProduct.mrp?.toLocaleString()}</span>
+                                    )}
                                 </div>
                             </div>
                         </div>
 
                         <div className="space-y-3 border-t border-slate-100 pt-4 text-sm">
+                            {/* Homepage Sections */}
+                            {viewingProduct.sections && viewingProduct.sections.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-slate-500 shrink-0">সেকশন:</span>
+                                    <div className="flex gap-1.5">
+                                        {viewingProduct.sections.includes('latest') && (
+                                            <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[11px] font-medium">
+                                                <Clock size={10} /> Latest
+                                            </span>
+                                        )}
+                                        {viewingProduct.sections.includes('bestSelling') && (
+                                            <span className="flex items-center gap-1 px-2 py-0.5 bg-orange-50 text-orange-700 rounded-full text-[11px] font-medium">
+                                                <TrendingUp size={10} /> Best Selling
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                             <div>
                                 <p className="font-semibold text-slate-700 mb-1">Description:</p>
                                 <p className="text-slate-600 leading-relaxed">{viewingProduct.description}</p>
                             </div>
+                            {viewingProduct.colors && viewingProduct.colors.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-slate-500">Colors:</span>
+                                    <div className="flex gap-1.5">
+                                        {viewingProduct.colors.map(c => (
+                                            <span key={c} className="w-5 h-5 rounded-full border border-slate-300" style={{ backgroundColor: c }} title={c} />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {viewingProduct.sizes && viewingProduct.sizes.length > 0 && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-slate-500">Sizes:</span>
+                                    <div className="flex gap-1.5">
+                                        {viewingProduct.sizes.map(s => (
+                                            <span key={s} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{s}</span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             <div className="flex justify-between items-center pt-2">
                                 <span className="text-slate-500">Stock Status:</span>
                                 <span className={`font-semibold ${viewingProduct.inStock ? 'text-green-600' : 'text-red-500'}`}>
-                                    {viewingProduct.inStock ? 'In Stock' : 'Out of Stock'}
+                                    {viewingProduct.inStock ? 'In Stock ✅' : 'Out of Stock ❌'}
                                 </span>
+                            </div>
+                            {/* Created / Updated timestamps */}
+                            <div className="flex flex-col gap-1 pt-2 border-t border-slate-50 text-xs text-slate-400">
+                                {viewingProduct.createdAt && (
+                                    <div className="flex justify-between">
+                                        <span>তৈরি হয়েছে:</span>
+                                        <span>{new Date(viewingProduct.createdAt).toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                    </div>
+                                )}
+                                {viewingProduct.updatedAt && (
+                                    <div className="flex justify-between">
+                                        <span>আপডেট হয়েছে:</span>
+                                        <span>{new Date(viewingProduct.updatedAt).toLocaleDateString('bn-BD', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
@@ -435,7 +691,25 @@ export default function AdminManageProducts() {
                             <Trash2Icon size={24} />
                         </div>
                         <h3 className="text-lg font-bold text-slate-800">Delete Product?</h3>
-                        <p className="text-sm text-slate-500 mt-2">
+                        {(() => {
+                            const delProd = products.find(p => p.id === deletingProductId)
+                            return delProd ? (
+                                <div className="flex items-center gap-3 mt-3 p-3 bg-slate-50 rounded-xl border border-slate-200 text-left">
+                                    <Image
+                                        width={40}
+                                        height={40}
+                                        src={delProd.images?.[0] || '/placeholder.png'}
+                                        alt={delProd.name || 'Product'}
+                                        className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0"
+                                    />
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-slate-800 truncate">{delProd.name}</p>
+                                        <p className="text-xs text-slate-400">{currency} {delProd.price?.toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            ) : null
+                        })()}
+                        <p className="text-sm text-slate-500 mt-3">
                             Are you sure you want to delete this product? This action cannot be undone.
                         </p>
 

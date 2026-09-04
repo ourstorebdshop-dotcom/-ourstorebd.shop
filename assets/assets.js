@@ -50,6 +50,8 @@ export const productDummyData = [
         price: 24,
         images: [product_img1, product_img2, product_img3, product_img4],
         category: "Decoration",
+        colors: ["#1a1a2e", "#c9a96e", "#e8e8e8", "#4a6741"],
+        sizes: [],
         inStock: true,
 
         rating: dummyRatingsData,
@@ -66,6 +68,8 @@ export const productDummyData = [
         inStock: true,
 
         category: "Speakers",
+        colors: ["#6b7280", "#1f2937", "#f9fafb"],
+        sizes: [],
         rating: dummyRatingsData,
         createdAt: 'Sat Jul 28 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 28 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -79,6 +83,8 @@ export const productDummyData = [
         images: [product_img3],
         inStock: true,
         category: "Watch",
+        colors: ["#f9fafb", "#1f2937", "#dc2626"],
+        sizes: ["38mm", "42mm", "44mm"],
         rating: dummyRatingsData,
         createdAt: 'Sat Jul 27 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 27 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -92,6 +98,8 @@ export const productDummyData = [
         images: [product_img4],
         inStock: true,
         category: "Headphones",
+        colors: ["#1f2937", "#f9fafb", "#3b82f6"],
+        sizes: [],
         rating: dummyRatingsData,
         createdAt: 'Sat Jul 26 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 26 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -105,6 +113,8 @@ export const productDummyData = [
         images: [product_img5],
         inStock: true,
         category: "Watch",
+        colors: ["#1f2937", "#6b7280", "#c9a96e"],
+        sizes: ["40mm", "44mm"],
         rating: [...dummyRatingsData,...dummyRatingsData],
         createdAt: 'Sat Jul 25 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 25 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -118,6 +128,8 @@ export const productDummyData = [
         images: [product_img6],
         inStock: true,
         category: "Camera",
+        colors: ["#f9fafb", "#1f2937"],
+        sizes: [],
         rating: [...dummyRatingsData,...dummyRatingsData],
         createdAt: 'Sat Jul 25 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 25 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -131,6 +143,8 @@ export const productDummyData = [
         images: [product_img7],
         inStock: true,
         category: "Pen",
+        colors: ["#f9fafb", "#1f2937"],
+        sizes: [],
         rating: [...dummyRatingsData,...dummyRatingsData],
         createdAt: 'Sat Jul 24 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 24 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -145,6 +159,8 @@ export const productDummyData = [
 
         inStock: true,
         category: "Theater",
+        colors: ["#1f2937"],
+        sizes: [],
         rating: [...dummyRatingsData,...dummyRatingsData],
         createdAt: 'Sat Jul 23 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 23 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -159,6 +175,8 @@ export const productDummyData = [
 
         inStock: true,
         category: "Earbuds",
+        colors: ["#f9fafb", "#1f2937", "#fbbf24"],
+        sizes: [],
         rating: [...dummyRatingsData,...dummyRatingsData],
         createdAt: 'Sat Jul 22 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 22 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -173,6 +191,8 @@ export const productDummyData = [
 
         inStock: true,
         category: "Watch",
+        colors: ["#1f2937", "#c9a96e", "#e5e7eb", "#dc2626"],
+        sizes: ["40mm", "44mm", "49mm"],
         rating: [...dummyRatingsData,...dummyRatingsData],
         createdAt: 'Sat Jul 21 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 21 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -186,6 +206,8 @@ export const productDummyData = [
         images: [product_img11],
         inStock: true,
         category: "Mouse",
+        colors: ["#1f2937", "#f9fafb"],
+        sizes: [],
         rating: [...dummyRatingsData,...dummyRatingsData],
         createdAt: 'Sat Jul 20 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 20 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -199,6 +221,8 @@ export const productDummyData = [
         images: [product_img12],
         inStock: true,
         category: "Cleaner",
+        colors: ["#f9fafb", "#6b7280"],
+        sizes: [],
         rating: [...dummyRatingsData,...dummyRatingsData],
         createdAt: 'Sat Jul 19 2025 14:51:25 GMT+0530 (India Standard Time)',
         updatedAt: 'Sat Jul 19 2025 14:51:25 GMT+0530 (India Standard Time)',
@@ -226,11 +250,13 @@ export const addressDummyData = {
 }
 
 export const couponDummyData = [
-    { code: "NEW20", description: "20% Off for New Users", discount: 20, forNewUser: true, forMember: false, isPublic: false, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:35:31.183Z" },
-    { code: "NEW10", description: "10% Off for New Users", discount: 10, forNewUser: true, forMember: false, isPublic: false, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:35:50.653Z" },
-    { code: "OFF20", description: "20% Off for All Users", discount: 20, forNewUser: false, forMember: false, isPublic: false, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:42:00.811Z" },
-    { code: "OFF10", description: "10% Off for All Users", discount: 10, forNewUser: false, forMember: false, isPublic: false, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:42:21.279Z" },
-    { code: "PLUS10", description: "10% Off for Members", discount: 10, forNewUser: false, forMember: true, isPublic: false, expiresAt: "2027-03-06T00:00:00.000Z", createdAt: "2025-08-22T11:38:20.194Z" }
+    { code: "NEW20", description: "20% Off for New Users", discount: 20, discountType: "percentage", forNewUser: true, forMember: false, isPublic: false, isActive: true, maxUses: 100, usedCount: 45, maxUsesPerUser: 1, minOrderAmount: 300, maxDiscountAmount: 500, totalSavings: 8925.00, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:35:31.183Z" },
+    { code: "NEW10", description: "10% Off for New Users", discount: 10, discountType: "percentage", forNewUser: true, forMember: false, isPublic: false, isActive: true, maxUses: 200, usedCount: 132, maxUsesPerUser: 1, minOrderAmount: 200, maxDiscountAmount: 300, totalSavings: 12450.00, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:35:50.653Z" },
+    { code: "OFF20", description: "20% Off for All Users", discount: 20, discountType: "percentage", forNewUser: false, forMember: false, isPublic: true, isActive: true, maxUses: 500, usedCount: 287, maxUsesPerUser: 3, minOrderAmount: 500, maxDiscountAmount: 1000, totalSavings: 45200.00, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:42:00.811Z" },
+    { code: "OFF10", description: "10% Off for All Users", discount: 10, discountType: "percentage", forNewUser: false, forMember: false, isPublic: true, isActive: false, maxUses: 300, usedCount: 298, maxUsesPerUser: 2, minOrderAmount: 250, maxDiscountAmount: 400, totalSavings: 31500.00, expiresAt: "2026-12-31T00:00:00.000Z", createdAt: "2025-08-22T08:42:21.279Z" },
+    { code: "PLUS10", description: "10% Off for Members", discount: 10, discountType: "percentage", forNewUser: false, forMember: true, isPublic: false, isActive: true, maxUses: 50, usedCount: 12, maxUsesPerUser: 2, minOrderAmount: 400, maxDiscountAmount: 250, totalSavings: 2800.00, expiresAt: "2027-03-06T00:00:00.000Z", createdAt: "2025-08-22T11:38:20.194Z" },
+    { code: "FLAT15", description: "৳150 Flat Off on Orders", discount: 150, discountType: "fixed", forNewUser: false, forMember: false, isPublic: true, isActive: true, maxUses: 150, usedCount: 67, maxUsesPerUser: 1, minOrderAmount: 600, maxDiscountAmount: 150, totalSavings: 10050.00, expiresAt: "2026-09-30T00:00:00.000Z", createdAt: "2025-09-01T10:00:00.000Z" },
+    { code: "SUMMER25", description: "25% Summer Sale Discount", discount: 25, discountType: "percentage", forNewUser: false, forMember: false, isPublic: true, isActive: false, maxUses: 200, usedCount: 200, maxUsesPerUser: 1, minOrderAmount: 450, maxDiscountAmount: 750, totalSavings: 38000.00, expiresAt: "2025-08-31T00:00:00.000Z", createdAt: "2025-06-01T08:00:00.000Z" }
 ]
 
 export const dummyUserData = {
@@ -256,8 +282,8 @@ export const orderDummyData = [
         isCouponUsed: true,
         coupon: couponDummyData[2],
         orderItems: [
-            { orderId: "cmemm75h5001jtat89016h1p3", productId: "cmemlydnx0017tat8h3rg92hz", quantity: 1, price: 89, product: productDummyData[0], },
-            { orderId: "cmemm75h5001jtat89016h1p3", productId: "cmemlxgnk0015tat84qm8si5v", quantity: 1, price: 149, product: productDummyData[1], }
+            { orderId: "cmemm75h5001jtat89016h1p3", productId: "cmemlydnx0017tat8h3rg92hz", quantity: 1, price: 89, color: "#1a1a2e", size: null, product: productDummyData[0], },
+            { orderId: "cmemm75h5001jtat89016h1p3", productId: "cmemlxgnk0015tat84qm8si5v", quantity: 1, price: 149, color: "#6b7280", size: null, product: productDummyData[1], }
         ],
         address: addressDummyData,
         user: dummyUserData
@@ -276,9 +302,9 @@ export const orderDummyData = [
         isCouponUsed: true,
         coupon: couponDummyData[0],
         orderItems: [
-            { orderId: "cmemm6jv7001htat8vmm3gxaf", productId: "cmemm1f3y001dtat8liccisar", quantity: 1, price: 229, product: productDummyData[2], },
-            { orderId: "cmemm6jv7001htat8vmm3gxaf", productId: "cmemm0nh2001btat8glfvhry1", quantity: 1, price: 99, product: productDummyData[3], },
-            { orderId: "cmemm6jv7001htat8vmm3gxaf", productId: "cmemlz8640019tat8kz7emqca", quantity: 1, price: 199, product: productDummyData[4], }
+            { orderId: "cmemm6jv7001htat8vmm3gxaf", productId: "cmemm1f3y001dtat8liccisar", quantity: 1, price: 229, color: "#f9fafb", size: "42mm", product: productDummyData[2], },
+            { orderId: "cmemm6jv7001htat8vmm3gxaf", productId: "cmemm0nh2001btat8glfvhry1", quantity: 1, price: 99, color: "#1f2937", size: null, product: productDummyData[3], },
+            { orderId: "cmemm6jv7001htat8vmm3gxaf", productId: "cmemlz8640019tat8kz7emqca", quantity: 1, price: 199, color: "#1f2937", size: "44mm", product: productDummyData[4], }
         ],
         address: addressDummyData,
         user: dummyUserData

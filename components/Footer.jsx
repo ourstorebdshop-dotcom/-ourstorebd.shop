@@ -12,66 +12,70 @@ const Footer = () => {
 
     const linkSections = [
         {
-            title: "PRODUCTS",
+            title: "QUICK NAVIGATION",
             links: [
-                { text: "Earphones", path: '/shop', icon: null },
-                { text: "Headphones", path: '/shop', icon: null },
-                { text: "Smartphones", path: '/shop', icon: null },
-                { text: "Laptops", path: '/shop', icon: null },
+                { text: "Home (হোম)", path: '/', icon: null },
+                { text: "Shop All Products (সকল পণ্য)", path: '/shop', icon: null },
+                { text: "About Us (আমাদের সম্পর্কে)", path: '/about', icon: null },
+                { text: "Contact & Helpline (যোগাযোগ)", path: '/contact', icon: null },
+                { text: "Customer Profile (প্রোফাইল)", path: '/profile', icon: null },
+                { text: "Track Order (অর্ডার ট্র্যাকিং)", path: '/profile?tab=orders', icon: null },
             ]
         },
         {
-            title: "QUICK LINKS",
+            title: "CONTACT INFO",
             links: [
-                { text: "Home", path: '/', icon: null },
-                { text: "Privacy Policy", path: '/', icon: null },
-                { text: "Shop", path: '/shop', icon: null },
-                { text: "My Orders", path: '/orders', icon: null },
-            ]
-        },
-        {
-            title: "CONTACT",
-            links: [
-                { text: "+1-212-456-7890", path: 'tel:+12124567890', icon: PhoneIcon },
-                { text: "contact@example.com", path: 'mailto:contact@example.com', icon: MailIcon },
-                { text: "794 Francisco, 94102", path: '/', icon: MapPinIcon }
+                { text: "+880 1712-345678", path: 'tel:+8801712345678', icon: PhoneIcon },
+                { text: "ourstorebd.shop@gmail.com", path: 'mailto:ourstorebd.shop@gmail.com', icon: MailIcon },
+                { text: "Dhanmondi, Dhaka-1209, Bangladesh", path: '/contact', icon: MapPinIcon }
             ]
         }
     ];
 
     const socialIcons = [
-        { icon: FacebookIcon, link: "https://www.facebook.com" },
-        { icon: InstagramIcon, link: "https://www.instagram.com" },
-        { icon: TwitterIcon, link: "https://twitter.com" },
-        { icon: LinkedinIcon, link: "https://www.linkedin.com" },
+        { name: "Facebook", icon: FacebookIcon, link: "https://www.facebook.com" },
+        { name: "Instagram", icon: InstagramIcon, link: "https://www.instagram.com" },
+        { name: "Twitter", icon: TwitterIcon, link: "https://twitter.com" },
+        { name: "LinkedIn", icon: LinkedinIcon, link: "https://www.linkedin.com" },
     ]
 
     return (
-        <footer className="mx-6 bg-white">
-            <div className="max-w-7xl mx-auto">
-                <div className="flex flex-col md:flex-row items-start justify-between gap-10 py-10 border-b border-slate-500/30 text-slate-500">
-                    <div>
-                        <Link href="/" className="text-4xl font-semibold text-slate-700">
-                            <span className="text-green-600">go</span>cart<span className="text-green-600 text-5xl leading-0">.</span>
+        <footer className="bg-white border-t border-slate-100">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6">
+                <div className="flex flex-col md:flex-row items-start justify-between gap-10 py-12 border-b border-slate-200 text-slate-500">
+                    <div className="max-w-md">
+                        <Link href="/" className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">
+                            <span className="text-green-600">Our</span> Store <span className="text-green-600">BD</span>
                         </Link>
-                        <p className="max-w-[410px] mt-6 text-sm">Welcome to gocart, your ultimate destination for the latest and smartest gadgets. From smartphones and smartwatches to essential accessories, we bring you the best in innovation — all in one place.</p>
-                        <div className="flex items-center gap-3 mt-5">
+                        <p className="mt-4 text-xs sm:text-sm text-slate-600 leading-relaxed">
+                            <strong>Our Store BD</strong> is your trusted online electronics and gadgets shop in Bangladesh. We bring you 100% authentic tech products, smartphones, wireless earbuds, smartwatches, and lifestyle audio with fast nationwide home delivery across all 64 districts.
+                        </p>
+                        <div className="flex items-center gap-3 mt-6">
                             {socialIcons.map((item, i) => (
-                                <Link href={item.link} key={i} className="flex items-center justify-center w-10 h-10 bg-slate-100 hover:scale-105 hover:border border-slate-300 transition rounded-full">
+                                <a 
+                                    href={item.link} 
+                                    key={i} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    aria-label={`Visit Our Store BD on ${item.name}`}
+                                    className="flex items-center justify-center w-10 h-10 bg-slate-100 hover:bg-green-50 hover:text-green-600 hover:scale-105 border border-slate-200 transition rounded-full text-slate-500"
+                                >
                                     <item.icon />
-                                </Link>
+                                </a>
                             ))}
                         </div>
                     </div>
-                    <div className="flex flex-wrap justify-between w-full md:w-[45%] gap-5 text-sm ">
+                    <div className="flex flex-wrap justify-between sm:justify-end gap-10 sm:gap-16 w-full md:w-auto text-xs sm:text-sm">
                         {linkSections.map((section, index) => (
-                            <div key={index}>
-                                <h3 className="font-medium text-slate-700 md:mb-5 mb-3">{section.title}</h3>
+                            <div key={index} className="min-w-[130px]">
+                                <h3 className="font-bold text-slate-800 md:mb-4 mb-3 tracking-wide text-xs uppercase">{section.title}</h3>
                                 <ul className="space-y-2.5">
                                     {section.links.map((link, i) => (
                                         <li key={i} className="flex items-center gap-2">
                                             {link.icon && <link.icon />}
-                                            <Link href={link.path} className="hover:underline transition">{link.text}</Link>
+                                            <Link href={link.path} className="text-slate-600 hover:text-green-600 hover:underline transition">
+                                                {link.text}
+                                            </Link>
                                         </li>
                                     ))}
                                 </ul>
@@ -79,9 +83,14 @@ const Footer = () => {
                         ))}
                     </div>
                 </div>
-                <p className="py-4 text-sm text-slate-500">
-                    Copyright {new Date().getFullYear()} © gocart All Right Reserved.
-                </p>
+                <div className="py-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+                    <p>
+                        Copyright {new Date().getFullYear()} © <strong>Our Store BD</strong>. All Rights Reserved. Made for Bangladesh 🇧🇩
+                    </p>
+                    <p className="text-slate-400">
+                        100% Authentic Products • Cash on Delivery • 7-Day Easy Return
+                    </p>
+                </div>
             </div>
         </footer>
     );

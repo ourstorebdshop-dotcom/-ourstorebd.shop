@@ -5,10 +5,10 @@ import { ourSpecsData } from '@/assets/assets'
 const OurSpecs = () => {
 
     return (
-        <div id="specs" className='px-6 my-20 max-w-6xl mx-auto'>
+        <div id="specs" className='px-4 sm:px-6 my-12 sm:my-20 max-w-6xl mx-auto'>
             <Title visibleButton={false} title='Our Specifications' description="We offer top-tier service and convenience to ensure your shopping experience is smooth, secure and completely hassle-free." />
 
-            <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7 gap-y-10 mt-26'>
+            <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-7 gap-y-10 mt-16 sm:mt-26'>
                 {
                     ourSpecsData.map((spec, index) => {
                         return (
