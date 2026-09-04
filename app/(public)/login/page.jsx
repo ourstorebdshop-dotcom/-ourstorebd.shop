@@ -189,22 +189,12 @@ function LoginForm() {
                 id: `google_${profile.googleId || timestamp}`,
                 name: profile.name || profile.given_name || "Google User",
                 email: profile.email,
-                phone: profile.phone || "017" + Math.floor(10000000 + Math.random() * 90000000),
+                phone: '',
                 avatar: profile.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.name || profile.email)}`,
                 role: "CUSTOMER",
                 authProvider: "GOOGLE",
                 joinedDate: new Date().toISOString(),
-                addresses: [
-                    {
-                        id: `addr_${timestamp}`,
-                        label: "Home (বাসা)",
-                        name: profile.name || "Customer",
-                        phone: "01712345678",
-                        street: "Dhaka, Bangladesh",
-                        city: "Dhaka",
-                        isDefault: true
-                    }
-                ]
+                addresses: []
             }
             dispatch(register(newGoogleUser))
             toast.success(`Google দিয়ে একাউন্ট তৈরি ও সাইন ইন সফল হয়েছে! স্বাগতম ${newGoogleUser.name}`, { icon: '🎉' })
@@ -241,6 +231,14 @@ function LoginForm() {
                 client_id: clientId,
                 scope: 'email profile openid',
                 callback: async (tokenResponse) => {
+                    if (tokenResponse?.error) {
+                        setGoogleLoading(false)
+                        console.warn('Google auth error:', tokenResponse.error)
+                        if (tokenResponse.error !== 'popup_closed_by_user') {
+                            toast.error(tokenResponse.error_description || `Google সাইন-ইন ত্রুটি: ${tokenResponse.error}`)
+                        }
+                        return
+                    }
                     if (tokenResponse?.access_token) {
                         try {
                             const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
