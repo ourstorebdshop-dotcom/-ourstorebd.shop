@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useDispatch, useSelector } from 'react-redux'
 import Link from 'next/link'
@@ -13,17 +13,14 @@ import {
     EyeOff, 
     ArrowRight, 
     CheckCircle2, 
-    ShieldCheck, 
     LogIn,
-    UserPlus,
-    X,
-    PlusCircle
+    UserPlus
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { login, register } from '@/lib/features/user/userSlice'
 
 const GoogleIcon = () => (
-    <svg className="w-5 h-5" viewBox="0 0 24 24">
+    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
         <path
             fill="#4285F4"
             d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -50,18 +47,15 @@ function LoginForm() {
     
     const dispatch = useDispatch()
     const { currentUser, savedUsers, isAuthenticated } = useSelector(state => state.user)
+    const apiSettings = useSelector(state => state.apiSettings)
+    const googleAuth = apiSettings?.googleAuth
 
     const [isLoginMode, setIsLoginMode] = useState(true)
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
     const [rememberMe, setRememberMe] = useState(true)
     const [loading, setLoading] = useState(false)
-
-    // Google Modal state
-    const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false)
-    const [customGoogleEmail, setCustomGoogleEmail] = useState('')
-    const [customGoogleName, setCustomGoogleName] = useState('')
-    const [showCustomGoogleInput, setShowCustomGoogleInput] = useState(false)
+    const [googleLoading, setGoogleLoading] = useState(false)
 
     // Form inputs
     const [loginIdentifier, setLoginIdentifier] = useState('')
@@ -74,28 +68,6 @@ function LoginForm() {
     const [regPassword, setRegPassword] = useState('')
     const [regConfirmPassword, setRegConfirmPassword] = useState('')
     const [agreeTerms, setAgreeTerms] = useState(true)
-
-    // Preset Google Accounts for realistic 1-click Sign in with Google
-    const googleAccounts = [
-        {
-            name: "Idris Rashel",
-            email: "idrisrashel@gmail.com",
-            avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-            phone: "01711002233"
-        },
-        {
-            name: "Tanvir Ahmed",
-            email: "customer@ourstorebd.com",
-            avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
-            phone: "01712345678"
-        },
-        {
-            name: "Shopnil Hasan",
-            email: "shopnil.hasan@gmail.com",
-            avatar: "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150&auto=format&fit=crop&q=80",
-            phone: "01812998877"
-        }
-    ]
 
     const handleLoginSubmit = (e) => {
         e.preventDefault()
@@ -111,7 +83,7 @@ function LoginForm() {
         }
 
         const matchedUser = savedUsers.find(
-            u => (u.email.toLowerCase() === identifier || u.phone === identifier) && u.password === password
+            u => (u.email?.toLowerCase() === identifier || u.phone === identifier) && u.password === password
         )
 
         if (matchedUser) {
@@ -174,7 +146,7 @@ function LoginForm() {
         }
 
         const exists = savedUsers.some(
-            u => (regEmail && u.email.toLowerCase() === regEmail.trim().toLowerCase()) || u.phone === regPhone.trim()
+            u => (regEmail && u.email?.toLowerCase() === regEmail.trim().toLowerCase()) || u.phone === regPhone.trim()
         )
 
         if (exists) {
@@ -201,27 +173,33 @@ function LoginForm() {
         setLoading(false)
     }
 
-    const handleSelectGoogleAccount = (acc) => {
-        const existing = savedUsers.find(u => u.email.toLowerCase() === acc.email.toLowerCase())
+    // Process genuine Google profile data
+    const completeGoogleAuth = (profile) => {
+        const emailToMatch = profile.email?.toLowerCase()
+        const existing = savedUsers.find(
+            u => u.email?.toLowerCase() === emailToMatch
+        )
+
         if (existing) {
             dispatch(login(existing))
-            toast.success(`Google দিয়ে সফলভাবে সাইন ইন হয়েছে! স্বাগতম ${existing.name}`)
+            toast.success(`Google দিয়ে সফলভাবে সাইন ইন হয়েছে! স্বাগতম ${existing.name}`, { icon: '👋' })
         } else {
+            const timestamp = Date.now()
             const newGoogleUser = {
-                id: `google_${Date.now()}`,
-                name: acc.name,
-                email: acc.email,
-                phone: acc.phone || "01712345678",
-                avatar: acc.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
+                id: `google_${profile.googleId || timestamp}`,
+                name: profile.name || profile.given_name || "Google User",
+                email: profile.email,
+                phone: profile.phone || "017" + Math.floor(10000000 + Math.random() * 90000000),
+                avatar: profile.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(profile.name || profile.email)}`,
                 role: "CUSTOMER",
                 authProvider: "GOOGLE",
                 joinedDate: new Date().toISOString(),
                 addresses: [
                     {
-                        id: `addr_${Date.now()}`,
+                        id: `addr_${timestamp}`,
                         label: "Home (বাসা)",
-                        name: acc.name,
-                        phone: acc.phone || "01712345678",
+                        name: profile.name || "Customer",
+                        phone: "01712345678",
                         street: "Dhaka, Bangladesh",
                         city: "Dhaka",
                         isDefault: true
@@ -229,30 +207,97 @@ function LoginForm() {
                 ]
             }
             dispatch(register(newGoogleUser))
-            toast.success(`Google দিয়ে সফলভাবে সাইন ইন হয়েছে! স্বাগতম ${newGoogleUser.name}`)
+            toast.success(`Google দিয়ে একাউন্ট তৈরি ও সাইন ইন সফল হয়েছে! স্বাগতম ${newGoogleUser.name}`, { icon: '🎉' })
         }
 
-        setIsGoogleModalOpen(false)
+        setGoogleLoading(false)
         router.push(redirectUrl)
     }
 
-    const handleCustomGoogleSignIn = (e) => {
-        e.preventDefault()
-        if (!customGoogleEmail.trim() || !customGoogleName.trim()) {
-            toast.error('অনুগ্রহ করে নাম এবং Google ইমেইল লিখুন')
+    // Launch genuine Google OAuth 2.0 popup via Google Identity Services
+    const initiateGoogleOAuth = async (clientId) => {
+        setGoogleLoading(true)
+        try {
+            if (!window.google?.accounts?.oauth2) {
+                await new Promise((resolve, reject) => {
+                    const existingScript = document.getElementById('google-jssdk')
+                    if (existingScript) {
+                        existingScript.onload = resolve
+                        existingScript.onerror = reject
+                        return
+                    }
+                    const script = document.createElement('script')
+                    script.id = 'google-jssdk'
+                    script.src = 'https://accounts.google.com/gsi/client'
+                    script.async = true
+                    script.defer = true
+                    script.onload = resolve
+                    script.onerror = () => reject(new Error('Google SDK load failed'))
+                    document.head.appendChild(script)
+                })
+            }
+
+            const tokenClient = window.google.accounts.oauth2.initTokenClient({
+                client_id: clientId,
+                scope: 'email profile openid',
+                callback: async (tokenResponse) => {
+                    if (tokenResponse?.access_token) {
+                        try {
+                            const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                                headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+                            })
+                            const profile = await res.json()
+                            if (profile?.email) {
+                                completeGoogleAuth({
+                                    name: profile.name || profile.given_name || 'Google User',
+                                    email: profile.email,
+                                    avatar: profile.picture,
+                                    googleId: profile.sub
+                                })
+                                return
+                            } else {
+                                toast.error('Google থেকে ব্যবহারকারী তথ্য পাওয়া যায়নি')
+                            }
+                        } catch (err) {
+                            console.error('Fetch profile error:', err)
+                            toast.error('Google প্রোফাইল যাচাই করতে সমস্যা হয়েছে')
+                        }
+                    }
+                    setGoogleLoading(false)
+                },
+                error_callback: (err) => {
+                    setGoogleLoading(false)
+                    console.warn('Google auth window closed or error:', err)
+                    toast('Google সাইন-ইন সম্পন্ন করা হয়নি', { icon: 'ℹ️' })
+                }
+            })
+
+            tokenClient.requestAccessToken({ prompt: 'select_account' })
+        } catch (err) {
+            setGoogleLoading(false)
+            console.error('Google GIS load error:', err)
+            toast.error('Google সার্ভিস লোড হতে ব্যর্থ হয়েছে। ইন্টারনেট সংযোগ বা অ্যাডব্লকার চেক করুন।')
+        }
+    }
+
+    // Button Click Handler
+    const handleGoogleSignInClick = () => {
+        if (googleAuth?.enabled === false) {
+            toast.error('Google দিয়ে সাইন ইন বর্তমানে সাময়িকভাবে বন্ধ রয়েছে')
             return
         }
 
-        const customAcc = {
-            name: customGoogleName.trim(),
-            email: customGoogleEmail.trim(),
-            avatar: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(customGoogleName.trim())}`,
-            phone: "01711223344"
+        const clientId = googleAuth?.clientId?.trim() || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim()
+
+        if (!clientId) {
+            // No client ID configured yet: clean message, NO MODAL for customer!
+            setGoogleLoading(false)
+            toast.error('Google Sign-In সার্ভিসটি শীঘ্রই সক্রিয় হবে। অনুগ্রহ করে ইমেইল/পাসওয়ার্ড দিয়ে লগইন করুন।')
+            return
         }
 
-        handleSelectGoogleAccount(customAcc)
+        initiateGoogleOAuth(clientId)
     }
-
 
     return (
         <div className="min-h-[85vh] py-12 px-4 sm:px-6 lg:px-8 flex flex-col justify-center items-center bg-gradient-to-b from-slate-50 to-white">
@@ -330,25 +375,39 @@ function LoginForm() {
 
                     <div className="p-6 sm:p-8">
                         
-                        {/* Google Sign-in Button */}
-                        <div className="mb-5">
-                            <button
-                                type="button"
-                                onClick={() => setIsGoogleModalOpen(true)}
-                                className="w-full py-2.5 px-4 border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:scale-[0.99] text-slate-700 font-semibold text-xs sm:text-sm rounded-xl transition flex items-center justify-center gap-3 shadow-xs bg-white group"
-                            >
-                                <GoogleIcon />
-                                <span className="group-hover:text-slate-900 transition">
-                                    {isLoginMode ? 'Sign in with Google' : 'Sign up with Google'}
-                                </span>
-                            </button>
+                        {/* Google 1-Click Sign-In / Sign-Up Button */}
+                        {googleAuth?.enabled !== false && (
+                            <div className="mb-5">
+                                <button
+                                    type="button"
+                                    onClick={handleGoogleSignInClick}
+                                    disabled={googleLoading}
+                                    className="w-full py-2.5 px-4 border border-slate-200 hover:border-slate-300 hover:bg-slate-50/80 active:scale-[0.99] text-slate-700 font-semibold text-xs sm:text-sm rounded-xl transition flex items-center justify-center gap-3 shadow-xs bg-white group disabled:opacity-75 cursor-pointer"
+                                >
+                                    {googleLoading ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                                            <span className="text-slate-600">Google সংযোগ হচ্ছে...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <GoogleIcon />
+                                            <span className="group-hover:text-slate-900 transition">
+                                                {isLoginMode ? 'Sign in with Google' : 'Sign up with Google'}
+                                            </span>
+                                        </>
+                                    )}
+                                </button>
 
-                            <div className="relative flex py-4 items-center">
-                                <div className="flex-grow border-t border-slate-200"></div>
-                                <span className="flex-shrink mx-3 text-xs text-slate-400 font-medium uppercase tracking-wider">অথবা (OR)</span>
-                                <div className="flex-grow border-t border-slate-200"></div>
+                                <div className="relative flex py-4 items-center">
+                                    <div className="flex-grow border-t border-slate-200"></div>
+                                    <span className="flex-shrink mx-3 text-xs text-slate-400 font-medium uppercase tracking-wider">
+                                        অথবা (OR)
+                                    </span>
+                                    <div className="flex-grow border-t border-slate-200"></div>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         {isLoginMode ? (
                             /* ===== LOGIN FORM ===== */
@@ -546,7 +605,6 @@ function LoginForm() {
                             </form>
                         )}
 
-
                     </div>
                 </div>
 
@@ -556,118 +614,6 @@ function LoginForm() {
                 </p>
 
             </div>
-
-            {/* GOOGLE SIGN IN OAUTH ACCOUNT PICKER MODAL */}
-            {isGoogleModalOpen && (
-                <div 
-                    onClick={() => setIsGoogleModalOpen(false)}
-                    className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-[fadeIn_0.15s_ease-out]"
-                >
-                    <div 
-                        onClick={(e) => e.stopPropagation()} 
-                        className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-sm w-full p-6 relative overflow-hidden"
-                    >
-                        {/* Header */}
-                        <div className="flex items-start justify-between pb-4 border-b border-slate-100 mb-4">
-                            <div className="flex items-center gap-3">
-                                <GoogleIcon />
-                                <div>
-                                    <h3 className="font-bold text-slate-800 text-sm sm:text-base">Google দিয়ে সাইন ইন</h3>
-                                    <p className="text-[11px] text-slate-400">Our Store BD-তে প্রবেশের জন্য একাউন্ট নির্বাচন করুন</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setIsGoogleModalOpen(false)}
-                                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-
-                        {/* Account Picker List */}
-                        {!showCustomGoogleInput ? (
-                            <div className="space-y-2 mb-4">
-                                <p className="text-xs font-medium text-slate-500 mb-2">উপলব্ধ Google একাউন্টসমূহ:</p>
-                                {googleAccounts.map((acc, index) => (
-                                    <button
-                                        key={index}
-                                        type="button"
-                                        onClick={() => handleSelectGoogleAccount(acc)}
-                                        className="w-full flex items-center gap-3.5 p-3 rounded-2xl border border-slate-150 hover:border-indigo-400 hover:bg-indigo-50/30 transition text-left group"
-                                    >
-                                        <img
-                                            src={acc.avatar}
-                                            alt={acc.name}
-                                            className="w-10 h-10 rounded-full object-cover border border-slate-200 group-hover:border-indigo-500 transition"
-                                        />
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-bold text-slate-800 truncate group-hover:text-indigo-600 transition">
-                                                {acc.name}
-                                            </p>
-                                            <p className="text-[11px] text-slate-500 truncate">{acc.email}</p>
-                                        </div>
-                                    </button>
-                                ))}
-
-                                <button
-                                    type="button"
-                                    onClick={() => setShowCustomGoogleInput(true)}
-                                    className="w-full mt-3 py-2.5 px-3 rounded-xl border border-dashed border-slate-300 hover:border-slate-400 text-slate-600 hover:text-slate-800 text-xs font-semibold transition flex items-center justify-center gap-2"
-                                >
-                                    <PlusCircle size={15} className="text-slate-500" />
-                                    অন্য কোনো Google একাউন্ট ব্যবহার করুন
-                                </button>
-                            </div>
-                        ) : (
-                            /* Custom Google Input Form */
-                            <form onSubmit={handleCustomGoogleSignIn} className="space-y-3 mb-4">
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-700 mb-1">আপনার নাম</label>
-                                    <input
-                                        type="text"
-                                        value={customGoogleName}
-                                        onChange={(e) => setCustomGoogleName(e.target.value)}
-                                        placeholder="যেমন: মোঃ সাকিব আহমেদ"
-                                        className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-semibold text-slate-700 mb-1">Google ইমেইল</label>
-                                    <input
-                                        type="email"
-                                        value={customGoogleEmail}
-                                        onChange={(e) => setCustomGoogleEmail(e.target.value)}
-                                        placeholder="yourname@gmail.com"
-                                        className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
-                                        required
-                                    />
-                                </div>
-                                <div className="flex gap-2 pt-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowCustomGoogleInput(false)}
-                                        className="w-1/2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition"
-                                    >
-                                        তালিকায় ফিরুন
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        className="w-1/2 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-semibold rounded-xl transition shadow-xs"
-                                    >
-                                        চালিয়ে যান
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-
-                        <p className="text-[10px] text-slate-400 text-center leading-relaxed">
-                            Google দিয়ে সাইন ইন করার মাধ্যমে আপনি Our Store BD এর শর্তাবলী মেনে নিচ্ছেন।
-                        </p>
-                    </div>
-                </div>
-            )}
-
         </div>
     )
 }

@@ -14,6 +14,7 @@ import { hydrateCategories, defaultCategories } from '@/lib/features/category/ca
 import { hydrateShipping, defaultShippingSettings } from '@/lib/features/shipping/shippingSlice'
 import { hydrateCashflow, defaultCashflowData } from '@/lib/features/cashflow/cashflowSlice'
 import { hydrateHero, defaultHeroData } from '@/lib/features/hero/heroSlice'
+import { hydrateApiSettings, defaultApiSettings } from '@/lib/features/apiSettings/apiSettingsSlice'
 import { couponDummyData, orderDummyData } from '@/assets/assets'
 
 const CHANNEL_NAME = 'gocart_product_sync'
@@ -30,6 +31,7 @@ const WISHLIST_STORAGE_KEY = 'ourstore_wishlist'
 const CATEGORY_STORAGE_KEY = 'gocart_categories'
 const SHIPPING_STORAGE_KEY = 'gocart_shipping'
 const CASHFLOW_STORAGE_KEY = 'gocart_cashflow'
+const API_SETTINGS_STORAGE_KEY = 'gocart_api_settings'
 
 export default function StoreProvider({ children }) {
   const storeRef = useRef(undefined)
@@ -111,8 +113,10 @@ export default function StoreProvider({ children }) {
     try {
       const savedUserList = localStorage.getItem(SAVED_USERS_STORAGE_KEY)
       if (savedUserList) {
-        const parsedUsers = JSON.parse(savedUserList)
+        let parsedUsers = JSON.parse(savedUserList)
         if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
+          // Purge any temporary demo users
+          parsedUsers = parsedUsers.filter(u => u.name !== 'Google Customer')
           storeRef.current.dispatch(hydrateSavedUsers(parsedUsers))
         }
       } else {
@@ -122,8 +126,10 @@ export default function StoreProvider({ children }) {
       const savedCurrentUser = localStorage.getItem(USER_STORAGE_KEY)
       if (savedCurrentUser) {
         const parsedUser = JSON.parse(savedCurrentUser)
-        if (parsedUser && parsedUser.id) {
+        if (parsedUser && parsedUser.id && parsedUser.name !== 'Google Customer') {
           storeRef.current.dispatch(hydrateUser(parsedUser))
+        } else if (parsedUser && parsedUser.name === 'Google Customer') {
+          localStorage.removeItem(USER_STORAGE_KEY)
         }
       }
     } catch (e) {
@@ -257,6 +263,24 @@ export default function StoreProvider({ children }) {
       storeRef.current.dispatch(hydrateHero(defaultHeroData))
     }
 
+    // API & Integration Settings
+    try {
+      const savedApiSettings = localStorage.getItem(API_SETTINGS_STORAGE_KEY)
+      if (savedApiSettings) {
+        const parsed = JSON.parse(savedApiSettings)
+        if (parsed && typeof parsed === 'object') {
+          storeRef.current.dispatch(hydrateApiSettings(parsed))
+        } else {
+          storeRef.current.dispatch(hydrateApiSettings(defaultApiSettings))
+        }
+      } else {
+        storeRef.current.dispatch(hydrateApiSettings(defaultApiSettings))
+      }
+    } catch (e) {
+      console.warn('Failed to load api settings from localStorage:', e)
+      storeRef.current.dispatch(hydrateApiSettings(defaultApiSettings))
+    }
+
     // ===== BroadcastChannel for product sync across tabs =====
     const channel = new BroadcastChannel(CHANNEL_NAME)
 
@@ -282,6 +306,7 @@ export default function StoreProvider({ children }) {
     let prevCategories = storeRef.current.getState().category?.categories
     let prevShipping = storeRef.current.getState().shipping
     let prevCashflow = storeRef.current.getState().cashflow
+    let prevApiSettings = storeRef.current.getState().apiSettings
 
     const unsubscribe = storeRef.current.subscribe(() => {
       const state = storeRef.current.getState()
@@ -386,6 +411,14 @@ export default function StoreProvider({ children }) {
         prevCashflow = currentCashflow
         try {
           localStorage.setItem(CASHFLOW_STORAGE_KEY, JSON.stringify(currentCashflow))
+        } catch (e) { /* ignore */ }
+      }
+
+      const currentApiSettings = state.apiSettings
+      if (currentApiSettings !== prevApiSettings) {
+        prevApiSettings = currentApiSettings
+        try {
+          localStorage.setItem(API_SETTINGS_STORAGE_KEY, JSON.stringify(currentApiSettings))
         } catch (e) { /* ignore */ }
       }
 

@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import { useSelector } from "react-redux"
-import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon } from "lucide-react"
+import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon } from "lucide-react"
 import Link from "next/link"
 import { getLocalMonthStr } from "@/lib/features/cashflow/cashflowSlice"
 
@@ -11,6 +11,10 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
     const pathname = usePathname()
     const messages = useSelector(state => state.contact?.messages) || []
     const unreadCount = messages.filter(m => m.status === 'NEW').length
+
+    // API settings status
+    const googleAuth = useSelector(state => state.apiSettings?.googleAuth)
+    const isGoogleConfigured = Boolean(googleAuth?.clientId?.trim())
 
     // Cash Flow Budget alert badge count
     const cashflowTransactions = useSelector(state => state.cashflow?.transactions) || []
@@ -39,6 +43,7 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         { name: 'Coupons', href: '/admin/coupons', icon: TicketPercentIcon },
         { name: 'Banners', href: '/admin/banners', icon: MegaphoneIcon },
         { name: 'Shipping', href: '/admin/shipping', icon: TruckIcon },
+        { name: 'API Settings', href: '/admin/api-settings', icon: KeyRoundIcon, statusDot: !isGoogleConfigured ? 'amber' : 'green' },
     ]
 
     // Mobile bottom navigation bar
@@ -59,6 +64,9 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
                         <span className="mt-0.5 whitespace-nowrap">{link.name.split(' ')[0]}</span>
                         {link.badge > 0 && (
                             <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-amber-500" />
+                        )}
+                        {link.statusDot && !link.badge && (
+                            <span className={`absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full ${link.statusDot === 'green' ? 'bg-emerald-500' : 'bg-amber-400'}`} />
                         )}
                     </Link>
                 ))}
@@ -90,6 +98,9 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
                                 <span className="mr-5 px-1.5 py-0.2 rounded-full bg-amber-500 text-white text-[10px] font-bold">
                                     {link.badge}
                                 </span>
+                            )}
+                            {link.statusDot && !link.badge && (
+                                <span className={`mr-5 w-2 h-2 rounded-full ${link.statusDot === 'green' ? 'bg-emerald-500' : 'bg-amber-400'}`} title={link.statusDot === 'green' ? 'API Configured' : 'API Setup Pending'} />
                             )}
                             {pathname === link.href && <span className="absolute bg-green-500 right-0 top-1.5 bottom-1.5 w-1.5 rounded-l"></span>}
                         </Link>
