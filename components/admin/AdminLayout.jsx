@@ -59,7 +59,7 @@ const generateSecureToken = () => {
 
 // Build the session signature — ties together email + time + fingerprint + secret
 const createSignature = (email, loginTime, fingerprint, token) => {
-    const adminPw = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || ''
+    const adminPw = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '@idris@1I@idris@1I@idris@1I'
     const secretKey = `gocart_${adminPw.slice(0, 8)}_${adminPw.length}_admin_2026`
     return computeHMAC(`${email}:${loginTime}:${fingerprint}:${token}`, secretKey)
 }
