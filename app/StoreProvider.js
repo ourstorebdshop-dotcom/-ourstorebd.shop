@@ -59,11 +59,26 @@ export default function StoreProvider({ children }) {
         const store = storeRef.current
         const firebaseEnabled = isFirebaseConfigured()
 
-        // ===== ONE-TIME CLEANUP: clear corrupted localStorage =====
+        // ===== ONE-TIME CLEANUP: clear corrupted localStorage & default dummy wishlist =====
         const MIGRATION_KEY = 'gocart_data_v6'
         if (!localStorage.getItem(MIGRATION_KEY)) {
             localStorage.removeItem(CART_STORAGE_KEY)
             localStorage.setItem(MIGRATION_KEY, '1')
+        }
+        const WISHLIST_CLEANUP_KEY = 'gocart_wishlist_clean_v1'
+        if (!localStorage.getItem(WISHLIST_CLEANUP_KEY)) {
+            const savedWl = localStorage.getItem(WISHLIST_STORAGE_KEY)
+            if (savedWl) {
+                try {
+                    const parsed = JSON.parse(savedWl)
+                    if (Array.isArray(parsed) && parsed.length === 2 && parsed.includes('prod_1') && parsed.includes('prod_3')) {
+                        localStorage.removeItem(WISHLIST_STORAGE_KEY)
+                    }
+                } catch (e) {
+                    localStorage.removeItem(WISHLIST_STORAGE_KEY)
+                }
+            }
+            localStorage.setItem(WISHLIST_CLEANUP_KEY, '1')
         }
 
         // ===== localStorage hydration helpers =====
@@ -261,9 +276,16 @@ export default function StoreProvider({ children }) {
                     const parsed = JSON.parse(savedWishlist)
                     if (Array.isArray(parsed)) {
                         store.dispatch(hydrateWishlist(parsed))
+                    } else {
+                        store.dispatch(hydrateWishlist([]))
                     }
+                } else {
+                    store.dispatch(hydrateWishlist([]))
                 }
-            } catch (e) { console.warn('Failed to load wishlist from localStorage:', e) }
+            } catch (e) {
+                console.warn('Failed to load wishlist from localStorage:', e)
+                store.dispatch(hydrateWishlist([]))
+            }
 
             // Cash Flow Management
             try {
