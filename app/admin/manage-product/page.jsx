@@ -4,6 +4,7 @@ import { toast } from "react-hot-toast"
 import Image from "next/image"
 import { useDispatch, useSelector } from "react-redux"
 import { updateProduct, deleteProduct as deleteProductAction, toggleProductStock } from "@/lib/features/product/productSlice"
+import { saveDocToFirestore, deleteDocFromFirestore } from "@/lib/firestore"
 import { 
     SearchIcon, 
     PencilIcon, 
@@ -50,8 +51,10 @@ export default function AdminManageProducts() {
     // Toggle product stock
     const toggleStock = (productId) => {
         const p = products.find(p => p.id === productId)
+        const newStock = !p?.inStock
         dispatch(toggleProductStock(productId))
-        toast.success(`Product "${p?.name}" marked as ${!p?.inStock ? 'In Stock' : 'Out of Stock'}`)
+        saveDocToFirestore('products', productId, { inStock: newStock })
+        toast.success(`Product "${p?.name}" marked as ${newStock ? 'In Stock' : 'Out of Stock'}`)
     }
 
     // Handle Edit Submit
@@ -85,7 +88,7 @@ export default function AdminManageProducts() {
             return
         }
 
-        dispatch(updateProduct({
+        const updatedProduct = {
             ...editingProduct,
             name: editingProduct.name.trim(),
             description: editingProduct.description.trim(),
@@ -94,7 +97,10 @@ export default function AdminManageProducts() {
             categories: editedCategories,
             category: editedCategories[0] || '',
             updatedAt: new Date().toISOString()
-        }))
+        }
+
+        dispatch(updateProduct(updatedProduct))
+        saveDocToFirestore('products', updatedProduct.id, updatedProduct)
         toast.success(`"${editingProduct.name}" সফলভাবে আপডেট হয়েছে!`)
         setEditingProduct(null)
     }
@@ -103,6 +109,7 @@ export default function AdminManageProducts() {
     const handleDeleteConfirm = () => {
         const prod = products.find(p => p.id === deletingProductId)
         dispatch(deleteProductAction(deletingProductId))
+        deleteDocFromFirestore('products', deletingProductId)
         toast.success(`Product "${prod?.name || ''}" deleted successfully!`)
         setDeletingProductId(null)
     }

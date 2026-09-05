@@ -7,6 +7,8 @@ import { XIcon, PlusIcon, Clock, TrendingUp, CheckIcon, Loader2Icon } from "luci
 import { useDispatch, useSelector } from "react-redux"
 import { addProduct } from "@/lib/features/product/productSlice"
 import { useRouter } from "next/navigation"
+import { compressImage } from "@/lib/imageCompressor"
+import { saveDocToFirestore } from "@/lib/firestore"
 
 export default function AdminAddProduct() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
@@ -114,15 +116,6 @@ export default function AdminAddProduct() {
         if (input) input.value = ''
     }
 
-    // Convert a File to base64 data URL
-    const fileToBase64 = (file) => {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader()
-            reader.onload = () => resolve(reader.result)
-            reader.onerror = reject
-            reader.readAsDataURL(file)
-        })
-    }
 
     const onSubmitHandler = async (e) => {
         e.preventDefault()
@@ -171,8 +164,8 @@ export default function AdminAddProduct() {
                 return
             }
 
-            // Convert images to base64 data URLs (persists across navigation)
-            const imageDataUrls = await Promise.all(imageFiles.map(file => fileToBase64(file)))
+            // Convert and compress images to compact WebP/JPEG (prevents Firestore 1MB limit)
+            const imageDataUrls = await Promise.all(imageFiles.map(file => compressImage(file, 800, 800, 0.75)))
 
             // Build sections array
             const activeSections = []
@@ -196,6 +189,9 @@ export default function AdminAddProduct() {
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             }
+
+            // Save immediately to Firestore (syncs across the entire world instantly)
+            await saveDocToFirestore('products', newProduct.id, newProduct)
 
             dispatch(addProduct(newProduct))
             

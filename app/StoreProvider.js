@@ -307,24 +307,67 @@ export default function StoreProvider({ children }) {
             if (firebaseEnabled) {
                 try {
                     // --- Products ---
-                    const fsProducts = await loadCollectionFromFirestore('products')
+                    let fsProducts = await loadCollectionFromFirestore('products')
+                    try {
+                        const saved = localStorage.getItem(PRODUCT_STORAGE_KEY)
+                        if (saved) {
+                            const localProducts = JSON.parse(saved)
+                            if (Array.isArray(localProducts) && localProducts.length > 0) {
+                                if (!fsProducts || fsProducts.length === 0) {
+                                    fsProducts = localProducts
+                                    syncCollectionToFirestore('products', localProducts)
+                                } else {
+                                    // Upload any local products not yet in Firestore
+                                    const fsIds = new Set(fsProducts.map(p => String(p.id)))
+                                    const missingLocals = localProducts.filter(p => p.id && !fsIds.has(String(p.id)))
+                                    if (missingLocals.length > 0) {
+                                        missingLocals.forEach(p => saveDocToFirestore('products', p.id, p))
+                                        fsProducts = [...missingLocals, ...fsProducts]
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) { console.warn('Product merge error:', e) }
+
                     if (fsProducts && fsProducts.length > 0) {
                         store.dispatch(setProduct(fsProducts))
                         prevProductsRef.current = fsProducts
+                        try { localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(fsProducts)) } catch (e) { /* ignore */ }
                     } else {
                         lsLoadProducts()
                     }
 
                     // --- Categories ---
-                    const fsCategories = await loadCollectionFromFirestore('categories')
+                    let fsCategories = await loadCollectionFromFirestore('categories')
+                    if (!fsCategories || fsCategories.length === 0) {
+                        try {
+                            const savedCat = localStorage.getItem(CATEGORY_STORAGE_KEY)
+                            const localCats = savedCat ? JSON.parse(savedCat) : defaultCategories
+                            if (Array.isArray(localCats) && localCats.length > 0) {
+                                fsCategories = localCats
+                                syncCollectionToFirestore('categories', localCats)
+                            }
+                        } catch (e) { /* ignore */ }
+                    }
                     if (fsCategories && fsCategories.length > 0) {
                         store.dispatch(hydrateCategories(fsCategories))
+                        try { localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(fsCategories)) } catch (e) { /* ignore */ }
                     } else {
                         lsLoadCategories()
                     }
 
                     // --- Banners ---
-                    const fsBanners = await loadCollectionFromFirestore('banners')
+                    let fsBanners = await loadCollectionFromFirestore('banners')
+                    if (!fsBanners || fsBanners.length === 0) {
+                        try {
+                            const savedBanners = localStorage.getItem(BANNER_STORAGE_KEY)
+                            const localBanners = savedBanners ? JSON.parse(savedBanners) : defaultBanners
+                            if (Array.isArray(localBanners) && localBanners.length > 0) {
+                                fsBanners = localBanners
+                                syncCollectionToFirestore('banners', localBanners)
+                            }
+                        } catch (e) { /* ignore */ }
+                    }
                     if (fsBanners && fsBanners.length > 0) {
                         const seen = new Set()
                         const deduped = fsBanners.filter(b => {
@@ -333,28 +376,63 @@ export default function StoreProvider({ children }) {
                             return true
                         })
                         store.dispatch(hydrateBanners(deduped))
+                        try { localStorage.setItem(BANNER_STORAGE_KEY, JSON.stringify(deduped)) } catch (e) { /* ignore */ }
                     } else {
                         lsLoadBanners()
                     }
 
                     // --- Coupons ---
-                    const fsCoupons = await loadCollectionFromFirestore('coupons')
+                    let fsCoupons = await loadCollectionFromFirestore('coupons')
+                    if (!fsCoupons || fsCoupons.length === 0) {
+                        try {
+                            const savedCoupons = localStorage.getItem(COUPON_STORAGE_KEY)
+                            const localCoupons = savedCoupons ? JSON.parse(savedCoupons) : couponDummyData
+                            if (Array.isArray(localCoupons) && localCoupons.length > 0) {
+                                fsCoupons = localCoupons
+                                syncCollectionToFirestore('coupons', localCoupons)
+                            }
+                        } catch (e) { /* ignore */ }
+                    }
                     if (fsCoupons && fsCoupons.length > 0) {
                         store.dispatch(hydrateCoupons(fsCoupons))
+                        try { localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(fsCoupons)) } catch (e) { /* ignore */ }
                     } else {
                         lsLoadCoupons()
                     }
 
                     // --- Hero Banner ---
-                    const fsHero = await loadDocFromFirestore('settings', 'hero')
+                    let fsHero = await loadDocFromFirestore('settings', 'hero')
+                    if (!fsHero) {
+                        try {
+                            const savedHero = localStorage.getItem(HERO_STORAGE_KEY)
+                            const localHero = savedHero ? JSON.parse(savedHero) : defaultHeroData
+                            if (localHero) {
+                                fsHero = localHero
+                                saveDocToFirestore('settings', 'hero', localHero)
+                            }
+                        } catch (e) { /* ignore */ }
+                    }
                     if (fsHero) {
                         store.dispatch(hydrateHero(fsHero))
+                        try { localStorage.setItem(HERO_STORAGE_KEY, JSON.stringify(fsHero)) } catch (e) { /* ignore */ }
                     } else {
                         lsLoadHero()
                     }
 
                     // --- Shipping Settings ---
-                    const fsShipping = await loadDocFromFirestore('settings', 'shipping')
+                    let fsShipping = await loadDocFromFirestore('settings', 'shipping')
+                    if (!fsShipping) {
+                        try {
+                            const savedShipping = localStorage.getItem(SHIPPING_STORAGE_KEY)
+                            if (savedShipping) {
+                                const localShipping = JSON.parse(savedShipping)
+                                if (localShipping) {
+                                    fsShipping = localShipping
+                                    saveDocToFirestore('settings', 'shipping', localShipping)
+                                }
+                            }
+                        } catch (e) { /* ignore */ }
+                    }
                     if (fsShipping) {
                         store.dispatch(hydrateShipping(fsShipping))
                     } else {
@@ -362,7 +440,19 @@ export default function StoreProvider({ children }) {
                     }
 
                     // --- Contact/Store Info ---
-                    const fsContact = await loadDocFromFirestore('settings', 'contact')
+                    let fsContact = await loadDocFromFirestore('settings', 'contact')
+                    if (!fsContact) {
+                        try {
+                            const savedContact = localStorage.getItem(CONTACT_STORAGE_KEY)
+                            if (savedContact) {
+                                const localContact = JSON.parse(savedContact)
+                                if (localContact) {
+                                    fsContact = localContact
+                                    saveDocToFirestore('settings', 'contact', localContact)
+                                }
+                            }
+                        } catch (e) { /* ignore */ }
+                    }
                     if (fsContact) {
                         store.dispatch(hydrateContact({
                             messages: fsContact.messages || defaultMessages,
