@@ -10,6 +10,16 @@ import Counter from "./Counter";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
 
+const resolveImage = (img) => {
+    if (!img) return '/products/product_img1.png'
+    const srcStr = typeof img === 'object' && img.src ? img.src : String(img)
+    const match = srcStr.match(/product_img(\d+)/)
+    if (match && srcStr.includes('/_next/')) {
+        return `/products/product_img${match[1]}.png`
+    }
+    return img
+}
+
 const ProductDetails = ({ product }) => {
 
     const productId = product.id;
@@ -44,10 +54,7 @@ const ProductDetails = ({ product }) => {
 
     const router = useRouter()
 
-    const [mainImage, setMainImage] = useState(product.images[0]);
-    const [selectedColor, setSelectedColor] = useState(product.colors?.[0] || null);
-    const [selectedSize, setSelectedSize] = useState(product.sizes?.[0] || null);
-    const [addedFeedback, setAddedFeedback] = useState(false);
+    const [mainImage, setMainImage] = useState(() => resolveImage(product.images?.[0]));
 
     const addToCartHandler = () => {
         if (!product.inStock) return;
@@ -93,13 +100,13 @@ const ProductDetails = ({ product }) => {
             <div className="flex max-sm:flex-col-reverse gap-3">
                 <div className="flex sm:flex-col gap-3">
                     {product.images.map((image, index) => (
-                        <div key={index} onClick={() => setMainImage(product.images[index])} className="bg-slate-100 flex items-center justify-center size-16 sm:size-26 rounded-lg group cursor-pointer">
-                            <Image src={image} className="group-hover:scale-103 group-active:scale-95 transition" alt={`${product.name} thumbnail view ${index + 1} - Our Store BD`} width={45} height={45} />
+                        <div key={index} onClick={() => setMainImage(resolveImage(product.images[index]))} className="bg-slate-100 flex items-center justify-center size-16 sm:size-26 rounded-lg group cursor-pointer">
+                            <Image src={resolveImage(image)} onError={(e) => { e.currentTarget.src = '/products/product_img1.png' }} className="group-hover:scale-103 group-active:scale-95 transition" alt={`${product.name} thumbnail view ${index + 1} - Our Store BD`} width={45} height={45} />
                         </div>
                     ))}
                 </div>
                 <div className="flex justify-center items-center h-60 sm:h-100 sm:size-113 bg-slate-100 rounded-lg ">
-                    <Image src={mainImage} alt={`${product.name} - Authentic Electronics & Gadgets in Bangladesh`} width={250} height={250} priority className='max-h-44 sm:max-h-full w-auto' />
+                    <Image src={mainImage} onError={() => setMainImage('/products/product_img1.png')} alt={`${product.name} - Authentic Electronics & Gadgets in Bangladesh`} width={250} height={250} priority className='max-h-44 sm:max-h-full w-auto' />
                 </div>
             </div>
             <div className="flex-1">

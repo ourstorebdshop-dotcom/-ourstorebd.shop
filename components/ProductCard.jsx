@@ -9,12 +9,29 @@ import { toggleWishlist } from '@/lib/features/wishlist/wishlistSlice'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
+// Helper to resolve and normalize image URLs safely
+const resolveImage = (img) => {
+    if (!img) return '/products/product_img1.png'
+    const srcStr = typeof img === 'object' && img.src ? img.src : String(img)
+    const match = srcStr.match(/product_img(\d+)/)
+    if (match && srcStr.includes('/_next/')) {
+        return `/products/product_img${match[1]}.png`
+    }
+    return img
+}
+
 const ProductCard = ({ product }) => {
 
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
     const router = useRouter()
     const [addedToCart, setAddedToCart] = useState(false)
+    const [currentImg, setCurrentImg] = React.useState(() => resolveImage(product.images?.[0]))
+
+    React.useEffect(() => {
+        setCurrentImg(resolveImage(product.images?.[0]))
+    }, [product.images])
+
     const wishlistItems = useSelector(state => state.wishlist?.items || [])
     const isWishlisted = wishlistItems.includes(product.id)
 
@@ -90,7 +107,8 @@ const ProductCard = ({ product }) => {
                     width={500}
                     height={500}
                     className='max-h-36 sm:max-h-48 w-auto group-hover:scale-110 transition duration-300'
-                    src={product.images[0]}
+                    src={currentImg}
+                    onError={() => setCurrentImg('/products/product_img1.png')}
                     alt={`${product.name || 'Electronics gadget'} - Buy in Bangladesh | Our Store BD`}
                 />
 
