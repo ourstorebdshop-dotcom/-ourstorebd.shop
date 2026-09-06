@@ -62,21 +62,6 @@ function ProfileDashboard() {
     const allProducts = useSelector(state => state.product?.list || [])
     const wishlistProducts = allProducts.filter(p => wishlistIds.includes(p.id) || (p._id && wishlistIds.includes(p._id)))
 
-    // Auto-clean any legacy demo IDs (prod_1 etc.) or deleted/orphaned IDs from wishlist
-    useEffect(() => {
-        if (mounted && wishlistIds.length > 0) {
-            const demoIds = wishlistIds.filter(id => typeof id === 'string' && (id.startsWith('prod_') || id === 'prod_1' || id === 'prod_3'))
-            if (demoIds.length > 0) {
-                demoIds.forEach(id => dispatch(removeFromWishlist(id)))
-            } else if (allProducts.length > 0) {
-                const orphaned = wishlistIds.filter(id => !allProducts.some(p => p.id === id || p._id === id))
-                if (orphaned.length > 0) {
-                    orphaned.forEach(id => dispatch(removeFromWishlist(id)))
-                }
-            }
-        }
-    }, [mounted, allProducts, wishlistIds, dispatch])
-
     const [mounted, setMounted] = useState(false)
     const [activeTab, setActiveTab] = useState(initialTab)
     const [selectedOrder, setSelectedOrder] = useState(null)
@@ -101,6 +86,21 @@ function ProfileDashboard() {
     useEffect(() => {
         setMounted(true)
     }, [])
+
+    // Auto-clean any legacy demo IDs (prod_1 etc.) or deleted/orphaned IDs from wishlist
+    useEffect(() => {
+        if (mounted && wishlistIds.length > 0) {
+            const demoIds = wishlistIds.filter(id => typeof id === 'string' && (id.startsWith('prod_') || id === 'prod_1' || id === 'prod_3'))
+            if (demoIds.length > 0) {
+                demoIds.forEach(id => dispatch(removeFromWishlist(id)))
+            } else if (allProducts.length > 0) {
+                const orphaned = wishlistIds.filter(id => !allProducts.some(p => p.id === id || p._id === id))
+                if (orphaned.length > 0) {
+                    orphaned.forEach(id => dispatch(removeFromWishlist(id)))
+                }
+            }
+        }
+    }, [mounted, allProducts, wishlistIds, dispatch])
 
     // Address Form State
     const [addrLabel, setAddrLabel] = useState('বাসা (Home)')
