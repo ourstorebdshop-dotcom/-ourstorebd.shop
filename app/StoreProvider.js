@@ -128,6 +128,27 @@ export default function StoreProvider({ children }) {
             localStorage.setItem(DEMO_CLEANUP_KEY, '1')
         }
 
+        // ===== ONE-TIME CLEANUP: clear legacy demo user from localStorage =====
+        const DEMO_USER_CLEANUP_KEY = 'gocart_demo_user_clean_v1'
+        if (!localStorage.getItem(DEMO_USER_CLEANUP_KEY)) {
+            try {
+                const deleted = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                if (!deleted.includes('user_demo_1')) {
+                    deleted.push('user_demo_1')
+                    localStorage.setItem('gocart_deleted_user_ids', JSON.stringify(deleted))
+                }
+                const saved = localStorage.getItem(SAVED_USERS_STORAGE_KEY)
+                if (saved) {
+                    const parsed = JSON.parse(saved)
+                    if (Array.isArray(parsed)) {
+                        const cleaned = parsed.filter(u => u.id !== 'user_demo_1')
+                        localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(cleaned))
+                    }
+                }
+            } catch (e) { /* ignore */ }
+            localStorage.setItem(DEMO_USER_CLEANUP_KEY, '1')
+        }
+
         // ===== localStorage hydration helpers =====
         function lsLoadProducts() {
             try {
@@ -267,22 +288,26 @@ export default function StoreProvider({ children }) {
         function lsLoadUserSpecific() {
             // Users & Current Session
             try {
+                const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
                 const savedUserList = localStorage.getItem(SAVED_USERS_STORAGE_KEY)
-                if (savedUserList) {
+                if (savedUserList !== null) {
                     let parsedUsers = JSON.parse(savedUserList)
-                    if (Array.isArray(parsedUsers) && parsedUsers.length > 0) {
-                        parsedUsers = parsedUsers.filter(u => u.name !== 'Google Customer')
+                    if (Array.isArray(parsedUsers)) {
+                        parsedUsers = parsedUsers.filter(u => u.name !== 'Google Customer' && !deletedIds.includes(u.id))
                         store.dispatch(hydrateSavedUsers(parsedUsers))
+                    } else {
+                        store.dispatch(hydrateSavedUsers([]))
                     }
                 } else {
-                    store.dispatch(hydrateSavedUsers(defaultUsers))
+                    const initialUsers = defaultUsers.filter(u => !deletedIds.includes(u.id))
+                    store.dispatch(hydrateSavedUsers(initialUsers))
                 }
                 const savedCurrentUser = localStorage.getItem(USER_STORAGE_KEY)
                 if (savedCurrentUser) {
                     const parsedUser = JSON.parse(savedCurrentUser)
-                    if (parsedUser && parsedUser.id && parsedUser.name !== 'Google Customer') {
+                    if (parsedUser && parsedUser.id && parsedUser.name !== 'Google Customer' && !deletedIds.includes(parsedUser.id)) {
                         store.dispatch(hydrateUser(parsedUser))
-                    } else if (parsedUser && parsedUser.name === 'Google Customer') {
+                    } else if (parsedUser && (parsedUser.name === 'Google Customer' || deletedIds.includes(parsedUser.id))) {
                         localStorage.removeItem(USER_STORAGE_KEY)
                     }
                 }
@@ -653,7 +678,11 @@ export default function StoreProvider({ children }) {
             const currentSavedUsers = state.user.savedUsers
             if (currentSavedUsers !== prevSavedUsers) {
                 prevSavedUsers = currentSavedUsers
-                try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(currentSavedUsers)) } catch (e) { /* ignore */ }
+                try {
+                    const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                    const sanitized = currentSavedUsers.filter(u => !deletedIds.includes(u.id))
+                    localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(sanitized))
+                } catch (e) { /* ignore */ }
             }
 
             // --- Orders (localStorage only for now) ---

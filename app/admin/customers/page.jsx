@@ -128,6 +128,16 @@ export default function AdminCustomers() {
 
     const confirmDeleteCustomer = () => {
         if (!customerToDelete) return
+        try {
+            const deleted = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+            if (!deleted.includes(customerToDelete.id)) {
+                deleted.push(customerToDelete.id)
+                localStorage.setItem('gocart_deleted_user_ids', JSON.stringify(deleted))
+            }
+            const updated = savedUsers.filter(u => u.id !== customerToDelete.id)
+            localStorage.setItem('gocart_users', JSON.stringify(updated))
+        } catch (e) { /* ignore */ }
+
         dispatch(deleteUser(customerToDelete.id))
         toast.success(`${customerToDelete.name} পার্মানেন্টলি ডিলিট করা হয়েছে`)
         if (selectedCustomer?.id === customerToDelete.id) setSelectedCustomer(null)
