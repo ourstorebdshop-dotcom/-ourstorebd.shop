@@ -76,7 +76,6 @@ const ProductDetails = ({ product }) => {
     const [imgStyle, setImgStyle] = useState(() => getInitialStyle(initialImg));
     const [selectedColor, setSelectedColor] = useState(() => product.colors?.[0] || '');
     const [selectedSize, setSelectedSize] = useState(() => product.sizes?.[0] || '');
-    const [addedFeedback, setAddedFeedback] = useState(false);
 
     useEffect(() => {
         if (!mainImage || typeof window === 'undefined') return;
@@ -172,11 +171,11 @@ const ProductDetails = ({ product }) => {
         };
     }, [mainImage]);
 
+    const isInCart = Boolean(cart[productId]);
+
     const addToCartHandler = () => {
-        if (!product.inStock) return;
+        if (!product.inStock || isInCart) return;
         dispatch(addToCart({ productId, color: selectedColor, size: selectedSize }))
-        setAddedFeedback(true)
-        setTimeout(() => setAddedFeedback(false), 1500)
     }
 
     const orderNowHandler = () => {
@@ -330,7 +329,7 @@ const ProductDetails = ({ product }) => {
                 )}
 
                 {/* Quantity — only shows when item is already in cart */}
-                {cart[productId] && (
+                {isInCart && (
                     <div className="mt-6">
                         <p className="text-sm font-medium text-slate-700 mb-2">Quantity</p>
                         <Counter productId={productId} />
@@ -348,19 +347,21 @@ const ProductDetails = ({ product }) => {
                 <div className="grid grid-cols-2 gap-3 mt-6 sm:mt-8 w-full sm:max-w-md items-center">
                     {/* Add to Cart */}
                     <button
+                        type="button"
                         onClick={addToCartHandler}
-                        disabled={!product.inStock}
-                        className={`w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium rounded transition-all duration-200 active:scale-95 ${
+                        disabled={!product.inStock || isInCart}
+                        title={isInCart ? 'পণ্যটি ইতিমধ্যে কার্টে যুক্ত রয়েছে। পরিমাণ বাড়াতে বা কমাতে ওপরের Quantity অপশন ব্যবহার করুন' : 'Add to Cart'}
+                        className={`w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium rounded transition-all duration-200 ${
                             !product.inStock
                                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                : addedFeedback
-                                    ? 'bg-green-500 text-white cursor-pointer'
-                                    : 'bg-slate-800 text-white hover:bg-slate-900 cursor-pointer'
+                                : isInCart
+                                    ? 'bg-emerald-600 text-white cursor-default select-none shadow-sm opacity-95'
+                                    : 'bg-slate-800 text-white hover:bg-slate-900 cursor-pointer active:scale-95'
                         }`}
                     >
-                        {addedFeedback ? (
+                        {isInCart ? (
                             <>
-                                <CheckIcon size={16} />
+                                <CheckIcon size={16} strokeWidth={2.5} />
                                 <span>Added to Cart!</span>
                             </>
                         ) : (
