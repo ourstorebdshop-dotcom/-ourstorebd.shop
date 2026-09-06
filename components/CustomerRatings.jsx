@@ -113,22 +113,30 @@ const CustomerRatings = () => {
         return list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
     }, [products])
 
-    // Prepend real customer reviews so they appear at the very front of the carousel
-    const allReviews = useMemo(() => {
+    // Statistics (Average score, review count, 5-4-3-2-1 star breakdown):
+    // If real customer reviews exist, calculate 100% from real customer reviews!
+    // Otherwise fallback to default testimonials when there are no reviews yet.
+    const reviewsForStats = realCustomerReviews.length > 0 ? realCustomerReviews : defaultTestimonials
+
+    const totalReviews = reviewsForStats.length
+    const avgRating = totalReviews > 0
+        ? (reviewsForStats.reduce((sum, t) => sum + (Number(t.rating) || 5), 0) / totalReviews).toFixed(1)
+        : "5.0"
+
+    // Carousel display cards:
+    // If real reviews exist, put them first. If fewer than 6, supplement with testimonials so marquee scrolls smoothly.
+    const displayReviews = useMemo(() => {
         if (realCustomerReviews.length === 0) {
             return defaultTestimonials
+        }
+        if (realCustomerReviews.length >= 6) {
+            return realCustomerReviews
         }
         return [...realCustomerReviews, ...defaultTestimonials]
     }, [realCustomerReviews])
 
-    // Calculate dynamic average rating and review counts
-    const totalReviews = allReviews.length
-    const avgRating = totalReviews > 0
-        ? (allReviews.reduce((sum, t) => sum + (Number(t.rating) || 5), 0) / totalReviews).toFixed(1)
-        : "5.0"
-
     // Duplicate testimonials for seamless infinite marquee loop
-    const duplicated = [...allReviews, ...allReviews]
+    const duplicated = [...displayReviews, ...displayReviews]
 
     return (
         <div className='px-4 sm:px-6 my-12 sm:my-20 max-w-6xl mx-auto'>
@@ -152,13 +160,15 @@ const CustomerRatings = () => {
                             />
                         ))}
                     </div>
-                    <p className='text-sm text-slate-500 mt-1'>Based on {totalReviews} reviews</p>
+                    <p className='text-sm text-slate-500 mt-1'>
+                        Based on {totalReviews} {totalReviews === 1 ? 'review' : 'reviews'}
+                    </p>
                 </div>
 
                 {/* Rating Bars */}
                 <div className='hidden sm:flex flex-col gap-1.5'>
                     {[5, 4, 3, 2, 1].map(star => {
-                        const count = allReviews.filter(t => Math.round(Number(t.rating)) === star).length
+                        const count = reviewsForStats.filter(t => Math.round(Number(t.rating)) === star).length
                         const percentage = totalReviews > 0 ? (count / totalReviews) * 100 : 0
                         return (
                             <div key={star} className='flex items-center gap-2 text-sm'>
