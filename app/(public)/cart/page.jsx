@@ -6,8 +6,37 @@ import ThankYouModal from "@/components/ThankYouModal";
 import { deleteItemFromCart } from "@/lib/features/cart/cartSlice";
 import { Trash2Icon } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+
+const getItemImage = (item) => {
+    if (!item) return '/placeholder.svg';
+    let img = null;
+    if (Array.isArray(item.images) && item.images.length > 0) {
+        img = item.images[0];
+    } else if (typeof item.images === 'string' && item.images.trim()) {
+        img = item.images;
+    } else if (item.image) {
+        img = item.image;
+    }
+    if (!img) return '/placeholder.svg';
+    const srcStr = typeof img === 'object' && img.src ? img.src : String(img);
+    const match = srcStr.match(/product_img(\d+)/);
+    if (match && srcStr.includes('/_next/')) {
+        return `/products/product_img${match[1]}.png`;
+    }
+    return srcStr;
+};
+
+const isPhoto = (src) => {
+    if (!src) return false;
+    const s = typeof src === 'object' && src.src ? src.src : String(src);
+    if (s.includes('product_img') || s.endsWith('.png')) {
+        return false;
+    }
+    return true;
+};
 
 export default function Cart() {
 
@@ -96,20 +125,41 @@ export default function Cart() {
                                     {
                                         cartArray.map((item, index) => (
                                             <tr key={index} className="space-x-2">
-                                                <td className="flex gap-3 my-4">
-                                                    <div className="flex gap-3 items-center justify-center bg-slate-100 size-18 rounded-md">
-                                                        <Image src={item.images[0]} className="h-14 w-auto" alt={item.name} width={45} height={45} />
-                                                    </div>
+                                                <td className="flex gap-3.5 my-4 items-center">
+                                                    <Link 
+                                                        href={`/product/${item.id}`}
+                                                        className="relative size-16 sm:size-18 rounded-xl border border-slate-200/90 bg-white overflow-hidden shadow-xs shrink-0 flex items-center justify-center group"
+                                                    >
+                                                        <Image 
+                                                            src={getItemImage(item)} 
+                                                            alt={item.name || 'Product image'} 
+                                                            fill
+                                                            sizes="(max-width: 640px) 64px, 72px"
+                                                            className={`transition-transform duration-200 group-hover:scale-105 ${
+                                                                isPhoto(getItemImage(item))
+                                                                    ? 'object-cover'
+                                                                    : 'object-contain p-1.5'
+                                                            }`}
+                                                            onError={(e) => {
+                                                                e.currentTarget.src = '/placeholder.svg';
+                                                            }}
+                                                        />
+                                                    </Link>
                                                     <div>
-                                                        <p className="max-sm:text-sm">{item.name}</p>
+                                                        <Link 
+                                                            href={`/product/${item.id}`}
+                                                            className="max-sm:text-sm font-semibold text-slate-800 hover:text-green-600 transition-colors line-clamp-1"
+                                                        >
+                                                            {item.name}
+                                                        </Link>
                                                         <p className="text-xs text-slate-500">{item.category}</p>
                                                         <div className="flex items-center gap-2 mt-0.5">
-                                                            <p>{currency}{item.price}</p>
+                                                            <p className="font-semibold text-slate-700">{currency}{item.price}</p>
                                                             {item.selectedColor && (
-                                                                <span className="w-4 h-4 rounded-full border border-slate-300 inline-block" style={{ backgroundColor: item.selectedColor }} title={item.selectedColor} />
+                                                                <span className="w-4 h-4 rounded-full border border-slate-300 inline-block shrink-0" style={{ backgroundColor: item.selectedColor }} title={item.selectedColor} />
                                                             )}
                                                             {item.selectedSize && (
-                                                                <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{item.selectedSize}</span>
+                                                                <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">{item.selectedSize}</span>
                                                             )}
                                                         </div>
                                                         <button onClick={() => handleDeleteItemFromCart(item.id)} className="md:hidden text-red-500 text-xs mt-1 hover:bg-red-50 px-2 py-0.5 rounded transition-all">
