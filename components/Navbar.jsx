@@ -297,14 +297,6 @@ const Navbar = () => {
 
                     {/* Mobile Header Icons */}
                     <div className="sm:hidden flex items-center gap-2">
-                        <Link href="/profile?tab=wishlist" className="relative flex items-center p-1.5 text-slate-600">
-                            <Heart size={20} className={safeWishlistCount > 0 ? "text-rose-500 fill-rose-500" : ""} />
-                            {safeWishlistCount > 0 && (
-                                <span className="absolute -top-1 -right-1 text-[9px] font-bold text-white bg-rose-500 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full">
-                                    {safeWishlistCount}
-                                </span>
-                            )}
-                        </Link>
                         <Link href="/cart" className="relative flex items-center p-1.5 text-slate-600">
                             <ShoppingCart size={20} />
                             {safeCartCount > 0 && (
