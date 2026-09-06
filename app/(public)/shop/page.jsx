@@ -18,14 +18,15 @@ function ShopContent() {
     const products = rawProducts.filter(p => !isDemoProduct(p))
 
     const filteredProducts = search
-        ? products.filter(product =>
-            product.name.toLowerCase().includes(search.toLowerCase()) ||
-            (product.categories && Array.isArray(product.categories)
-                ? product.categories.some(cat => cat.toLowerCase().includes(search.toLowerCase()))
-                : (product.category && product.category.toLowerCase().includes(search.toLowerCase()))
-            ) ||
-            (product.description && product.description.toLowerCase().includes(search.toLowerCase()))
-        )
+        ? products.filter(product => {
+            const query = search.toLowerCase()
+            const nameMatch = (product?.name || '').toLowerCase().includes(query)
+            const descMatch = (product?.description || '').toLowerCase().includes(query)
+            const catMatch = product?.categories && Array.isArray(product.categories)
+                ? product.categories.some(cat => (cat || '').toLowerCase().includes(query))
+                : (product?.category || '').toLowerCase().includes(query)
+            return nameMatch || descMatch || catMatch
+        })
         : products;
 
     const breadcrumbs = [

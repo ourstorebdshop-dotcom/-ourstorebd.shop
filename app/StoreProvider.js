@@ -97,7 +97,7 @@ export default function StoreProvider({ children }) {
                     const parsed = JSON.parse(savedWl)
                     if (Array.isArray(parsed)) {
                         // Strip any demo dummy product IDs (prod_1 to prod_16)
-                        const cleaned = parsed.filter(id => typeof id === 'string' && !DEMO_PRODUCT_IDS.has(id))
+                        const cleaned = parsed.filter(id => typeof id === 'string' && !DUMMY_IDS.has(id))
                         if (cleaned.length > 0) {
                             localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(cleaned))
                         } else {

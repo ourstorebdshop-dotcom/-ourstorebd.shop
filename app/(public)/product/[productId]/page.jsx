@@ -5,18 +5,20 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
 import Link from "next/link";
-import { ChevronRight, HomeIcon } from "lucide-react";
+import { ChevronRight, HomeIcon, Package } from "lucide-react";
 import { ProductJsonLd, BreadcrumbJsonLd } from "@/components/seo/JsonLd";
 
 export default function Product() {
     const { productId } = useParams();
     const [product, setProduct] = useState(null);
+    const [hasChecked, setHasChecked] = useState(false);
     const products = useSelector(state => state.product.list);
 
     useEffect(() => {
         if (products && products.length > 0) {
             const foundProduct = products.find((p) => p.id === productId);
-            setProduct(foundProduct);
+            setProduct(foundProduct || null);
+            setHasChecked(true);
             if (foundProduct?.name) {
                 document.title = `${foundProduct.name} - Buy Online in Bangladesh | Our Store BD`;
             }
@@ -72,6 +74,17 @@ export default function Product() {
                         <ProductDetails product={product} />
                         <ProductDescription product={product} />
                     </>
+                ) : hasChecked ? (
+                    <div className="min-h-[50vh] flex flex-col items-center justify-center text-slate-500 text-center py-16">
+                        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-slate-400">
+                            <Package size={32} />
+                        </div>
+                        <h2 className="text-xl font-bold text-slate-800 mb-2">পণ্যটি খুঁজে পাওয়া যায়নি</h2>
+                        <p className="text-sm text-slate-500 max-w-md mb-6">দুঃখিত, আপনি যে পণ্যটি খুঁজছেন তা বর্তমানে উপলব্ধ নেই অথবা সরানো হয়েছে।</p>
+                        <Link href="/shop" className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold text-sm rounded-xl transition shadow-xs">
+                            সকল পণ্য দেখুন
+                        </Link>
+                    </div>
                 ) : (
                     <div className="min-h-[50vh] flex flex-col items-center justify-center text-slate-500">
                         <div className="w-8 h-8 border-3 border-green-600 border-t-transparent rounded-full animate-spin mb-3" />
