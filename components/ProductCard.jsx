@@ -20,16 +20,136 @@ const resolveImage = (img) => {
     return img
 }
 
+// Cache analyzed image styles so that once analyzed, rendering is instantaneous
+const styleCache = new Map()
+
+// Helper to determine initial/fallback style from src
+const getInitialStyle = (src) => {
+    if (!src) return { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+    const srcStr = typeof src === 'object' && src.src ? src.src : String(src)
+    if (styleCache.has(srcStr)) {
+        return styleCache.get(srcStr)
+    }
+    if (srcStr.includes('product_img') || srcStr.endsWith('.png')) {
+        return { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+    }
+    if (srcStr.startsWith('data:image/jpeg') || srcStr.endsWith('.jpg') || srcStr.endsWith('.jpeg')) {
+        return { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
+    }
+    return { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+}
+
 const ProductCard = ({ product }) => {
 
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
     const router = useRouter()
     const [addedToCart, setAddedToCart] = useState(false)
-    const [currentImg, setCurrentImg] = React.useState(() => resolveImage(product.images?.[0]))
+    const resolvedImg = resolveImage(product.images?.[0])
+    const [currentImg, setCurrentImg] = React.useState(resolvedImg)
+    const [imgStyle, setImgStyle] = React.useState(() => getInitialStyle(resolvedImg))
 
     React.useEffect(() => {
-        setCurrentImg(resolveImage(product.images?.[0]))
+        const resolved = resolveImage(product.images?.[0])
+        setCurrentImg(resolved)
+
+        if (!resolved || typeof window === 'undefined') return
+
+        const srcStr = typeof resolved === 'object' && resolved.src ? resolved.src : String(resolved)
+
+        if (styleCache.has(srcStr)) {
+            setImgStyle(styleCache.get(srcStr))
+            return
+        }
+
+        let isCancelled = false
+        const img = new window.Image()
+        img.crossOrigin = 'anonymous'
+
+        img.onload = () => {
+            if (isCancelled) return
+            try {
+                const nw = img.naturalWidth || 1
+                const nh = img.naturalHeight || 1
+                const aspectRatio = nw / nh
+
+                // Inspect corner pixels using a small offscreen canvas
+                const canvas = document.createElement('canvas')
+                canvas.width = 16
+                canvas.height = 16
+                const ctx = canvas.getContext('2d', { willReadFrequently: true })
+
+                if (!ctx) {
+                    const fallback = srcStr.includes('.png') || srcStr.includes('product_img')
+                        ? { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+                        : { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
+                    styleCache.set(srcStr, fallback)
+                    setImgStyle(fallback)
+                    return
+                }
+
+                ctx.drawImage(img, 0, 0, 16, 16)
+                const data = ctx.getImageData(0, 0, 16, 16).data
+
+                // Sample corner pixels: top-left, top-right, bottom-left, bottom-right
+                const corners = [0, 15, 15 * 16, 15 * 16 + 15]
+                let hasTransparentCorner = false
+                let whiteCornersCount = 0
+
+                for (const idx of corners) {
+                    const p = idx * 4
+                    const r = data[p]
+                    const g = data[p + 1]
+                    const b = data[p + 2]
+                    const a = data[p + 3]
+
+                    if (a < 40) {
+                        hasTransparentCorner = true
+                    }
+                    if (a >= 200 && r > 230 && g > 230 && b > 230) {
+                        whiteCornersCount++;
+                    }
+                }
+
+                let style
+                if (hasTransparentCorner) {
+                    // Transparent product PNG (e.g. watch, lamp, gadget)
+                    style = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+                } else if (whiteCornersCount >= 3) {
+                    // Graphic or product with pure white/near-white background
+                    style = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-white' }
+                } else if (aspectRatio > 1.75 || aspectRatio < 0.5) {
+                    // Extreme aspect ratio (panoramic banner)
+                    style = { fit: 'contain', padding: 'p-2', bg: 'bg-[#F5F5F5]' }
+                } else {
+                    // Real photograph (flower, lifestyle, clothing) -> full-bleed cover
+                    style = { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
+                }
+
+                styleCache.set(srcStr, style)
+                setImgStyle(style)
+            } catch (e) {
+                const isJpeg = srcStr.startsWith('data:image/jpeg') || srcStr.endsWith('.jpg') || srcStr.endsWith('.jpeg')
+                const fallback = isJpeg
+                    ? { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
+                    : { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+                styleCache.set(srcStr, fallback)
+                setImgStyle(fallback)
+            }
+        }
+
+        img.onerror = () => {
+            if (!isCancelled) {
+                const fallback = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+                setImgStyle(fallback)
+            }
+        }
+
+        img.src = srcStr
+
+        return () => {
+            isCancelled = true
+        }
     }, [product.images])
 
     const wishlistItems = useSelector(state => state.wishlist?.items || [])
@@ -101,20 +221,27 @@ const ProductCard = ({ product }) => {
 
     return (
         <Link href={`/product/${product.id}`} className='group w-full'>
-            {/* Image Container — taller for better visibility */}
-            <div className='relative bg-[#F5F5F5] h-48 sm:h-72 rounded-xl flex items-center justify-center overflow-hidden'>
+            {/* Image Container — strictly preserves homepage size (h-48 sm:h-72) */}
+            <div className={`relative ${imgStyle.bg} border border-slate-100/80 h-48 sm:h-72 rounded-xl flex items-center justify-center overflow-hidden transition-colors duration-300`}>
                 <Image
-                    width={500}
-                    height={500}
-                    className='max-h-36 sm:max-h-48 w-auto group-hover:scale-110 transition duration-300'
+                    fill
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                    className={`transition-all duration-300 group-hover:scale-105 ${
+                        imgStyle.fit === 'cover'
+                            ? 'object-cover'
+                            : `object-contain ${imgStyle.padding}`
+                    }`}
                     src={currentImg}
-                    onError={() => setCurrentImg('/products/product_img1.png')}
+                    onError={() => {
+                        setCurrentImg('/products/product_img1.png')
+                        setImgStyle({ fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' })
+                    }}
                     alt={`${product.name || 'Electronics gadget'} - Buy in Bangladesh | Our Store BD`}
                 />
 
                 {/* Badge */}
                 {badge && (
-                    <span className={`absolute top-2 left-2 sm:top-3 sm:left-3 ${badge.color} text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full flex items-center gap-0.5 shadow-lg`}>
+                    <span className={`absolute top-2 left-2 sm:top-3 sm:left-3 ${badge.color} text-white text-[10px] sm:text-xs font-bold px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full flex items-center gap-0.5 shadow-lg z-10`}>
                         {badge.icon && <badge.icon size={11} />}
                         {badge.label}
                     </span>
@@ -123,7 +250,7 @@ const ProductCard = ({ product }) => {
                 {/* Wishlist Button */}
                 <button
                     onClick={handleWishlist}
-                    className={`absolute top-2 right-2 sm:top-3 sm:right-3 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-md transition-all duration-200 active:scale-90 cursor-pointer ${
+                    className={`absolute top-2 right-2 sm:top-3 sm:right-3 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-md transition-all duration-200 active:scale-90 cursor-pointer z-10 ${
                         isWishlisted
                             ? 'bg-rose-500 text-white shadow-rose-200'
                             : 'bg-white/90 backdrop-blur-sm text-slate-400 hover:text-rose-500 hover:bg-white'
@@ -135,7 +262,7 @@ const ProductCard = ({ product }) => {
 
                 {/* Out of Stock overlay */}
                 {!product.inStock && (
-                    <div className='absolute inset-0 bg-black/40 flex items-center justify-center rounded-xl'>
+                    <div className='absolute inset-0 bg-black/40 flex items-center justify-center rounded-xl z-10'>
                         <span className='text-white text-xs sm:text-sm font-semibold bg-black/60 px-3 py-1 rounded-full'>Out of Stock</span>
                     </div>
                 )}

@@ -4,7 +4,7 @@ import { addToCart } from "@/lib/features/cart/cartSlice";
 import { toggleWishlist } from "@/lib/features/wishlist/wishlistSlice";
 import { StarIcon, TagIcon, EarthIcon, CreditCardIcon, UserIcon, ZapIcon, ShoppingCartIcon, CheckIcon, PhoneCallIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import Counter from "./Counter";
 import { useDispatch, useSelector } from "react-redux";
@@ -18,6 +18,23 @@ const resolveImage = (img) => {
         return `/products/product_img${match[1]}.png`
     }
     return img
+}
+
+const styleCache = new Map()
+
+const getInitialStyle = (src) => {
+    if (!src) return { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' }
+    const srcStr = typeof src === 'object' && src.src ? src.src : String(src)
+    if (styleCache.has(srcStr)) {
+        return styleCache.get(srcStr)
+    }
+    if (srcStr.includes('product_img') || srcStr.endsWith('.png')) {
+        return { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' }
+    }
+    if (srcStr.startsWith('data:image/jpeg') || srcStr.endsWith('.jpg') || srcStr.endsWith('.jpeg')) {
+        return { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' }
+    }
+    return { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' }
 }
 
 const ProductDetails = ({ product }) => {
@@ -54,7 +71,106 @@ const ProductDetails = ({ product }) => {
 
     const router = useRouter()
 
-    const [mainImage, setMainImage] = useState(() => resolveImage(product.images?.[0]));
+    const initialImg = resolveImage(product.images?.[0]);
+    const [mainImage, setMainImage] = useState(initialImg);
+    const [imgStyle, setImgStyle] = useState(() => getInitialStyle(initialImg));
+    const [selectedColor, setSelectedColor] = useState(() => product.colors?.[0] || '');
+    const [selectedSize, setSelectedSize] = useState(() => product.sizes?.[0] || '');
+    const [addedFeedback, setAddedFeedback] = useState(false);
+
+    useEffect(() => {
+        if (!mainImage || typeof window === 'undefined') return;
+
+        const srcStr = typeof mainImage === 'object' && mainImage.src ? mainImage.src : String(mainImage);
+
+        if (styleCache.has(srcStr)) {
+            setImgStyle(styleCache.get(srcStr));
+            return;
+        }
+
+        let isCancelled = false;
+        const img = new window.Image();
+        img.crossOrigin = 'anonymous';
+
+        img.onload = () => {
+            if (isCancelled) return;
+            try {
+                const nw = img.naturalWidth || 1;
+                const nh = img.naturalHeight || 1;
+                const aspectRatio = nw / nh;
+
+                const canvas = document.createElement('canvas');
+                canvas.width = 16;
+                canvas.height = 16;
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+                if (!ctx) {
+                    const fallback = srcStr.includes('.png') || srcStr.includes('product_img')
+                        ? { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' }
+                        : { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' };
+                    styleCache.set(srcStr, fallback);
+                    setImgStyle(fallback);
+                    return;
+                }
+
+                ctx.drawImage(img, 0, 0, 16, 16);
+                const data = ctx.getImageData(0, 0, 16, 16).data;
+
+                const corners = [0, 15, 15 * 16, 15 * 16 + 15];
+                let hasTransparentCorner = false;
+                let whiteCornersCount = 0;
+
+                for (const idx of corners) {
+                    const p = idx * 4;
+                    const r = data[p];
+                    const g = data[p + 1];
+                    const b = data[p + 2];
+                    const a = data[p + 3];
+
+                    if (a < 40) {
+                        hasTransparentCorner = true;
+                    }
+                    if (a >= 200 && r > 230 && g > 230 && b > 230) {
+                        whiteCornersCount++;
+                    }
+                }
+
+                let style;
+                if (hasTransparentCorner) {
+                    style = { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' };
+                } else if (whiteCornersCount >= 3) {
+                    style = { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-white' };
+                } else if (aspectRatio > 1.8 || aspectRatio < 0.45) {
+                    style = { fit: 'contain', padding: 'p-4', bg: 'bg-slate-100' };
+                } else {
+                    style = { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' };
+                }
+
+                styleCache.set(srcStr, style);
+                setImgStyle(style);
+            } catch (e) {
+                const isJpeg = srcStr.startsWith('data:image/jpeg') || srcStr.endsWith('.jpg') || srcStr.endsWith('.jpeg');
+                const fallback = isJpeg
+                    ? { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' }
+                    : { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' };
+                styleCache.set(srcStr, fallback);
+                setImgStyle(fallback);
+            }
+        };
+
+        img.onerror = () => {
+            if (!isCancelled) {
+                const fallback = { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' };
+                setImgStyle(fallback);
+            }
+        };
+
+        img.src = srcStr;
+
+        return () => {
+            isCancelled = true;
+        };
+    }, [mainImage]);
 
     const addToCartHandler = () => {
         if (!product.inStock) return;
@@ -98,15 +214,52 @@ const ProductDetails = ({ product }) => {
     return (
         <div className="flex max-lg:flex-col gap-6 sm:gap-12">
             <div className="flex max-sm:flex-col-reverse gap-3">
-                <div className="flex sm:flex-col gap-3">
-                    {product.images.map((image, index) => (
-                        <div key={index} onClick={() => setMainImage(resolveImage(product.images[index]))} className="bg-slate-100 flex items-center justify-center size-16 sm:size-26 rounded-lg group cursor-pointer">
-                            <Image src={resolveImage(image)} onError={(e) => { e.currentTarget.src = '/products/product_img1.png' }} className="group-hover:scale-103 group-active:scale-95 transition" alt={`${product.name} thumbnail view ${index + 1} - Our Store BD`} width={45} height={45} />
-                        </div>
-                    ))}
+                {/* Thumbnails */}
+                <div className="flex max-sm:flex-row max-sm:overflow-x-auto sm:flex-col gap-3 pb-2 sm:pb-0">
+                    {product.images.map((image, index) => {
+                        const resolved = resolveImage(image);
+                        const isActive = mainImage === resolved;
+                        return (
+                            <div
+                                key={index}
+                                onClick={() => setMainImage(resolved)}
+                                className={`relative flex-shrink-0 size-16 sm:size-22 rounded-xl border-2 overflow-hidden cursor-pointer transition-all duration-200 ${
+                                    isActive
+                                        ? 'border-green-600 ring-2 ring-green-600/25 shadow-md scale-102'
+                                        : 'border-slate-200 hover:border-slate-400 bg-slate-50'
+                                }`}
+                            >
+                                <Image
+                                    fill
+                                    sizes="88px"
+                                    src={resolved}
+                                    onError={(e) => { e.currentTarget.src = '/products/product_img1.png' }}
+                                    className="object-cover transition-transform duration-200 hover:scale-105"
+                                    alt={`${product.name} thumbnail view ${index + 1} - Our Store BD`}
+                                />
+                            </div>
+                        );
+                    })}
                 </div>
-                <div className="flex justify-center items-center h-60 sm:h-100 sm:size-113 bg-slate-100 rounded-lg ">
-                    <Image src={mainImage} onError={() => setMainImage('/products/product_img1.png')} alt={`${product.name} - Authentic Electronics & Gadgets in Bangladesh`} width={250} height={250} priority className='max-h-44 sm:max-h-full w-auto' />
+
+                {/* Main Showcase Image */}
+                <div className={`relative flex justify-center items-center h-80 sm:h-112 sm:size-113 w-full ${imgStyle.bg} border border-slate-200/80 rounded-2xl overflow-hidden transition-colors duration-300 shadow-sm`}>
+                    <Image
+                        fill
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 550px"
+                        src={mainImage}
+                        onError={() => {
+                            setMainImage('/products/product_img1.png');
+                            setImgStyle({ fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' });
+                        }}
+                        alt={`${product.name} - Authentic Electronics & Gadgets in Bangladesh`}
+                        priority
+                        className={`transition-all duration-300 ${
+                            imgStyle.fit === 'cover'
+                                ? 'object-cover hover:scale-105'
+                                : `object-contain ${imgStyle.padding} hover:scale-105`
+                        }`}
+                    />
                 </div>
             </div>
             <div className="flex-1">

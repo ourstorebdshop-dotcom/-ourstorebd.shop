@@ -89,15 +89,15 @@ const Hero = () => {
                         )}
 
                         {/* Title */}
-                        <h2 className='text-3xl sm:text-5xl leading-[1.2] my-3 font-medium bg-gradient-to-r from-slate-600 to-[#A0FF74] bg-clip-text text-transparent max-w-xs sm:max-w-md'>
+                        <h2 className='text-3xl sm:text-5xl leading-[1.18] my-3 font-bold text-slate-800 tracking-tight max-w-xs sm:max-w-md'>
                             {mainBanner.title}
                         </h2>
 
                         {/* Price */}
                         {mainBanner.showPrice && (
                             <div className='text-slate-800 text-sm font-medium mt-4 sm:mt-8'>
-                                <p>{mainBanner.priceLabel}</p>
-                                <p className='text-3xl'>{currency}{mainBanner.priceValue}</p>
+                                <p className='text-xs sm:text-sm font-medium text-slate-600'>{mainBanner.priceLabel}</p>
+                                <p className='text-2xl sm:text-3xl font-bold tracking-tight text-slate-900'>{currency}{mainBanner.priceValue}</p>
                             </div>
                         )}
 
@@ -105,7 +105,7 @@ const Hero = () => {
                         {mainBanner.showButton && (
                             <Link 
                                 href={mainBanner.buttonLink || '/shop'} 
-                                className='bg-slate-800 text-white text-sm py-3 px-8 sm:py-5 sm:px-12 mt-4 sm:mt-10 rounded-md hover:bg-slate-900 hover:scale-103 active:scale-95 transition inline-block'
+                                className='bg-slate-900 text-white text-xs sm:text-sm font-semibold py-3 sm:py-4 px-7 sm:px-10 mt-4 sm:mt-8 rounded-xl shadow-sm hover:bg-slate-800 hover:shadow-md hover:scale-102 active:scale-95 transition-all duration-200 inline-block'
                             >
                                 {mainBanner.buttonText}
                             </Link>
@@ -115,13 +115,14 @@ const Hero = () => {
                     {/* Main Image */}
                     {mainBanner.image ? (
                         <img 
-                            className='sm:absolute bottom-0 right-0 md:right-10 w-full sm:max-w-sm max-h-96 object-contain z-0' 
+                            className='sm:absolute bottom-0 right-0 md:right-8 w-full sm:max-w-sm max-h-96 object-contain z-0 pointer-events-none' 
                             src={mainBanner.image} 
                             alt={mainBanner.title || "Shop gadgets"} 
                         />
                     ) : (
                         <Image 
-                            className='sm:absolute bottom-0 right-0 md:right-10 w-full sm:max-w-sm' 
+                            priority
+                            className='sm:absolute bottom-0 right-0 md:right-8 w-full sm:max-w-sm max-h-96 object-contain pointer-events-none' 
                             src={assets.hero_model_img} 
                             alt="Shop gadgets" 
                         />
@@ -135,25 +136,25 @@ const Hero = () => {
                         {sideCard1.showCard && (
                             <Link 
                                 href={sideCard1.link || '/shop'} 
-                                className={`flex-1 flex items-center justify-between w-full ${card1BgClass} rounded-3xl p-6 px-8 group`}
+                                className={`flex-1 flex items-center justify-between w-full ${card1BgClass} rounded-3xl p-6 px-8 group transition-all duration-300 hover:shadow-md`}
                                 style={card1BgStyle}
                             >
                                 <div>
-                                    <p className='text-3xl font-medium bg-gradient-to-r from-slate-800 to-[#FFAD51] bg-clip-text text-transparent max-w-40'>
+                                    <p className='text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight max-w-40 leading-tight'>
                                         {sideCard1.title}
                                     </p>
-                                    <p className='flex items-center gap-1 mt-4'>
-                                        {sideCard1.buttonText} <ArrowRightIcon className='group-hover:ml-2 transition-all' size={18} />
+                                    <p className='flex items-center gap-1 mt-4 font-medium text-slate-700'>
+                                        {sideCard1.buttonText} <ArrowRightIcon className='group-hover:ml-1.5 transition-all' size={18} />
                                     </p>
                                 </div>
                                 {sideCard1.image ? (
                                     <img 
-                                        className='w-28 sm:w-35 max-h-28 object-contain' 
+                                        className='w-24 sm:w-32 max-h-28 object-contain drop-shadow-sm group-hover:scale-105 transition-transform duration-300' 
                                         src={sideCard1.image} 
                                         alt={sideCard1.title || "Best products"} 
                                     />
                                 ) : (
-                                    <Image className='w-35' src={assets.hero_product_img1} alt="Best products" />
+                                    <Image className='w-24 sm:w-32 h-auto object-contain drop-shadow-sm group-hover:scale-105 transition-transform duration-300' src={assets.hero_product_img1} alt="Best products" />
                                 )}
                             </Link>
                         )}
@@ -162,25 +163,25 @@ const Hero = () => {
                         {sideCard2.showCard && (
                             <Link 
                                 href={sideCard2.link || '/shop'} 
-                                className={`flex-1 flex items-center justify-between w-full ${card2BgClass} rounded-3xl p-6 px-8 group`}
+                                className={`flex-1 flex items-center justify-between w-full ${card2BgClass} rounded-3xl p-6 px-8 group transition-all duration-300 hover:shadow-md`}
                                 style={card2BgStyle}
                             >
                                 <div>
-                                    <p className='text-3xl font-medium bg-gradient-to-r from-slate-800 to-[#78B2FF] bg-clip-text text-transparent max-w-40'>
+                                    <p className='text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight max-w-40 leading-tight'>
                                         {sideCard2.title}
                                     </p>
-                                    <p className='flex items-center gap-1 mt-4'>
-                                        {sideCard2.buttonText} <ArrowRightIcon className='group-hover:ml-2 transition-all' size={18} />
+                                    <p className='flex items-center gap-1 mt-4 font-medium text-slate-700'>
+                                        {sideCard2.buttonText} <ArrowRightIcon className='group-hover:ml-1.5 transition-all' size={18} />
                                     </p>
                                 </div>
                                 {sideCard2.image ? (
                                     <img 
-                                        className='w-28 sm:w-35 max-h-28 object-contain' 
+                                        className='w-24 sm:w-32 max-h-28 object-contain drop-shadow-sm group-hover:scale-105 transition-transform duration-300' 
                                         src={sideCard2.image} 
                                         alt={sideCard2.title || "20% discounts"} 
                                     />
                                 ) : (
-                                    <Image className='w-35' src={assets.hero_product_img2} alt="20% discounts" />
+                                    <Image className='w-24 sm:w-32 h-auto object-contain drop-shadow-sm group-hover:scale-105 transition-transform duration-300' src={assets.hero_product_img2} alt="20% discounts" />
                                 )}
                             </Link>
                         )}
