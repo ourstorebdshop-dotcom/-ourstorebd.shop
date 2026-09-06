@@ -44,8 +44,17 @@ const Navbar = () => {
 
     const cartItems = useSelector(state => state.cart.cartItems);
     const cartCount = Object.values(cartItems).reduce((sum, item) => sum + (typeof item === 'number' ? item : (item?.quantity || 0)), 0);
+    const allProducts = useSelector(state => state.product?.list || []);
     const wishlistItems = useSelector(state => state.wishlist?.items || []);
-    const wishlistCount = wishlistItems.length;
+    // Only count products that actually exist and are not demo dummy products
+    const validWishlistItems = wishlistItems.filter(id => {
+        if (!id || (typeof id === 'string' && id.startsWith('prod_'))) return false;
+        if (allProducts.length > 0) {
+            return allProducts.some(p => p.id === id || p._id === id);
+        }
+        return true;
+    });
+    const wishlistCount = validWishlistItems.length;
     const { currentUser, isAuthenticated } = useSelector(state => state.user);
 
     useEffect(() => {

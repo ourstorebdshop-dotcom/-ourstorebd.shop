@@ -89,13 +89,21 @@ export default function StoreProvider({ children }) {
             localStorage.removeItem(CART_STORAGE_KEY)
             localStorage.setItem(MIGRATION_KEY, '1')
         }
-        const WISHLIST_CLEANUP_KEY = 'gocart_wishlist_clean_v1'
+        const WISHLIST_CLEANUP_KEY = 'gocart_wishlist_clean_v5'
         if (!localStorage.getItem(WISHLIST_CLEANUP_KEY)) {
             const savedWl = localStorage.getItem(WISHLIST_STORAGE_KEY)
             if (savedWl) {
                 try {
                     const parsed = JSON.parse(savedWl)
-                    if (Array.isArray(parsed) && parsed.length === 2 && parsed.includes('prod_1') && parsed.includes('prod_3')) {
+                    if (Array.isArray(parsed)) {
+                        // Strip any demo dummy product IDs (prod_1 to prod_16)
+                        const cleaned = parsed.filter(id => typeof id === 'string' && !DEMO_PRODUCT_IDS.has(id))
+                        if (cleaned.length > 0) {
+                            localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(cleaned))
+                        } else {
+                            localStorage.removeItem(WISHLIST_STORAGE_KEY)
+                        }
+                    } else {
                         localStorage.removeItem(WISHLIST_STORAGE_KEY)
                     }
                 } catch (e) {
@@ -315,7 +323,17 @@ export default function StoreProvider({ children }) {
                 if (savedWishlist) {
                     const parsed = JSON.parse(savedWishlist)
                     if (Array.isArray(parsed)) {
-                        store.dispatch(hydrateWishlist(parsed))
+                        const cleaned = parsed.filter(id => typeof id === 'string' && !DEMO_PRODUCT_IDS.has(id))
+                        store.dispatch(hydrateWishlist(cleaned))
+                        if (cleaned.length !== parsed.length) {
+                            try {
+                                if (cleaned.length > 0) {
+                                    localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(cleaned))
+                                } else {
+                                    localStorage.removeItem(WISHLIST_STORAGE_KEY)
+                                }
+                            } catch (e) { /* ignore */ }
+                        }
                     } else {
                         store.dispatch(hydrateWishlist([]))
                     }

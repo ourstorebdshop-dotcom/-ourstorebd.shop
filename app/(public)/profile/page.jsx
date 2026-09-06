@@ -60,7 +60,22 @@ function ProfileDashboard() {
     const coupons = useSelector(state => state.coupon.coupons)
     const wishlistIds = useSelector(state => state.wishlist?.items || [])
     const allProducts = useSelector(state => state.product?.list || [])
-    const wishlistProducts = allProducts.filter(p => wishlistIds.includes(p.id))
+    const wishlistProducts = allProducts.filter(p => wishlistIds.includes(p.id) || (p._id && wishlistIds.includes(p._id)))
+
+    // Auto-clean any legacy demo IDs (prod_1 etc.) or deleted/orphaned IDs from wishlist
+    useEffect(() => {
+        if (mounted && wishlistIds.length > 0) {
+            const demoIds = wishlistIds.filter(id => typeof id === 'string' && (id.startsWith('prod_') || id === 'prod_1' || id === 'prod_3'))
+            if (demoIds.length > 0) {
+                demoIds.forEach(id => dispatch(removeFromWishlist(id)))
+            } else if (allProducts.length > 0) {
+                const orphaned = wishlistIds.filter(id => !allProducts.some(p => p.id === id || p._id === id))
+                if (orphaned.length > 0) {
+                    orphaned.forEach(id => dispatch(removeFromWishlist(id)))
+                }
+            }
+        }
+    }, [mounted, allProducts, wishlistIds, dispatch])
 
     const [mounted, setMounted] = useState(false)
     const [activeTab, setActiveTab] = useState(initialTab)
@@ -347,6 +362,140 @@ function ProfileDashboard() {
         }
     }
 
+    // Helper to render the Wishlist content (used by both guest and logged-in views)
+    const renderWishlistContent = () => (
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div>
+                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <Heart size={22} className="text-rose-500 fill-rose-500" />
+                        আমার পছন্দের তালিকা (Wishlist)
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                        আপনার পছন্দ করে রাখা প্রিয় গ্যাজেট ও ইলেকট্রনিক্স পণ্যসমূহ
+                    </p>
+                </div>
+                {wishlistProducts.length > 0 && (
+                    <button
+                        onClick={() => {
+                            if (confirm('আপনি কি নিশ্চিত যে পছন্দের তালিকার সকল পণ্য মুছে ফেলতে চান?')) {
+                                dispatch(clearWishlist())
+                                toast.success('পছন্দের তালিকা খালি করা হয়েছে')
+                            }
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 self-start sm:self-auto hover:underline cursor-pointer"
+                    >
+                        <Trash2 size={14} />
+                        সব মুছে ফেলুন
+                    </button>
+                )}
+            </div>
+
+            {wishlistProducts.length === 0 ? (
+                <div className="text-center py-16 text-slate-400">
+                    <div className="w-16 h-16 bg-rose-50 text-rose-400 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <Heart size={32} />
+                    </div>
+                    <h3 className="text-base font-semibold text-slate-700">আপনার পছন্দের তালিকা বর্তমানে খালি</h3>
+                    <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                        পণ্য ব্রাউজ করার সময় প্রোডাক্ট কার্ডের হার্ট (❤️) আইকনে ক্লিক করে পছন্দের তালিকায় যুক্ত করুন।
+                    </p>
+                    <Link
+                        href="/shop"
+                        className="inline-flex items-center gap-2 mt-5 px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition shadow-xs"
+                    >
+                        <ShoppingBag size={16} />
+                        পণ্যসমূহ দেখুন (Explore Shop)
+                    </Link>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {wishlistProducts.map((product) => {
+                        const discountPercent = product.mrp && product.mrp > product.price
+                            ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
+                            : 0
+                        const prodId = product.id || product._id
+
+                        return (
+                            <div 
+                                key={prodId}
+                                className="group border border-slate-200 hover:border-green-300 rounded-2xl p-4 transition-all bg-white hover:shadow-md flex flex-col justify-between"
+                            >
+                                <div>
+                                    {/* Image Container */}
+                                    <div className="relative bg-slate-50 rounded-xl h-44 flex items-center justify-center overflow-hidden mb-3">
+                                        <Link href={`/product/${prodId}`} className="w-full h-full flex items-center justify-center">
+                                            <img
+                                                src={product.images?.[0]?.src || product.images?.[0] || "/product_img.png"}
+                                                alt={product.name}
+                                                className="max-h-36 w-auto object-contain group-hover:scale-105 transition duration-300"
+                                            />
+                                        </Link>
+                                        {discountPercent > 0 && (
+                                            <span className="absolute top-2 left-2 bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
+                                                -{discountPercent}%
+                                            </span>
+                                        )}
+                                        <button
+                                            onClick={() => {
+                                                dispatch(removeFromWishlist(prodId))
+                                                toast.success(`"${product.name}" পছন্দের তালিকা থেকে সরানো হয়েছে`)
+                                            }}
+                                            className="absolute top-2 right-2 w-8 h-8 bg-white/90 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-full flex items-center justify-center shadow-xs transition cursor-pointer"
+                                            title="Remove from Wishlist"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
+
+                                    {/* Product Info */}
+                                    <span className="text-[10px] text-green-700 font-semibold uppercase bg-green-50 px-2 py-0.5 rounded-md">
+                                        {product.category || "Gadgets"}
+                                    </span>
+                                    <Link href={`/product/${prodId}`} className="block mt-1.5">
+                                        <h4 className="text-sm font-bold text-slate-800 line-clamp-2 hover:text-green-600 transition">
+                                            {product.name}
+                                        </h4>
+                                    </Link>
+
+                                    <div className="flex items-baseline gap-2 mt-2">
+                                        <span className="text-base font-bold text-slate-900">{currency}{product.price}</span>
+                                        {product.mrp && product.mrp > product.price && (
+                                            <span className="text-xs text-slate-400 line-through">{currency}{product.mrp}</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Actions */}
+                                <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
+                                    <button
+                                        onClick={() => {
+                                            dispatch(addToCart({ productId: prodId }))
+                                            toast.success(`"${product.name}" কার্টে যোগ করা হয়েছে!`)
+                                        }}
+                                        className="flex-1 py-2.5 bg-slate-100 hover:bg-green-50 hover:text-green-700 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
+                                    >
+                                        <ShoppingBag size={14} />
+                                        কার্টে নিন
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            dispatch(addToCart({ productId: prodId }))
+                                            router.push('/cart')
+                                        }}
+                                        className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
+                                    >
+                                        অর্ডার করুন
+                                    </button>
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            )}
+        </div>
+    )
+
     // Wait until client mounted to prevent hydration mismatches
     if (!mounted) {
         return (
@@ -356,8 +505,55 @@ function ProfileDashboard() {
         )
     }
 
-    // Redirect if not logged in
+    // If not logged in but viewing Wishlist, allow guest view
     if (!isAuthenticated || !currentUser) {
+        if (activeTab === 'wishlist') {
+            return (
+                <div className="min-h-screen bg-slate-50/60 pb-20 pt-6">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6">
+                        {/* Guest Wishlist Top Bar */}
+                        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/80 shadow-xs mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative overflow-hidden">
+                            <div className="flex items-center gap-4 relative z-10">
+                                <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center shrink-0 border border-rose-100 shadow-xs">
+                                    <Heart size={32} className="fill-rose-500" />
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2.5 flex-wrap">
+                                        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">আমার পছন্দের তালিকা (Wishlist)</h1>
+                                        <span className="bg-rose-100 text-rose-700 text-xs px-2.5 py-0.5 rounded-full font-semibold">
+                                            {wishlistProducts.length} টি পণ্য
+                                        </span>
+                                    </div>
+                                    <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                                        পছন্দের পণ্যগুলো আপনার বর্তমান ডিভাইসে সংরক্ষিত আছে। যেকোনো ডিভাইস থেকে দেখতে লগইন করুন।
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 w-full md:w-auto relative z-10">
+                                <Link
+                                    href="/login?redirect=/profile?tab=wishlist"
+                                    className="px-5 py-2.5 bg-green-600 hover:bg-green-700 active:scale-95 text-white font-medium rounded-xl transition text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm"
+                                >
+                                    <User size={16} />
+                                    লগইন করুন
+                                </Link>
+                                <Link
+                                    href="/shop"
+                                    className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 font-medium rounded-xl transition text-xs sm:text-sm flex items-center justify-center gap-2"
+                                >
+                                    <ShoppingBag size={16} />
+                                    শপ দেখুন
+                                </Link>
+                            </div>
+                        </div>
+
+                        {/* Render Wishlist Content */}
+                        {renderWishlistContent()}
+                    </div>
+                </div>
+            )
+        }
+
         return (
             <div className="min-h-[75vh] flex flex-col items-center justify-center px-4">
                 <div className="max-w-md w-full bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center">
@@ -1203,137 +1399,7 @@ function ProfileDashboard() {
                         )}
 
                         {/* 6. WISHLIST TAB */}
-                        {activeTab === 'wishlist' && (
-                            <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-6">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                                    <div>
-                                        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                                            <Heart size={22} className="text-rose-500 fill-rose-500" />
-                                            আমার পছন্দের তালিকা (Wishlist)
-                                        </h2>
-                                        <p className="text-xs text-slate-500 mt-0.5">
-                                            আপনার পছন্দ করে রাখা প্রিয় গ্যাজেট ও ইলেকট্রনিক্স পণ্যসমূহ
-                                        </p>
-                                    </div>
-                                    {wishlistProducts.length > 0 && (
-                                        <button
-                                            onClick={() => {
-                                                if (confirm('আপনি কি নিশ্চিত যে পছন্দের তালিকার সকল পণ্য মুছে ফেলতে চান?')) {
-                                                    dispatch(clearWishlist())
-                                                    toast.success('পছন্দের তালিকা খালি করা হয়েছে')
-                                                }
-                                            }}
-                                            className="text-xs text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 self-start sm:self-auto hover:underline cursor-pointer"
-                                        >
-                                            <Trash2 size={14} />
-                                            সব মুছে ফেলুন
-                                        </button>
-                                    )}
-                                </div>
-
-                                {wishlistProducts.length === 0 ? (
-                                    <div className="text-center py-16 text-slate-400">
-                                        <div className="w-16 h-16 bg-rose-50 text-rose-400 rounded-full flex items-center justify-center mx-auto mb-3">
-                                            <Heart size={32} />
-                                        </div>
-                                        <h3 className="text-base font-semibold text-slate-700">আপনার পছন্দের তালিকা বর্তমানে খালি</h3>
-                                        <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-                                            পণ্য ব্রাউজ করার সময় প্রোডাক্ট কার্ডের হার্ট (❤️) আইকনে ক্লিক করে পছন্দের তালিকায় যুক্ত করুন।
-                                        </p>
-                                        <Link
-                                            href="/shop"
-                                            className="inline-flex items-center gap-2 mt-5 px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white text-xs sm:text-sm font-semibold rounded-xl transition shadow-xs"
-                                        >
-                                            <ShoppingBag size={16} />
-                                            পণ্যসমূহ দেখুন (Explore Shop)
-                                        </Link>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                                        {wishlistProducts.map((product) => {
-                                            const discountPercent = product.mrp && product.mrp > product.price
-                                                ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
-                                                : 0
-
-                                            return (
-                                                <div 
-                                                    key={product.id}
-                                                    className="group border border-slate-200 hover:border-green-300 rounded-2xl p-4 transition-all bg-white hover:shadow-md flex flex-col justify-between"
-                                                >
-                                                    <div>
-                                                        {/* Image Container */}
-                                                        <div className="relative bg-slate-50 rounded-xl h-44 flex items-center justify-center overflow-hidden mb-3">
-                                                            <Link href={`/product/${product.id}`} className="w-full h-full flex items-center justify-center">
-                                                                <img
-                                                                    src={product.images?.[0]?.src || product.images?.[0] || "/product_img.png"}
-                                                                    alt={product.name}
-                                                                    className="max-h-36 w-auto object-contain group-hover:scale-105 transition duration-300"
-                                                                />
-                                                            </Link>
-                                                            {discountPercent > 0 && (
-                                                                <span className="absolute top-2 left-2 bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs">
-                                                                    -{discountPercent}%
-                                                                </span>
-                                                            )}
-                                                            <button
-                                                                onClick={() => {
-                                                                    dispatch(removeFromWishlist(product.id))
-                                                                    toast.success(`"${product.name}" পছন্দের তালিকা থেকে সরানো হয়েছে`)
-                                                                }}
-                                                                className="absolute top-2 right-2 w-8 h-8 bg-white/90 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-full flex items-center justify-center shadow-xs transition cursor-pointer"
-                                                                title="Remove from Wishlist"
-                                                            >
-                                                                <Trash2 size={14} />
-                                                            </button>
-                                                        </div>
-
-                                                        {/* Product Info */}
-                                                        <span className="text-[10px] text-green-700 font-semibold uppercase bg-green-50 px-2 py-0.5 rounded-md">
-                                                            {product.category || "Gadgets"}
-                                                        </span>
-                                                        <Link href={`/product/${product.id}`} className="block mt-1.5">
-                                                            <h4 className="text-sm font-bold text-slate-800 line-clamp-2 hover:text-green-600 transition">
-                                                                {product.name}
-                                                            </h4>
-                                                        </Link>
-
-                                                        <div className="flex items-baseline gap-2 mt-2">
-                                                            <span className="text-base font-bold text-slate-900">{currency}{product.price}</span>
-                                                            {product.mrp && product.mrp > product.price && (
-                                                                <span className="text-xs text-slate-400 line-through">{currency}{product.mrp}</span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Actions */}
-                                                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => {
-                                                                dispatch(addToCart({ productId: product.id }))
-                                                                toast.success(`"${product.name}" কার্টে যোগ করা হয়েছে!`)
-                                                            }}
-                                                            className="flex-1 py-2.5 bg-slate-100 hover:bg-green-50 hover:text-green-700 text-slate-700 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"
-                                                        >
-                                                            <ShoppingBag size={14} />
-                                                            কার্টে নিন
-                                                        </button>
-                                                        <button
-                                                            onClick={() => {
-                                                                dispatch(addToCart({ productId: product.id }))
-                                                                router.push('/cart')
-                                                            }}
-                                                            className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-                                                        >
-                                                            অর্ডার করুন
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        {activeTab === 'wishlist' && renderWishlistContent()}
 
                     </div>
                 </div>
