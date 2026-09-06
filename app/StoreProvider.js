@@ -120,24 +120,6 @@ export default function StoreProvider({ children }) {
             localStorage.setItem(DEMO_CLEANUP_KEY, '1')
         }
 
-        // ===== 0ms Instant Cache-First Hydration =====
-        // Immediately load real cached products from localStorage so the visitor sees them in 0ms!
-        try {
-            const saved = localStorage.getItem(PRODUCT_STORAGE_KEY)
-            if (saved) {
-                const parsed = JSON.parse(saved)
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    const cleaned = parsed.filter(p => !isDemoProduct(p))
-                    if (cleaned.length > 0) {
-                        store.dispatch(setProduct(cleaned))
-                        prevProductsRef.current = cleaned
-                    }
-                }
-            }
-        } catch (e) {
-            console.warn('Instant cache-first load error:', e)
-        }
-
         // ===== localStorage hydration helpers =====
         function lsLoadProducts() {
             try {
@@ -382,165 +364,96 @@ export default function StoreProvider({ children }) {
             }
         }
 
-        // ===== HYDRATE from Firestore (primary) or localStorage (fallback) =====
+        // ===== 0ms INSTANT CACHE-FIRST HYDRATION =====
+        // Immediately load user session, cart, categories, banners, hero, products from localStorage!
+        // This ensures the entire page renders with real data in 0ms with ZERO delay, pop-in, or login flicker!
+        lsLoadUserSpecific()
+        lsLoadAllAdmin()
+
+        // ===== BACKGROUND PARALLEL FIRESTORE SYNC =====
         async function hydrateData() {
             if (firebaseEnabled) {
                 try {
-                    // --- Products ---
-                    let fsProducts = await loadCollectionFromFirestore('products')
-                    if (fsProducts && Array.isArray(fsProducts)) {
-                        // Purge any untouched dummy demo products from Firestore so they never return
+                    const [
+                        productsRes,
+                        categoriesRes,
+                        bannersRes,
+                        couponsRes,
+                        heroRes,
+                        shippingRes,
+                        contactRes,
+                    ] = await Promise.allSettled([
+                        loadCollectionFromFirestore('products'),
+                        loadCollectionFromFirestore('categories'),
+                        loadCollectionFromFirestore('banners'),
+                        loadCollectionFromFirestore('coupons'),
+                        loadDocFromFirestore('settings', 'hero'),
+                        loadDocFromFirestore('settings', 'shipping'),
+                        loadDocFromFirestore('settings', 'contact'),
+                    ])
+
+                    // --- 1. Products ---
+                    if (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value)) {
+                        let fsProducts = productsRes.value
                         const demoItems = fsProducts.filter(isDemoProduct)
                         if (demoItems.length > 0) {
-                            demoItems.forEach(item => {
-                                deleteDocFromFirestore('products', item.id)
-                            })
+                            demoItems.forEach(item => deleteDocFromFirestore('products', item.id))
                             fsProducts = fsProducts.filter(p => !isDemoProduct(p))
                         }
-
                         store.dispatch(setProduct(fsProducts))
                         prevProductsRef.current = fsProducts
                         try { localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(fsProducts)) } catch (e) { /* ignore */ }
-                    } else {
-                        lsLoadProducts()
                     }
 
-                    // --- Categories ---
-                    let fsCategories = await loadCollectionFromFirestore('categories')
-                    if (!fsCategories || fsCategories.length === 0) {
-                        try {
-                            const savedCat = localStorage.getItem(CATEGORY_STORAGE_KEY)
-                            const localCats = savedCat ? JSON.parse(savedCat) : defaultCategories
-                            if (Array.isArray(localCats) && localCats.length > 0) {
-                                fsCategories = localCats
-                                syncCollectionToFirestore('categories', localCats)
-                            }
-                        } catch (e) { /* ignore */ }
-                    }
-                    if (fsCategories && fsCategories.length > 0) {
-                        store.dispatch(hydrateCategories(fsCategories))
-                        try { localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(fsCategories)) } catch (e) { /* ignore */ }
-                    } else {
-                        lsLoadCategories()
+                    // --- 2. Categories ---
+                    if (categoriesRes.status === 'fulfilled' && Array.isArray(categoriesRes.value) && categoriesRes.value.length > 0) {
+                        store.dispatch(hydrateCategories(categoriesRes.value))
+                        try { localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(categoriesRes.value)) } catch (e) { /* ignore */ }
                     }
 
-                    // --- Banners ---
-                    let fsBanners = await loadCollectionFromFirestore('banners')
-                    if (!fsBanners || fsBanners.length === 0) {
-                        try {
-                            const savedBanners = localStorage.getItem(BANNER_STORAGE_KEY)
-                            const localBanners = savedBanners ? JSON.parse(savedBanners) : defaultBanners
-                            if (Array.isArray(localBanners) && localBanners.length > 0) {
-                                fsBanners = localBanners
-                                syncCollectionToFirestore('banners', localBanners)
-                            }
-                        } catch (e) { /* ignore */ }
-                    }
-                    if (fsBanners && fsBanners.length > 0) {
+                    // --- 3. Banners ---
+                    if (bannersRes.status === 'fulfilled' && Array.isArray(bannersRes.value) && bannersRes.value.length > 0) {
                         const seen = new Set()
-                        const deduped = fsBanners.filter(b => {
+                        const deduped = bannersRes.value.filter(b => {
                             if (!b.id || seen.has(b.id)) return false
                             seen.add(b.id)
                             return true
                         })
                         store.dispatch(hydrateBanners(deduped))
                         try { localStorage.setItem(BANNER_STORAGE_KEY, JSON.stringify(deduped)) } catch (e) { /* ignore */ }
-                    } else {
-                        lsLoadBanners()
                     }
 
-                    // --- Coupons ---
-                    let fsCoupons = await loadCollectionFromFirestore('coupons')
-                    if (!fsCoupons || fsCoupons.length === 0) {
-                        try {
-                            const savedCoupons = localStorage.getItem(COUPON_STORAGE_KEY)
-                            const localCoupons = savedCoupons ? JSON.parse(savedCoupons) : couponDummyData
-                            if (Array.isArray(localCoupons) && localCoupons.length > 0) {
-                                fsCoupons = localCoupons
-                                syncCollectionToFirestore('coupons', localCoupons)
-                            }
-                        } catch (e) { /* ignore */ }
-                    }
-                    if (fsCoupons && fsCoupons.length > 0) {
-                        store.dispatch(hydrateCoupons(fsCoupons))
-                        try { localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(fsCoupons)) } catch (e) { /* ignore */ }
-                    } else {
-                        lsLoadCoupons()
+                    // --- 4. Coupons ---
+                    if (couponsRes.status === 'fulfilled' && Array.isArray(couponsRes.value) && couponsRes.value.length > 0) {
+                        store.dispatch(hydrateCoupons(couponsRes.value))
+                        try { localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(couponsRes.value)) } catch (e) { /* ignore */ }
                     }
 
-                    // --- Hero Banner ---
-                    let fsHero = await loadDocFromFirestore('settings', 'hero')
-                    if (!fsHero) {
-                        try {
-                            const savedHero = localStorage.getItem(HERO_STORAGE_KEY)
-                            const localHero = savedHero ? JSON.parse(savedHero) : defaultHeroData
-                            if (localHero) {
-                                fsHero = localHero
-                                saveDocToFirestore('settings', 'hero', localHero)
-                            }
-                        } catch (e) { /* ignore */ }
-                    }
-                    if (fsHero) {
-                        store.dispatch(hydrateHero(fsHero))
-                        try { localStorage.setItem(HERO_STORAGE_KEY, JSON.stringify(fsHero)) } catch (e) { /* ignore */ }
-                    } else {
-                        lsLoadHero()
+                    // --- 5. Hero Banner ---
+                    if (heroRes.status === 'fulfilled' && heroRes.value) {
+                        store.dispatch(hydrateHero(heroRes.value))
+                        try { localStorage.setItem(HERO_STORAGE_KEY, JSON.stringify(heroRes.value)) } catch (e) { /* ignore */ }
                     }
 
-                    // --- Shipping Settings ---
-                    let fsShipping = await loadDocFromFirestore('settings', 'shipping')
-                    if (!fsShipping) {
-                        try {
-                            const savedShipping = localStorage.getItem(SHIPPING_STORAGE_KEY)
-                            if (savedShipping) {
-                                const localShipping = JSON.parse(savedShipping)
-                                if (localShipping) {
-                                    fsShipping = localShipping
-                                    saveDocToFirestore('settings', 'shipping', localShipping)
-                                }
-                            }
-                        } catch (e) { /* ignore */ }
-                    }
-                    if (fsShipping) {
-                        store.dispatch(hydrateShipping(fsShipping))
-                    } else {
-                        lsLoadShipping()
+                    // --- 6. Shipping Settings ---
+                    if (shippingRes.status === 'fulfilled' && shippingRes.value) {
+                        store.dispatch(hydrateShipping(shippingRes.value))
+                        try { localStorage.setItem(SHIPPING_STORAGE_KEY, JSON.stringify(shippingRes.value)) } catch (e) { /* ignore */ }
                     }
 
-                    // --- Contact/Store Info ---
-                    let fsContact = await loadDocFromFirestore('settings', 'contact')
-                    if (!fsContact) {
-                        try {
-                            const savedContact = localStorage.getItem(CONTACT_STORAGE_KEY)
-                            if (savedContact) {
-                                const localContact = JSON.parse(savedContact)
-                                if (localContact) {
-                                    fsContact = localContact
-                                    saveDocToFirestore('settings', 'contact', localContact)
-                                }
-                            }
-                        } catch (e) { /* ignore */ }
-                    }
-                    if (fsContact) {
+                    // --- 7. Contact Info ---
+                    if (contactRes.status === 'fulfilled' && contactRes.value) {
+                        const fsContact = contactRes.value
                         store.dispatch(hydrateContact({
                             messages: fsContact.messages || defaultMessages,
                             storeInfo: fsContact.storeInfo || defaultStoreInfo
                         }))
-                    } else {
-                        lsLoadContact()
+                        try { localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(fsContact)) } catch (e) { /* ignore */ }
                     }
-
                 } catch (e) {
-                    console.warn('[Firestore] Initial hydration failed, falling back to localStorage:', e)
-                    lsLoadAllAdmin()
+                    console.warn('[Firestore] Background parallel hydration failed:', e)
                 }
-            } else {
-                // Firebase not configured — use localStorage only
-                lsLoadAllAdmin()
             }
-
-            // User-specific data always loads from localStorage
-            lsLoadUserSpecific()
         }
 
         hydrateData()
