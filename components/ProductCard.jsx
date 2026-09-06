@@ -153,7 +153,7 @@ const ProductCard = ({ product }) => {
     }, [product.images])
 
     const wishlistItems = useSelector(state => state.wishlist?.items || [])
-    const isWishlisted = wishlistItems.includes(product.id)
+    const isWishlisted = wishlistItems.includes(product.id) || (product._id && wishlistItems.includes(product._id))
 
     // calculate the average rating of the product (guard against empty rating array)
     const rating = product.rating.length > 0
@@ -205,15 +205,16 @@ const ProductCard = ({ product }) => {
     const handleWishlist = (e) => {
         e.preventDefault()
         e.stopPropagation()
-        dispatch(toggleWishlist(product.id))
+        const prodId = product.id || product._id
+        dispatch(toggleWishlist(prodId))
         if (!isWishlisted) {
             toast.success(`"${product.name}" পছন্দের তালিকায় যোগ করা হয়েছে! ❤️`, {
-                id: `wishlist-${product.id}`,
+                id: `wishlist-${prodId}`,
                 duration: 2500,
             })
         } else {
             toast.success(`"${product.name}" পছন্দের তালিকা থেকে সরানো হয়েছে`, {
-                id: `wishlist-${product.id}`,
+                id: `wishlist-${prodId}`,
                 duration: 2500,
             })
         }

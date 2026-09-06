@@ -39,12 +39,12 @@ const getInitialStyle = (src) => {
 
 const ProductDetails = ({ product }) => {
 
-    const productId = product.id;
+    const productId = product.id || product._id;
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳';
 
     const cart = useSelector(state => state.cart.cartItems);
     const wishlistItems = useSelector(state => state.wishlist?.items || []);
-    const isWishlisted = wishlistItems.includes(productId);
+    const isWishlisted = wishlistItems.includes(productId) || (product._id && wishlistItems.includes(product._id));
     const storeInfo = useSelector(state => state.contact?.storeInfo) || {};
     const shipping = useSelector(state => state.shipping);
     const dispatch = useDispatch();

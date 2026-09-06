@@ -87,17 +87,19 @@ function ProfileDashboard() {
         setMounted(true)
     }, [])
 
-    // Auto-clean any legacy demo IDs (prod_1 etc.) or deleted/orphaned IDs from wishlist
+    // Auto-clean only old template dummy IDs (prod_1 to prod_16) if not in current product list
     useEffect(() => {
-        if (mounted && wishlistIds.length > 0) {
-            const demoIds = wishlistIds.filter(id => typeof id === 'string' && (id.startsWith('prod_') || id === 'prod_1' || id === 'prod_3'))
-            if (demoIds.length > 0) {
-                demoIds.forEach(id => dispatch(removeFromWishlist(id)))
-            } else if (allProducts.length > 0) {
-                const orphaned = wishlistIds.filter(id => !allProducts.some(p => p.id === id || p._id === id))
-                if (orphaned.length > 0) {
-                    orphaned.forEach(id => dispatch(removeFromWishlist(id)))
+        if (mounted && wishlistIds.length > 0 && allProducts.length > 0) {
+            const invalidIds = wishlistIds.filter(id => {
+                if (!id) return true
+                // Only target old template dummy IDs (prod_1 through prod_16)
+                if (/^prod_([1-9]|1[0-6])$/.test(id) && !allProducts.some(p => p.id === id || p._id === id)) {
+                    return true
                 }
+                return false
+            })
+            if (invalidIds.length > 0) {
+                invalidIds.forEach(id => dispatch(removeFromWishlist(id)))
             }
         }
     }, [mounted, allProducts, wishlistIds, dispatch])
@@ -363,33 +365,52 @@ function ProfileDashboard() {
     }
 
     // Helper to render the Wishlist content (used by both guest and logged-in views)
-    const renderWishlistContent = () => (
+    const renderWishlistContent = (isGuest = false) => (
         <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-                <div>
-                    <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                        <Heart size={22} className="text-rose-500 fill-rose-500" />
-                        আমার পছন্দের তালিকা (Wishlist)
-                    </h2>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                        আপনার পছন্দ করে রাখা প্রিয় গ্যাজেট ও ইলেকট্রনিক্স পণ্যসমূহ
-                    </p>
+            {!isGuest ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            <Heart size={22} className="text-rose-500 fill-rose-500" />
+                            আমার পছন্দের তালিকা (Wishlist)
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            আপনার পছন্দ করে রাখা প্রিয় গ্যাজেট ও ইলেকট্রনিক্স পণ্যসমূহ
+                        </p>
+                    </div>
+                    {wishlistProducts.length > 0 && (
+                        <button
+                            onClick={() => {
+                                if (confirm('আপনি কি নিশ্চিত যে পছন্দের তালিকার সকল পণ্য মুছে ফেলতে চান?')) {
+                                    dispatch(clearWishlist())
+                                    toast.success('পছন্দের তালিকা খালি করা হয়েছে')
+                                }
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 self-start sm:self-auto hover:underline cursor-pointer"
+                        >
+                            <Trash2 size={14} />
+                            সব মুছে ফেলুন
+                        </button>
+                    )}
                 </div>
-                {wishlistProducts.length > 0 && (
-                    <button
-                        onClick={() => {
-                            if (confirm('আপনি কি নিশ্চিত যে পছন্দের তালিকার সকল পণ্য মুছে ফেলতে চান?')) {
-                                dispatch(clearWishlist())
-                                toast.success('পছন্দের তালিকা খালি করা হয়েছে')
-                            }
-                        }}
-                        className="text-xs text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 self-start sm:self-auto hover:underline cursor-pointer"
-                    >
-                        <Trash2 size={14} />
-                        সব মুছে ফেলুন
-                    </button>
-                )}
-            </div>
+            ) : (
+                wishlistProducts.length > 0 && (
+                    <div className="flex justify-end pb-3 border-b border-slate-100">
+                        <button
+                            onClick={() => {
+                                if (confirm('আপনি কি নিশ্চিত যে পছন্দের তালিকার সকল পণ্য মুছে ফেলতে চান?')) {
+                                    dispatch(clearWishlist())
+                                    toast.success('পছন্দের তালিকা খালি করা হয়েছে')
+                                }
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 font-semibold flex items-center gap-1 hover:underline cursor-pointer"
+                        >
+                            <Trash2 size={14} />
+                            সব মুছে ফেলুন
+                        </button>
+                    </div>
+                )
+            )}
 
             {wishlistProducts.length === 0 ? (
                 <div className="text-center py-16 text-slate-400">
@@ -548,7 +569,7 @@ function ProfileDashboard() {
                         </div>
 
                         {/* Render Wishlist Content */}
-                        {renderWishlistContent()}
+                        {renderWishlistContent(true)}
                     </div>
                 </div>
             )
