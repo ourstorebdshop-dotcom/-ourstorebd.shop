@@ -231,7 +231,7 @@ const ProductDescription = ({ product }) => {
                                             key={i}
                                             size={22}
                                             className="text-transparent"
-                                            fill={i < Math.round(Number(avgRating)) ? "#F59E0B" : "#E2E8F0"}
+                                            fill={i < Math.round(Number(avgRating)) ? "#00C950" : "#E2E8F0"}
                                         />
                                     ))}
                                 </div>
@@ -258,12 +258,12 @@ const ProductDescription = ({ product }) => {
                                         <div key={star} className="flex items-center gap-3 text-sm">
                                             <div className="flex items-center gap-1 w-10 shrink-0 font-bold text-slate-700">
                                                 <span>{star}</span>
-                                                <StarIcon size={14} fill="#F59E0B" className="text-transparent" />
+                                                <StarIcon size={14} fill="#00C950" className="text-transparent" />
                                             </div>
 
                                             <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
                                                 <div
-                                                    className="h-full bg-amber-400 rounded-full transition-all duration-700 ease-out"
+                                                    className="h-full bg-[#00C950] rounded-full transition-all duration-700 ease-out"
                                                     style={{ width: `${percentage}%` }}
                                                 />
                                             </div>
@@ -386,14 +386,14 @@ const ProductDescription = ({ product }) => {
                                                             <StarIcon
                                                                 size={28}
                                                                 className="transition-colors duration-150 text-transparent"
-                                                                fill={isFilled ? "#F59E0B" : "#D1D5DB"}
+                                                                fill={isFilled ? "#00C950" : "#D1D5DB"}
                                                             />
                                                         </button>
                                                     )
                                                 })}
                                             </div>
 
-                                            <span className="text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-lg">
+                                            <span className="text-sm font-semibold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-lg">
                                                 {RATING_LABELS[hoverRating || userRating]}
                                             </span>
                                         </div>
@@ -531,7 +531,7 @@ const ProductDescription = ({ product }) => {
                                                                 key={i}
                                                                 size={15}
                                                                 className="text-transparent"
-                                                                fill={i < ratingScore ? "#F59E0B" : "#E2E8F0"}
+                                                                fill={i < ratingScore ? "#00C950" : "#E2E8F0"}
                                                             />
                                                         ))}
                                                     </div>

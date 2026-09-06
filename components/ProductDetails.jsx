@@ -267,9 +267,9 @@ const ProductDetails = ({ product }) => {
                 <h1 className="text-2xl sm:text-3xl font-semibold text-slate-800">{product.name}</h1>
                 <div className='flex items-center mt-2'>
                     {Array(5).fill('').map((_, index) => (
-                        <StarIcon key={index} size={15} className='text-transparent mt-0.5' fill={averageRating >= index + 0.8 ? "#F59E0B" : "#D1D5DB"} />
+                        <StarIcon key={index} size={15} className='text-transparent mt-0.5' fill={averageRating >= index + 0.8 ? "#00C950" : "#D1D5DB"} />
                     ))}
-                    <span className="text-xs font-semibold text-amber-600 ml-1.5">{ratings.length > 0 ? averageRating.toFixed(1) : ''}</span>
+                    <span className="text-xs font-semibold text-green-600 ml-1.5">{ratings.length > 0 ? averageRating.toFixed(1) : ''}</span>
                     <p className="text-sm ml-2 text-slate-500 font-medium">({ratings.length} Reviews)</p>
                 </div>
                 <div className="flex items-baseline my-4 sm:my-6 gap-3 text-xl sm:text-2xl font-semibold text-slate-800">
