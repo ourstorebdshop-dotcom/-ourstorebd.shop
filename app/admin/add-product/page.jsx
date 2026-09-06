@@ -194,6 +194,15 @@ export default function AdminAddProduct() {
             await saveDocToFirestore('products', newProduct.id, newProduct)
 
             dispatch(addProduct(newProduct))
+
+            // Immediate localStorage cache update for 0ms instant display
+            try {
+                const saved = localStorage.getItem('gocart_products')
+                const currentList = saved ? JSON.parse(saved) : []
+                if (Array.isArray(currentList)) {
+                    localStorage.setItem('gocart_products', JSON.stringify([newProduct, ...currentList]))
+                }
+            } catch (err) { /* ignore */ }
             
             // Cleanup preview URLs before resetting
             Object.values(imagePreviews).forEach(url => {

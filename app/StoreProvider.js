@@ -20,6 +20,7 @@ import {
     isFirebaseConfigured,
     saveDocToFirestore,
     loadDocFromFirestore,
+    deleteDocFromFirestore,
     loadCollectionFromFirestore,
     syncCollectionToFirestore,
     subscribeToDoc,
@@ -41,6 +42,29 @@ const CATEGORY_STORAGE_KEY = 'gocart_categories'
 const SHIPPING_STORAGE_KEY = 'gocart_shipping'
 const CASHFLOW_STORAGE_KEY = 'gocart_cashflow'
 const API_SETTINGS_STORAGE_KEY = 'gocart_api_settings'
+
+// Helper to identify untouched demo dummy products (e.g. prod_1 to prod_16)
+const DUMMY_IDS = new Set([
+    'prod_1', 'prod_2', 'prod_3', 'prod_4', 'prod_5', 'prod_6', 'prod_7', 'prod_8',
+    'prod_9', 'prod_10', 'prod_11', 'prod_12', 'prod_13', 'prod_14', 'prod_15', 'prod_16'
+])
+const DUMMY_NAMES = new Set([
+    'Modern table lamp', 'Smart speaker gray', 'Smart watch white', 'Wireless headphones',
+    'Camera 4k', 'Smart pen', 'Home theater 5.1', 'Wireless earbuds', 'Gaming mouse rgb',
+    'Screen cleaner spray'
+])
+export function isDemoProduct(product) {
+    if (!product) return false
+    const idStr = String(product.id || '')
+    if (DUMMY_IDS.has(idStr)) {
+        if (DUMMY_NAMES.has(product.name)) return true
+        if (typeof product.createdAt === 'string' && product.createdAt.includes('GMT+0530 (India Standard Time)')) return true
+        const firstImg = product.images?.[0]
+        if (typeof firstImg === 'string' && firstImg.includes('product_img')) return true
+        if (typeof firstImg === 'object' && firstImg?.src?.includes('product_img')) return true
+    }
+    return false
+}
 
 // Flag to track whether we're receiving data from Firestore (to avoid write loops)
 let isReceivingFromFirestore = false
@@ -80,6 +104,39 @@ export default function StoreProvider({ children }) {
             }
             localStorage.setItem(WISHLIST_CLEANUP_KEY, '1')
         }
+        // ===== ONE-TIME CLEANUP: clear legacy demo products from localStorage =====
+        const DEMO_CLEANUP_KEY = 'gocart_demo_clean_v2'
+        if (!localStorage.getItem(DEMO_CLEANUP_KEY)) {
+            try {
+                const saved = localStorage.getItem(PRODUCT_STORAGE_KEY)
+                if (saved) {
+                    const parsed = JSON.parse(saved)
+                    if (Array.isArray(parsed)) {
+                        const cleaned = parsed.filter(p => !isDemoProduct(p))
+                        localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(cleaned))
+                    }
+                }
+            } catch (e) { /* ignore */ }
+            localStorage.setItem(DEMO_CLEANUP_KEY, '1')
+        }
+
+        // ===== 0ms Instant Cache-First Hydration =====
+        // Immediately load real cached products from localStorage so the visitor sees them in 0ms!
+        try {
+            const saved = localStorage.getItem(PRODUCT_STORAGE_KEY)
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    const cleaned = parsed.filter(p => !isDemoProduct(p))
+                    if (cleaned.length > 0) {
+                        store.dispatch(setProduct(cleaned))
+                        prevProductsRef.current = cleaned
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Instant cache-first load error:', e)
+        }
 
         // ===== localStorage hydration helpers =====
         function lsLoadProducts() {
@@ -87,9 +144,10 @@ export default function StoreProvider({ children }) {
                 const saved = localStorage.getItem(PRODUCT_STORAGE_KEY)
                 if (saved) {
                     const parsed = JSON.parse(saved)
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        store.dispatch(setProduct(parsed))
-                        prevProductsRef.current = parsed
+                    if (Array.isArray(parsed)) {
+                        const cleaned = parsed.filter(p => !isDemoProduct(p))
+                        store.dispatch(setProduct(cleaned))
+                        prevProductsRef.current = cleaned
                     }
                 }
             } catch (e) { console.warn('Failed to load products from localStorage:', e) }
@@ -330,28 +388,16 @@ export default function StoreProvider({ children }) {
                 try {
                     // --- Products ---
                     let fsProducts = await loadCollectionFromFirestore('products')
-                    try {
-                        const saved = localStorage.getItem(PRODUCT_STORAGE_KEY)
-                        if (saved) {
-                            const localProducts = JSON.parse(saved)
-                            if (Array.isArray(localProducts) && localProducts.length > 0) {
-                                if (!fsProducts || fsProducts.length === 0) {
-                                    fsProducts = localProducts
-                                    syncCollectionToFirestore('products', localProducts)
-                                } else {
-                                    // Upload any local products not yet in Firestore
-                                    const fsIds = new Set(fsProducts.map(p => String(p.id)))
-                                    const missingLocals = localProducts.filter(p => p.id && !fsIds.has(String(p.id)))
-                                    if (missingLocals.length > 0) {
-                                        missingLocals.forEach(p => saveDocToFirestore('products', p.id, p))
-                                        fsProducts = [...missingLocals, ...fsProducts]
-                                    }
-                                }
-                            }
+                    if (fsProducts && Array.isArray(fsProducts)) {
+                        // Purge any untouched dummy demo products from Firestore so they never return
+                        const demoItems = fsProducts.filter(isDemoProduct)
+                        if (demoItems.length > 0) {
+                            demoItems.forEach(item => {
+                                deleteDocFromFirestore('products', item.id)
+                            })
+                            fsProducts = fsProducts.filter(p => !isDemoProduct(p))
                         }
-                    } catch (e) { console.warn('Product merge error:', e) }
 
-                    if (fsProducts && fsProducts.length > 0) {
                         store.dispatch(setProduct(fsProducts))
                         prevProductsRef.current = fsProducts
                         try { localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(fsProducts)) } catch (e) { /* ignore */ }
@@ -506,11 +552,12 @@ export default function StoreProvider({ children }) {
             // Products real-time listener
             unsubscribers.push(
                 subscribeToCollection('products', (docs) => {
-                    if (docs && docs.length > 0) {
+                    if (docs && Array.isArray(docs)) {
+                        const cleaned = docs.filter(p => !isDemoProduct(p))
                         isReceivingFromFirestore = true
-                        store.dispatch(setProduct(docs))
-                        prevProductsRef.current = docs
-                        try { localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(docs)) } catch (e) { /* ignore */ }
+                        store.dispatch(setProduct(cleaned))
+                        prevProductsRef.current = cleaned
+                        try { localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(cleaned)) } catch (e) { /* ignore */ }
                         isReceivingFromFirestore = false
                     }
                 })
@@ -748,16 +795,15 @@ export default function StoreProvider({ children }) {
                 try { localStorage.setItem(API_SETTINGS_STORAGE_KEY, JSON.stringify(currentApiSettings)) } catch (e) { /* ignore */ }
             }
 
-            // --- Products: BroadcastChannel + localStorage + Firestore ---
+            // --- Products: BroadcastChannel + localStorage ---
             if (!isReceivingRef.current && !isReceivingFromFirestore) {
                 const currentProducts = state.product.list
                 if (currentProducts !== prevProductsRef.current) {
                     prevProductsRef.current = currentProducts
                     channel.postMessage({ type: 'PRODUCT_UPDATE', products: currentProducts })
                     try { localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(currentProducts)) } catch (e) { /* ignore */ }
-                    if (firebaseEnabled) {
-                        syncCollectionToFirestore('products', currentProducts)
-                    }
+                    // Note: Atomic single-document operations in add-product/manage-product already update Firestore directly.
+                    // syncCollectionToFirestore is deliberately omitted to prevent re-uploading the entire collection.
                 }
             }
         })

@@ -11,7 +11,7 @@ import toast from 'react-hot-toast'
 
 // Helper to resolve and normalize image URLs safely
 const resolveImage = (img) => {
-    if (!img) return '/products/product_img1.png'
+    if (!img) return '/placeholder.svg'
     const srcStr = typeof img === 'object' && img.src ? img.src : String(img)
     const match = srcStr.match(/product_img(\d+)/)
     if (match && srcStr.includes('/_next/')) {

@@ -5,6 +5,7 @@ import Image from "next/image"
 import { useDispatch, useSelector } from "react-redux"
 import { updateProduct, deleteProduct as deleteProductAction, toggleProductStock } from "@/lib/features/product/productSlice"
 import { saveDocToFirestore, deleteDocFromFirestore } from "@/lib/firestore"
+import { isDemoProduct } from "@/app/StoreProvider"
 import { 
     SearchIcon, 
     PencilIcon, 
@@ -101,17 +102,69 @@ export default function AdminManageProducts() {
 
         dispatch(updateProduct(updatedProduct))
         saveDocToFirestore('products', updatedProduct.id, updatedProduct)
+        // Immediate localStorage cache update
+        try {
+            const saved = localStorage.getItem('gocart_products')
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                const idx = parsed.findIndex(p => p.id === updatedProduct.id)
+                if (idx !== -1) parsed[idx] = updatedProduct
+                localStorage.setItem('gocart_products', JSON.stringify(parsed))
+            }
+        } catch (err) { /* ignore */ }
+
         toast.success(`"${editingProduct.name}" সফলভাবে আপডেট হয়েছে!`)
         setEditingProduct(null)
     }
 
     // Handle Delete Confirm
-    const handleDeleteConfirm = () => {
+    const handleDeleteConfirm = async () => {
         const prod = products.find(p => p.id === deletingProductId)
         dispatch(deleteProductAction(deletingProductId))
         deleteDocFromFirestore('products', deletingProductId)
+
+        // Immediate localStorage cache update
+        try {
+            const saved = localStorage.getItem('gocart_products')
+            if (saved) {
+                const parsed = JSON.parse(saved)
+                const remaining = parsed.filter(p => p.id !== deletingProductId)
+                localStorage.setItem('gocart_products', JSON.stringify(remaining))
+            }
+        } catch (err) { /* ignore */ }
+
         toast.success(`Product "${prod?.name || ''}" deleted successfully!`)
         setDeletingProductId(null)
+    }
+
+    // Demo products detection & purge
+    const demoProducts = products.filter(isDemoProduct)
+    const demoCount = demoProducts.length
+
+    const handlePurgeDemoProducts = async () => {
+        if (demoCount === 0) {
+            toast.success('কোনো ডেমো প্রোডাক্ট নেই')
+            return
+        }
+        const toastId = toast.loading(`${demoCount}টি ডেমো প্রোডাক্ট মুছে ফেলা হচ্ছে...`)
+        try {
+            for (const dp of demoProducts) {
+                dispatch(deleteProductAction(dp.id))
+                await deleteDocFromFirestore('products', dp.id)
+            }
+            try {
+                const saved = localStorage.getItem('gocart_products')
+                if (saved) {
+                    const parsed = JSON.parse(saved)
+                    const cleaned = parsed.filter(p => !isDemoProduct(p))
+                    localStorage.setItem('gocart_products', JSON.stringify(cleaned))
+                }
+            } catch (err) { /* ignore */ }
+            toast.success(`${demoCount}টি ডেমো প্রোডাক্ট সফলভাবে মুছে ফেলা হয়েছে!`, { id: toastId })
+        } catch (e) {
+            console.error('Error purging demo products:', e)
+            toast.error('ডেমো প্রোডাক্ট মুছতে সমস্যা হয়েছে', { id: toastId })
+        }
     }
 
     // Filter products
@@ -138,7 +191,37 @@ export default function AdminManageProducts() {
                         View, edit, toggle stock, and delete products from your store inventory
                     </p>
                 </div>
+                {demoCount > 0 && (
+                    <button
+                        type="button"
+                        onClick={handlePurgeDemoProducts}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer shadow-sm flex items-center gap-2"
+                    >
+                        <Trash2Icon size={15} />
+                        সব ডেমো প্রোডাক্ট মুছুন ({demoCount})
+                    </button>
+                )}
             </div>
+
+            {/* Demo Products Warning Banner */}
+            {demoCount > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 text-amber-800 text-sm">
+                        <span className="text-lg">⚠️</span>
+                        <span>
+                            ডাটাবেজে <strong>{demoCount}টি ডেমো প্রোডাক্ট</strong> রয়েছে। এগুলো লাইভ স্টোরে অপ্রয়োজনীয় স্পেস নিচ্ছে।
+                        </span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handlePurgeDemoProducts}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-medium transition shrink-0 cursor-pointer shadow-xs flex items-center gap-1.5"
+                    >
+                        <Trash2Icon size={14} />
+                        সব ডেমো প্রোডাক্ট মুছুন
+                    </button>
+                </div>
+            )}
 
             {/* Quick Stats Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
@@ -239,7 +322,7 @@ export default function AdminManageProducts() {
                                                     width={48}
                                                     height={48}
                                                     className="w-12 h-12 object-cover border border-slate-200 rounded-lg p-1 shrink-0 bg-slate-50"
-                                                    src={product.images?.[0] || '/placeholder.png'}
+                                                    src={product.images?.[0] || '/placeholder.svg'}
                                                     alt={product.name || 'Product'}
                                                 />
                                                 <div>
@@ -586,7 +669,7 @@ export default function AdminManageProducts() {
                             <Image
                                 width={80}
                                 height={80}
-                                src={viewingProduct.images?.[0] || '/placeholder.png'}
+                                src={viewingProduct.images?.[0] || '/placeholder.svg'}
                                 alt={viewingProduct.name || 'Product'}
                                 className="w-20 h-20 object-cover border border-slate-200 rounded-xl p-1 bg-slate-50 shrink-0"
                             />
@@ -705,7 +788,7 @@ export default function AdminManageProducts() {
                                     <Image
                                         width={40}
                                         height={40}
-                                        src={delProd.images?.[0] || '/placeholder.png'}
+                                        src={delProd.images?.[0] || '/placeholder.svg'}
                                         alt={delProd.name || 'Product'}
                                         className="w-10 h-10 object-cover rounded-lg border border-slate-200 shrink-0"
                                     />

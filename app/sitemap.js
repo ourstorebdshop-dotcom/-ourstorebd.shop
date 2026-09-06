@@ -1,4 +1,4 @@
-import { productDummyData } from "@/assets/assets";
+import { loadCollectionFromFirestore } from "@/lib/firestore";
 
 export default async function sitemap() {
     const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://ourstorebd.shop";
@@ -38,8 +38,18 @@ export default async function sitemap() {
         },
     ];
 
-    // Dynamic product pages
-    const productPages = (productDummyData || []).map((product) => {
+    // Dynamic real product pages from Firestore
+    let realProducts = [];
+    try {
+        const fsProducts = await loadCollectionFromFirestore('products');
+        if (fsProducts && Array.isArray(fsProducts)) {
+            realProducts = fsProducts.filter(p => p && p.id && (!p.id.startsWith('prod_') || p.id.length > 8));
+        }
+    } catch (e) {
+        console.warn('Failed to load products for sitemap:', e);
+    }
+
+    const productPages = realProducts.map((product) => {
         let lastMod = currentDate;
         if (product.updatedAt) {
             try {

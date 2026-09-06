@@ -6,13 +6,16 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useSelector } from "react-redux"
 import Link from "next/link"
 import { BreadcrumbJsonLd, ItemListJsonLd } from "@/components/seo/JsonLd"
+import { isDemoProduct } from "@/app/StoreProvider"
 
 function ShopContent() {
     const searchParams = useSearchParams()
     const search = searchParams.get('search')
     const router = useRouter()
 
-    const products = useSelector(state => state.product.list) || []
+    const rawProducts = useSelector(state => state.product?.list) || []
+    const isHydrated = useSelector(state => state.product?.isHydrated)
+    const products = rawProducts.filter(p => !isDemoProduct(p))
 
     const filteredProducts = search
         ? products.filter(product =>
@@ -69,7 +72,21 @@ function ShopContent() {
                 </div>
 
                 {/* Product Grid */}
-                {filteredProducts.length > 0 ? (
+                {!isHydrated && rawProducts.length === 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 mb-16">
+                        {Array.from({ length: 8 }).map((_, index) => (
+                            <div key={index} className="animate-pulse bg-white rounded-2xl p-3 border border-slate-100 shadow-sm space-y-3">
+                                <div className="bg-slate-100 rounded-xl h-44 sm:h-52 w-full" />
+                                <div className="h-4 bg-slate-100 rounded-md w-3/4" />
+                                <div className="h-3 bg-slate-100 rounded-md w-1/2" />
+                                <div className="flex justify-between items-center pt-2">
+                                    <div className="h-5 bg-slate-100 rounded w-1/3" />
+                                    <div className="h-8 bg-slate-100 rounded-lg w-1/2" />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : filteredProducts.length > 0 ? (
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 mb-16">
                         {filteredProducts.map((product) => (
                             <ProductCard key={product.id} product={product} />
