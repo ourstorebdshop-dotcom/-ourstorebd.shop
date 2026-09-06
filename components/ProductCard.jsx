@@ -155,11 +155,12 @@ const ProductCard = ({ product }) => {
     const wishlistItems = useSelector(state => state.wishlist?.items || [])
     const isWishlisted = wishlistItems.includes(product.id) || (product._id && wishlistItems.includes(product._id))
 
-    // calculate the average rating of the product (guard against empty rating array)
-    const rating = product.rating.length > 0
-        ? Math.round(product.rating.reduce((acc, curr) => acc + curr.rating, 0) / product.rating.length)
+    // calculate the average rating of the product (guard against undefined/empty rating array)
+    const ratingsList = Array.isArray(product.rating) ? product.rating : [];
+    const rating = ratingsList.length > 0
+        ? Math.round(ratingsList.reduce((acc, curr) => acc + (Number(curr.rating) || 0), 0) / ratingsList.length)
         : 0;
-    const reviewCount = product.rating.length;
+    const reviewCount = ratingsList.length;
 
     // Badge logic
     const discountPercent = product.mrp && product.mrp > product.price
