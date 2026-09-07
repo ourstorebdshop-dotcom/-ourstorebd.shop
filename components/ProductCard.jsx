@@ -200,7 +200,7 @@ const ProductCard = ({ product }) => {
         e.preventDefault()
         e.stopPropagation()
         dispatch(addToCart({ productId: product.id }))
-        router.push('/cart')
+        router.push('/order')
     }
 
     const handleWishlist = (e) => {

@@ -2,7 +2,8 @@
 
 import React, { useEffect } from 'react'
 import Link from 'next/link'
-import { BreadcrumbJsonLd } from '@/components/seo/JsonLd'
+import { useSelector } from 'react-redux'
+import { BreadcrumbJsonLd, OrganizationJsonLd } from '@/components/seo/JsonLd'
 import { 
     ShieldCheck, 
     Truck, 
@@ -15,7 +16,6 @@ import {
     MapPin, 
     Phone, 
     Mail, 
-    ArrowRight, 
     HeartHandshake, 
     Store, 
     Award, 
@@ -26,8 +26,19 @@ import {
 } from 'lucide-react'
 
 export default function AboutPage() {
+    const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳';
+    const storeInfo = useSelector(state => state.contact?.storeInfo) || {};
+    const quickContact = useSelector(state => state.shipping?.quickContact) || {};
+
     useEffect(() => {
         document.title = "About Us - Our Store BD | Trusted Electronics & Gadgets Shop in Bangladesh";
+        let metaDesc = document.querySelector('meta[name="description"]');
+        if (!metaDesc) {
+            metaDesc = document.createElement('meta');
+            metaDesc.name = "description";
+            document.head.appendChild(metaDesc);
+        }
+        metaDesc.content = "Learn about Our Store BD — your trusted destination for authentic electronics, smartwatches, earbuds, audio gear, and lifestyle tech in Bangladesh with official warranty.";
     }, []);
     const stats = [
         {
@@ -129,6 +140,10 @@ export default function AboutPage() {
         <div className="min-h-screen bg-slate-50/50 pb-20">
             {/* Structured Schema Data */}
             <BreadcrumbJsonLd items={[{ name: "Home", url: "/" }, { name: "About Us", url: "/about" }]} />
+            <OrganizationJsonLd 
+                phone={storeInfo.phone || quickContact.whatsapp?.number || "+8801712345678"} 
+                email={storeInfo.email || "ourstorebd.shop@gmail.com"} 
+            />
 
             {/* Breadcrumb Bar */}
             <div className="bg-white border-b border-slate-100">
@@ -169,7 +184,7 @@ export default function AboutPage() {
                                 <span>Browse Products</span>
                             </Link>
                             <Link 
-                                href="/#newsletter" 
+                                href="/contact" 
                                 className="px-7 py-3.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-medium text-sm transition backdrop-blur-sm"
                             >
                                 Contact Our Team
@@ -180,9 +195,9 @@ export default function AboutPage() {
 
                 {/* Key Metrics Stats */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mt-8">
-                    {stats.map((stat, index) => (
+                    {stats.map((stat) => (
                         <div 
-                            key={index}
+                            key={stat.label}
                             className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5 flex flex-col justify-between group"
                         >
                             <div className="flex items-center justify-between">
@@ -222,12 +237,12 @@ export default function AboutPage() {
                         </p>
 
                         <div className="mt-6 border-l-4 border-emerald-500 pl-4 py-1 text-slate-700 italic text-sm sm:text-base bg-emerald-50/50 rounded-r-lg">
-                            "Our goal isn't just selling gadgets — it's about building lasting relationships grounded in quality, honesty, and lightning-fast service."
+                            &ldquo;Our goal isn&apos;t just selling gadgets &mdash; it&apos;s about building lasting relationships grounded in quality, honesty, and lightning-fast service.&rdquo;
                         </div>
 
                         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                            {whyChooseList.map((point, index) => (
-                                <div key={index} className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-700">
+                            {whyChooseList.map((point) => (
+                                <div key={point} className="flex items-start gap-2.5 text-xs sm:text-sm text-slate-700">
                                     <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
                                     <span>{point}</span>
                                 </div>
@@ -263,7 +278,7 @@ export default function AboutPage() {
                                             <Truck size={16} className="text-blue-500" />
                                             Free Shipping
                                         </span>
-                                        <span className="font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">Orders above ৳500</span>
+                                        <span className="font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200">Orders above {currency}500</span>
                                     </div>
 
                                     <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
@@ -308,9 +323,9 @@ export default function AboutPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-12">
-                    {coreValues.map((value, index) => (
+                    {coreValues.map((value) => (
                         <div 
-                            key={index}
+                            key={value.title}
                             className={`p-7 rounded-2xl bg-white border ${value.borderColor} shadow-xs hover:shadow-lg transition-all duration-300 hover:-translate-y-1 group flex flex-col justify-between`}
                         >
                             <div>
@@ -366,7 +381,7 @@ export default function AboutPage() {
                             </div>
                             <h3 className="text-2xl font-bold mb-3">Our Vision (আমাদের ভিশন)</h3>
                             <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
-                                To become Bangladesh's most customer-loved and trusted technology e-commerce brand, known for innovation, speed, zero-compromise product authenticity, and memorable shopping experiences.
+                                To become Bangladesh&apos;s most customer-loved and trusted technology e-commerce brand, known for innovation, speed, zero-compromise product authenticity, and memorable shopping experiences.
                             </p>
                         </div>
                     </div>
@@ -385,13 +400,27 @@ export default function AboutPage() {
                         </p>
                         <div className="mt-5 flex flex-wrap items-center justify-center lg:justify-start gap-5 text-sm text-slate-600 font-medium">
                             <div className="flex items-center gap-2">
-                                <MapPin size={18} className="text-green-600" />
-                                <span>Dhaka, Bangladesh</span>
+                                <MapPin size={18} className="text-green-600 shrink-0" />
+                                <span>{storeInfo.address ? "Dhanmondi, Dhaka, Bangladesh" : "Dhaka, Bangladesh"}</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <Mail size={18} className="text-green-600" />
-                                <span>ourstorebd.shop@gmail.com</span>
-                            </div>
+                            <a 
+                                href={`mailto:${storeInfo.email || "ourstorebd.shop@gmail.com"}`} 
+                                className="flex items-center gap-2 hover:text-green-600 transition"
+                                title="Send email to customer care"
+                            >
+                                <Mail size={18} className="text-green-600 shrink-0" />
+                                <span>{storeInfo.email || "ourstorebd.shop@gmail.com"}</span>
+                            </a>
+                            {(storeInfo.phone || quickContact.whatsapp?.number) && (
+                                <a 
+                                    href={`tel:${(storeInfo.phone || quickContact.whatsapp?.number || '').replace(/[^0-9+]/g, '')}`}
+                                    className="flex items-center gap-2 hover:text-green-600 transition"
+                                    title="Call Support Helpline"
+                                >
+                                    <Phone size={18} className="text-green-600 shrink-0" />
+                                    <span>{storeInfo.phone || quickContact.whatsapp?.number}</span>
+                                </a>
+                            )}
                         </div>
                     </div>
 
@@ -403,7 +432,7 @@ export default function AboutPage() {
                             Explore Store
                         </Link>
                         <Link 
-                            href="/#newsletter" 
+                            href="/contact" 
                             className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition text-center"
                         >
                             Get in Touch

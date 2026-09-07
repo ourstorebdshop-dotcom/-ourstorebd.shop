@@ -1,17 +1,18 @@
 'use client'
 
-import { CreditCardIcon, TruckIcon, XIcon, Loader2Icon, ArrowRightIcon } from 'lucide-react';
+import { CreditCardIcon, TruckIcon, XIcon, Loader2Icon, ArrowRightIcon, MapPinIcon } from 'lucide-react';
 import React, { useState } from 'react'
 import { useSelector, useDispatch } from 'react-redux';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { addOrder } from '@/lib/features/order/orderSlice';
+import { saveAddressFromOrder } from '@/lib/features/user/userSlice';
 import { clearCart } from '@/lib/features/cart/cartSlice';
 import { useCoupon } from '@/lib/features/coupon/couponSlice';
 
 const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳';
 
-const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrderSuccess }) => {
+const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrderSuccess, className }) => {
 
     const router = useRouter();
     const dispatch = useDispatch();
@@ -185,6 +186,17 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
         dispatch(addOrder(newOrder));
         dispatch(clearCart());
 
+        // Automatically save address to customer account
+        dispatch(saveAddressFromOrder({
+            name: deliveryInfo.name,
+            phone: deliveryInfo.phone,
+            address: deliveryInfo.address,
+            street: deliveryInfo.address,
+            location: deliveryInfo.location,
+            city: deliveryInfo.location === 'insideDhaka' ? 'ঢাকা (Dhaka)' : 'ঢাকার বাইরে (Outside Dhaka)',
+            userId: currentUser?.id
+        }));
+
         // Update coupon usage stats
         if (coupon) {
             dispatch(useCoupon({ code: coupon.code, savedAmount: discountAmount }));
@@ -196,7 +208,11 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
         if (onOrderSuccess) {
             onOrderSuccess(newOrder);
         } else {
-            router.push('/profile?tab=orders');
+            if (currentUser) {
+                router.push('/profile?tab=orders');
+            } else {
+                router.push('/orders');
+            }
         }
     }
 
@@ -215,13 +231,61 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
     ].filter(Boolean);
 
     return (
-        <div className='w-full lg:max-w-[340px] bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-5 sm:p-7'>
+        <div className={`w-full bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-5 sm:p-7 ${className || 'lg:max-w-[340px]'}`}>
 
-            {/* Delivery Info */}
-            <h2 className='text-lg font-semibold text-slate-700 flex items-center gap-2'>
-                <TruckIcon size={18} />
-                ডেলিভারি তথ্য
-            </h2>
+            {/* Delivery Info Header */}
+            <div className='flex items-center justify-between'>
+                <h2 className='text-lg font-semibold text-slate-700 flex items-center gap-2'>
+                    <TruckIcon size={18} />
+                    ডেলিভারি তথ্য
+                </h2>
+            </div>
+
+            {/* Quick-select from saved addresses if available */}
+            {currentUser?.addresses && currentUser.addresses.length > 0 && (
+                <div className='mt-3 p-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl'>
+                    <div className='flex items-center justify-between mb-1.5'>
+                        <span className='text-[11px] font-semibold text-emerald-800 flex items-center gap-1'>
+                            <MapPinIcon size={12} className="text-emerald-600" />
+                            সংরক্ষিত ঠিকানা থেকে নির্বাচন করুন:
+                        </span>
+                    </div>
+                    <div className='flex flex-wrap gap-1.5'>
+                        {currentUser.addresses.map((addr) => {
+                            const isSelected = deliveryInfo.address === addr.street && deliveryInfo.phone === addr.phone;
+                            return (
+                                <button
+                                    key={addr.id}
+                                    type="button"
+                                    onClick={() => {
+                                        const isOutside = addr.city?.toLowerCase().includes('outside') || addr.city?.includes('বাইরে');
+                                        setDeliveryInfo({
+                                            name: addr.name || currentUser.name || '',
+                                            phone: addr.phone || currentUser.phone || '',
+                                            address: addr.street || '',
+                                            location: isOutside ? 'outsideDhaka' : 'insideDhaka'
+                                        });
+                                        toast.success(`"${addr.label || 'ঠিকানা'}" নির্বাচন করা হয়েছে!`, { id: 'addr-chip', duration: 1500 });
+                                    }}
+                                    className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 cursor-pointer ${
+                                        isSelected
+                                            ? 'border-emerald-600 bg-emerald-600 text-white font-medium shadow-xs ring-1 ring-emerald-500'
+                                            : 'border-emerald-200/90 bg-white text-emerald-900 hover:bg-emerald-100/60'
+                                    }`}
+                                >
+                                    <span>{addr.label || addr.name || 'ঠিকানা'}</span>
+                                    {addr.isDefault && (
+                                        <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isSelected ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                                            ডিফল্ট
+                                        </span>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             <div className='mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3'>
                 <div>
                     <label className='text-xs font-medium text-slate-500'>আপনার নাম <span className='text-red-500'>*</span></label>

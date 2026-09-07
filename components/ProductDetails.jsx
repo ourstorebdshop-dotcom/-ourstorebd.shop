@@ -183,7 +183,7 @@ const ProductDetails = ({ product }) => {
         if (!cart[productId]) {
             dispatch(addToCart({ productId, color: selectedColor, size: selectedSize }))
         }
-        router.push('/cart')
+        router.push('/order')
     }
 
     const ratings = Array.isArray(product?.rating) ? product.rating : [];

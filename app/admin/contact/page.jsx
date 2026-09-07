@@ -106,6 +106,15 @@ export default function AdminContactMessages() {
         return { total, unread, replied, resolved }
     }, [messages])
 
+    // Format customer WhatsApp number with Bangladesh country code prefix
+    const formatCustomerWa = (phone) => {
+        let clean = (phone || '').replace(/[^0-9]/g, '')
+        if (clean.startsWith('01') && clean.length === 11) {
+            clean = '88' + clean
+        }
+        return clean
+    }
+
     // Filtered & Searched Messages
     const filteredMessages = useMemo(() => {
         return messages.filter(msg => {
@@ -514,7 +523,7 @@ export default function AdminContactMessages() {
                                                             {/* WhatsApp Shortcut */}
                                                             {msg.phone && (
                                                                 <a 
-                                                                    href={`https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(`Hello ${msg.name}, thank you for contacting Our Store BD regarding your inquiry: "${msg.subject}".`)}`}
+                                                                    href={`https://wa.me/${formatCustomerWa(msg.phone)}?text=${encodeURIComponent(`Hello ${msg.name}, thank you for contacting Our Store BD regarding your inquiry: "${msg.subject}".`)}`}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                     className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition"
@@ -790,7 +799,7 @@ export default function AdminContactMessages() {
                             <div className="flex flex-wrap items-center gap-2">
                                 {activeMessage.phone && (
                                     <a 
-                                        href={`https://wa.me/${activeMessage.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hello ${activeMessage.name}, regarding your message about ${activeMessage.subject}:`)}`}
+                                        href={`https://wa.me/${formatCustomerWa(activeMessage.phone)}?text=${encodeURIComponent(`Hello ${activeMessage.name}, regarding your message about ${activeMessage.subject}:`)}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-xl font-semibold text-xs transition flex items-center gap-1.5"

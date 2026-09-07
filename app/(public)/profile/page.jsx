@@ -55,7 +55,8 @@ import {
     addUserAddress, 
     updateUserAddress, 
     deleteUserAddress, 
-    setDefaultUserAddress 
+    setDefaultUserAddress,
+    saveAddressFromOrder
 } from '@/lib/features/user/userSlice'
 import { cancelOrder } from '@/lib/features/order/orderSlice'
 import { addToCart } from '@/lib/features/cart/cartSlice'
@@ -239,6 +240,27 @@ function ProfileDashboard() {
             return matchesStatus && matchesSearch
         })
     }, [userOrders, orderFilter, orderSearch])
+
+    // Auto-populate delivery address from past orders if customer account has no saved addresses
+    useEffect(() => {
+        if (currentUser && (!currentUser.addresses || currentUser.addresses.length === 0) && userOrders.length > 0) {
+            const validOrders = userOrders.filter(o => o.address && o.address.street && o.address.street.trim())
+            if (validOrders.length > 0) {
+                const latestOrder = validOrders[0]
+                const oAddr = latestOrder.address
+                const isOutside = (oAddr.city || '').toLowerCase().includes('outside') || (oAddr.city || '').includes('বাইরে')
+                dispatch(saveAddressFromOrder({
+                    name: oAddr.name || latestOrder.user?.name || currentUser.name || '',
+                    phone: oAddr.phone || latestOrder.user?.phone || currentUser.phone || '',
+                    address: oAddr.street,
+                    street: oAddr.street,
+                    location: isOutside ? 'outsideDhaka' : 'insideDhaka',
+                    city: oAddr.city || (isOutside ? 'ঢাকার বাইরে (Outside Dhaka)' : 'ঢাকা (Dhaka)'),
+                    userId: currentUser.id
+                }))
+            }
+        }
+    }, [currentUser, userOrders, dispatch])
 
     // Order statistics
     const totalOrdersCount = userOrders.length
@@ -677,7 +699,7 @@ function ProfileDashboard() {
                                     <button
                                         onClick={() => {
                                             dispatch(addToCart({ productId: prodId }))
-                                            router.push('/cart')
+                                            router.push('/order')
                                         }}
                                         className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
                                     >

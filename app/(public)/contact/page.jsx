@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useSelector, useDispatch } from 'react-redux'
 import { submitMessage } from '@/lib/features/contact/contactSlice'
-import { BreadcrumbJsonLd, FaqJsonLd } from '@/components/seo/JsonLd'
+import { BreadcrumbJsonLd, FaqJsonLd, OrganizationJsonLd } from '@/components/seo/JsonLd'
 import toast from 'react-hot-toast'
 import { 
     Phone, 
@@ -25,9 +25,14 @@ import {
 export default function ContactPage() {
     useEffect(() => {
         document.title = "Contact Us - Our Store BD | Customer Care, Helpline, WhatsApp & Dhaka Hub";
+        const metaDesc = document.querySelector('meta[name="description"]');
+        if (metaDesc) {
+            metaDesc.setAttribute("content", "Get in touch with Our Store BD customer support team. Call our helpline, message us on WhatsApp, or visit our Dhanmondi Dhaka hub.");
+        }
     }, []);
     const dispatch = useDispatch()
     const storeInfo = useSelector(state => state.contact?.storeInfo) || {}
+    const currentUser = useSelector(state => state.user?.currentUser)
 
     const [formData, setFormData] = useState({
         name: '',
@@ -39,6 +44,18 @@ export default function ContactPage() {
     const [submitting, setSubmitting] = useState(false)
     const [submitted, setSubmitted] = useState(false)
     const [activeFaq, setActiveFaq] = useState(null)
+
+    // Pre-fill user contact info if logged in
+    useEffect(() => {
+        if (currentUser) {
+            setFormData(prev => ({
+                ...prev,
+                name: prev.name || currentUser.name || '',
+                email: prev.email || currentUser.email || '',
+                phone: prev.phone || currentUser.phone || ''
+            }))
+        }
+    }, [currentUser])
 
     const subjects = [
         'Order Status & Tracking',
@@ -84,6 +101,20 @@ export default function ContactPage() {
             toast.error("Please provide either your phone number or email")
             return
         }
+        if (formData.email.trim()) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+            if (!emailRegex.test(formData.email.trim())) {
+                toast.error("Please provide a valid email address")
+                return
+            }
+        }
+        if (formData.phone.trim()) {
+            const cleanDigits = formData.phone.replace(/[^0-9]/g, '')
+            if (cleanDigits.length < 10) {
+                toast.error("Please provide a valid phone number")
+                return
+            }
+        }
         if (!formData.message.trim()) {
             toast.error("Please write your message")
             return
@@ -107,11 +138,11 @@ export default function ContactPage() {
                 icon: '🚀',
             })
 
-            // Reset form
+            // Reset form (retaining authenticated customer info if logged in)
             setFormData({
-                name: '',
-                email: '',
-                phone: '',
+                name: currentUser?.name || '',
+                email: currentUser?.email || '',
+                phone: currentUser?.phone || '',
                 subject: 'Order Status & Tracking',
                 message: ''
             })
@@ -120,13 +151,17 @@ export default function ContactPage() {
         }, 600)
     }
 
-    const cleanWhatsApp = (storeInfo.whatsapp || storeInfo.phone || '+8801712345678').replace(/[^0-9]/g, '')
-    const cleanPhone = (storeInfo.phone || '+8801712345678').replace(/[^0-9+]/g, '')
+    let cleanWhatsApp = (storeInfo.whatsapp || storeInfo.phone || '+8801712345678').replace(/[^0-9]/g, '')
+    if (cleanWhatsApp.startsWith('01') && cleanWhatsApp.length === 11) {
+        cleanWhatsApp = '88' + cleanWhatsApp
+    }
+    const cleanPhone = (storeInfo.phone || '+8801712345678').replace(/[\s-]/g, '')
 
     return (
         <div className="min-h-screen bg-slate-50/50 pb-20">
             {/* Structured Schema Data */}
             <BreadcrumbJsonLd items={[{ name: "Home", url: "/" }, { name: "Contact Us", url: "/contact" }]} />
+            <OrganizationJsonLd phone={storeInfo.phone || cleanPhone} email={storeInfo.email || "ourstorebd.shop@gmail.com"} />
             <FaqJsonLd faqs={faqs} />
 
             {/* Breadcrumb Bar */}
@@ -147,7 +182,7 @@ export default function ContactPage() {
                     <div className="relative z-10 max-w-2xl">
                         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 text-xs sm:text-sm font-semibold mb-4">
                             <Sparkles size={16} />
-                            <span>WE'RE ALWAYS HERE TO HELP</span>
+                            <span>WE&apos;RE ALWAYS HERE TO HELP</span>
                         </div>
                         <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
                             Get in Touch with <span className="bg-gradient-to-r from-emerald-400 to-green-300 bg-clip-text text-transparent">Our Support Team</span>
@@ -337,8 +372,8 @@ export default function ContactPage() {
                                             onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
                                             className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-green-500 focus:ring-2 focus:ring-green-100 outline-none transition cursor-pointer"
                                         >
-                                            {subjects.map((subj, i) => (
-                                                <option key={i} value={subj}>{subj}</option>
+                                            {subjects.map((subj) => (
+                                                <option key={subj} value={subj}>{subj}</option>
                                             ))}
                                         </select>
                                     </div>
@@ -448,12 +483,13 @@ export default function ContactPage() {
                         const isOpen = activeFaq === index
                         return (
                             <div 
-                                key={index}
+                                key={faq.q}
                                 className="bg-white rounded-2xl border border-slate-200/80 overflow-hidden shadow-xs transition-all"
                             >
                                 <button 
+                                    type="button"
                                     onClick={() => setActiveFaq(isOpen ? null : index)}
-                                    className="w-full px-6 py-4.5 text-left flex items-center justify-between gap-4 font-semibold text-slate-800 text-sm sm:text-base hover:bg-slate-50/70 transition"
+                                    className="w-full px-6 py-4.5 text-left flex items-center justify-between gap-4 font-semibold text-slate-800 text-sm sm:text-base hover:bg-slate-50/70 transition cursor-pointer"
                                 >
                                     <div>
                                         <p>{faq.q}</p>
