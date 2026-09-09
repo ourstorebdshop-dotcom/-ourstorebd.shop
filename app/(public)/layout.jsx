@@ -2,6 +2,7 @@ import Banner from "@/components/Banner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileBottomNav from "@/components/MobileBottomNav";
+import ChatButton from "@/components/chat/ChatButton";
 
 export default function PublicLayout({ children }) {
     return (
@@ -15,6 +16,7 @@ export default function PublicLayout({ children }) {
             </main>
             <Footer />
             <MobileBottomNav />
+            <ChatButton />
         </div>
     );
 }

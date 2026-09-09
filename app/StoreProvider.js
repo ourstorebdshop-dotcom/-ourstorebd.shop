@@ -26,6 +26,8 @@ import {
     subscribeToDoc,
     subscribeToCollection,
 } from '@/lib/firestore'
+import { setAdminUnreadCount } from '@/lib/features/chat/chatSlice'
+import { subscribeToAdminUnreadCount } from '@/lib/chatFirestore'
 
 const CHANNEL_NAME = 'gocart_product_sync'
 const PRODUCT_STORAGE_KEY = 'gocart_products'
@@ -597,6 +599,13 @@ export default function StoreProvider({ children }) {
                         try { localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
                         isReceivingFromFirestore = false
                     }
+                })
+            )
+
+            // Chat admin unread count real-time listener (lightweight — counts only)
+            unsubscribers.push(
+                subscribeToAdminUnreadCount((count) => {
+                    store.dispatch(setAdminUnreadCount(count))
                 })
             )
         }

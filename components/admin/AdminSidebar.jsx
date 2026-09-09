@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import { useSelector } from "react-redux"
-import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon } from "lucide-react"
+import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon } from "lucide-react"
 import Link from "next/link"
 import { getLocalMonthStr } from "@/lib/features/cashflow/cashflowSlice"
 
@@ -11,6 +11,9 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
     const pathname = usePathname()
     const messages = useSelector(state => state.contact?.messages) || []
     const unreadCount = messages.filter(m => m.status === 'NEW').length
+
+    // Chat unread badge count
+    const chatUnreadCount = useSelector(state => state.chat?.adminUnreadCount) || 0
 
     // API settings status
     const googleAuth = useSelector(state => state.apiSettings?.googleAuth)
@@ -40,6 +43,7 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         { name: 'Orders', href: '/admin/orders', icon: LayoutListIcon },
         { name: 'Customers', href: '/admin/customers', icon: UsersIcon },
         { name: 'Messages', href: '/admin/contact', icon: MessageSquareIcon, badge: unreadCount },
+        { name: 'Live Chat', href: '/admin/chat', icon: HeadphonesIcon, badge: chatUnreadCount },
         { name: 'Coupons', href: '/admin/coupons', icon: TicketPercentIcon },
         { name: 'Banners', href: '/admin/banners', icon: MegaphoneIcon },
         { name: 'Shipping', href: '/admin/shipping', icon: TruckIcon },
