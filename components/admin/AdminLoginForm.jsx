@@ -38,8 +38,8 @@ const AdminLoginForm = ({ onLoginSuccess }) => {
     const [lockoutCount, setLockoutCount] = useState(0) // How many times locked out
     const lockoutTimerRef = useRef(null)
 
-    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'idrisrashel@gmail.com'
-    const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '@idris@1I@idris@1I@idris@1I'
+    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || ''
+    const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || ''
 
     // Restore lockout state on mount
     useEffect(() => {

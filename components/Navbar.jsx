@@ -218,7 +218,7 @@ const Navbar = () => {
                                 >
                                     <img
                                         src={safeCurrentUser.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"}
-                                        alt={safeCurrentUser.name}
+                                        alt={safeCurrentUser.name || 'User avatar'}
                                         className="w-7 h-7 rounded-full object-cover border border-green-500"
                                     />
                                     <span className="text-xs font-semibold text-slate-700 max-w-[100px] truncate">
@@ -422,7 +422,7 @@ const Navbar = () => {
                                 </Link>
                             )}
 
-                            {isAuthenticated && currentUser ? (
+                            {safeIsAuthenticated && safeCurrentUser ? (
                                 <button 
                                     onClick={handleLogout} 
                                     className="w-full py-3 bg-red-50 hover:bg-red-100 active:bg-red-200 text-red-600 rounded-xl font-semibold transition mt-3 flex items-center justify-center gap-2"

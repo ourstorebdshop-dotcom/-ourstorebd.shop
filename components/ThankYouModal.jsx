@@ -27,7 +27,24 @@ export default function ThankYouModal({ order, onClose }) {
 
     const handleCopyOrderId = () => {
         if (order?.id) {
-            navigator.clipboard.writeText(order.id);
+            const text = order.id;
+            const doCopy = () => {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    return navigator.clipboard.writeText(text);
+                }
+                // Fallback for HTTP / non-secure contexts
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.focus();
+                textarea.select();
+                try { document.execCommand('copy'); } catch (e) { /* ignore */ }
+                document.body.removeChild(textarea);
+                return Promise.resolve();
+            };
+            doCopy();
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }

@@ -348,7 +348,7 @@ export default function StoreProvider({ children }) {
                 if (savedWishlist) {
                     const parsed = JSON.parse(savedWishlist)
                     if (Array.isArray(parsed)) {
-                        const cleaned = parsed.filter(id => typeof id === 'string' && !DEMO_PRODUCT_IDS.has(id))
+                        const cleaned = parsed.filter(id => typeof id === 'string' && !DUMMY_IDS.has(id))
                         store.dispatch(hydrateWishlist(cleaned))
                         if (cleaned.length !== parsed.length) {
                             try {
