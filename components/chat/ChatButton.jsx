@@ -49,18 +49,33 @@ const ChatButton = () => {
 
     return (
         <>
+            {/* Live Signal Radar Waves (only when closed) */}
+            {!isOpen && (
+                <div
+                    className="fixed z-39 pointer-events-none flex items-center justify-center
+                        w-13 h-13 sm:w-14 sm:h-14
+                        bottom-[88px] right-4
+                        sm:bottom-6 sm:right-6"
+                    aria-hidden="true"
+                >
+                    <span className="absolute inset-0 rounded-full bg-green-500/35 animate-chat-signal-1" />
+                    <span className="absolute inset-0 rounded-full bg-emerald-400/25 animate-chat-signal-2" />
+                    <span className="absolute inset-0 rounded-full bg-green-400/15 animate-chat-signal-3" />
+                </div>
+            )}
+
             {/* Floating Chat Button */}
             <button
                 onClick={handleToggle}
                 className={`fixed z-40 flex items-center justify-center transition-all duration-300 ease-out
                     w-13 h-13 sm:w-14 sm:h-14
-                    rounded-full shadow-lg
+                    rounded-full
                     bottom-[88px] right-4
                     sm:bottom-6 sm:right-6
                     focus:outline-none focus-visible:ring-4 focus-visible:ring-green-300
                     ${isOpen
-                        ? 'bg-slate-700 hover:bg-slate-800 rotate-0 scale-95'
-                        : 'bg-gradient-to-br from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 hover:scale-105 hover:shadow-xl hover:shadow-green-600/25 active:scale-95'
+                        ? 'bg-slate-700 hover:bg-slate-800 rotate-0 scale-95 shadow-lg'
+                        : 'bg-gradient-to-br from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 hover:scale-105 active:scale-95 animate-chat-btn-glow'
                     }
                 `}
                 aria-label={isOpen ? 'Close chat' : 'Open customer support chat'}
@@ -80,6 +95,14 @@ const ChatButton = () => {
                         <MessageCircle size={22} className="text-white" />
                     )}
                 </span>
+
+                {/* Live Online Signal Indicator Dot (when no unread messages) */}
+                {!isOpen && unreadCount === 0 && (
+                    <span className="absolute top-0 right-0 flex h-3.5 w-3.5 -mt-0.5 -mr-0.5" title="Online">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-85" />
+                        <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-400 border-2 border-white shadow-xs" />
+                    </span>
+                )}
 
                 {/* Unread badge */}
                 {!isOpen && unreadCount > 0 && (

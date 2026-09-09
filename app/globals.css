@@ -180,6 +180,31 @@
     }
 }
 
+/* Radar Signal Waves */
+@keyframes chatSignalWave {
+    0% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+    40% {
+        opacity: 0.45;
+    }
+    100% {
+        transform: scale(1.95);
+        opacity: 0;
+    }
+}
+
+/* Button Breathing Glow */
+@keyframes chatButtonGlow {
+    0%, 100% {
+        box-shadow: 0 10px 25px -4px rgba(22, 163, 74, 0.4), 0 6px 10px -4px rgba(22, 163, 74, 0.25);
+    }
+    50% {
+        box-shadow: 0 16px 36px -4px rgba(22, 163, 74, 0.65), 0 10px 16px -4px rgba(22, 163, 74, 0.4);
+    }
+}
+
 .animate-chat-slide-up {
     animation: chatSlideUp 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -198,4 +223,20 @@
 
 .animate-chat-btn-ring {
     animation: chatBtnPulseRing 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+.animate-chat-signal-1 {
+    animation: chatSignalWave 2.6s cubic-bezier(0.15, 0.5, 0.3, 1) 0s infinite;
+}
+
+.animate-chat-signal-2 {
+    animation: chatSignalWave 2.6s cubic-bezier(0.15, 0.5, 0.3, 1) 0.85s infinite;
+}
+
+.animate-chat-signal-3 {
+    animation: chatSignalWave 2.6s cubic-bezier(0.15, 0.5, 0.3, 1) 1.7s infinite;
+}
+
+.animate-chat-btn-glow {
+    animation: chatButtonGlow 2.6s ease-in-out infinite;
 }
