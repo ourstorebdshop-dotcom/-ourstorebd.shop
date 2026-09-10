@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import { useState, useRef } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { 
@@ -505,7 +505,7 @@ export default function AdminShippingSettings() {
                     <div>
                         <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                             <SmartphoneIcon size={20} className="text-emerald-600" />
-                            প্রোডাক্ট পেজ বাটন সেটিংস (WhatsApp & Call Now)
+                            WhatsApp ও Call বাটন সেটিংস
                         </h2>
                         <p className="text-xs text-slate-500 mt-1">
                             প্রোডাক্ট পেজের WhatsApp এবং Call Now বাটনের ফোন নম্বর ও মেসেজ নিয়ন্ত্রণ করুন
