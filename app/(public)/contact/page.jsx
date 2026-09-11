@@ -6,6 +6,7 @@ import { useSelector, useDispatch } from 'react-redux'
 import { submitMessage } from '@/lib/features/contact/contactSlice'
 import { BreadcrumbJsonLd, FaqJsonLd, OrganizationJsonLd } from '@/components/seo/JsonLd'
 import toast from 'react-hot-toast'
+import { validateBDPhone, normalizePhone } from '@/lib/fraud/phoneValidator'
 import { 
     Phone, 
     Mail, 
@@ -109,9 +110,9 @@ export default function ContactPage() {
             }
         }
         if (formData.phone.trim()) {
-            const cleanDigits = formData.phone.replace(/[^0-9]/g, '')
-            if (cleanDigits.length < 10) {
-                toast.error("Please provide a valid phone number")
+            const phoneResult = validateBDPhone(formData.phone)
+            if (!phoneResult.valid) {
+                toast.error(phoneResult.message)
                 return
             }
         }
@@ -126,7 +127,7 @@ export default function ContactPage() {
             dispatch(submitMessage({
                 name: formData.name.trim(),
                 email: formData.email.trim(),
-                phone: formData.phone.trim(),
+                phone: formData.phone.trim() ? normalizePhone(formData.phone) : '',
                 subject: formData.subject,
                 message: formData.message.trim(),
             }))

@@ -12,6 +12,7 @@ import { hydrateContact, defaultMessages, defaultStoreInfo } from '@/lib/feature
 import { hydrateWishlist } from '@/lib/features/wishlist/wishlistSlice'
 import { hydrateCategories, defaultCategories } from '@/lib/features/category/categorySlice'
 import { hydrateShipping, defaultShippingSettings } from '@/lib/features/shipping/shippingSlice'
+import { hydrateFraud } from '@/lib/features/fraud/fraudSlice'
 import { hydrateCashflow, defaultCashflowData } from '@/lib/features/cashflow/cashflowSlice'
 import { hydrateHero, defaultHeroData } from '@/lib/features/hero/heroSlice'
 import { hydrateApiSettings, defaultApiSettings } from '@/lib/features/apiSettings/apiSettingsSlice'
@@ -42,6 +43,7 @@ const CONTACT_STORAGE_KEY = 'gocart_contact'
 const WISHLIST_STORAGE_KEY = 'ourstore_wishlist'
 const CATEGORY_STORAGE_KEY = 'gocart_categories'
 const SHIPPING_STORAGE_KEY = 'gocart_shipping'
+const FRAUD_STORAGE_KEY = 'gocart_fraud'
 const CASHFLOW_STORAGE_KEY = 'gocart_cashflow'
 const API_SETTINGS_STORAGE_KEY = 'gocart_api_settings'
 
@@ -260,6 +262,18 @@ export default function StoreProvider({ children }) {
             } catch (e) { console.warn('Failed to load shipping settings from localStorage:', e) }
         }
 
+        function lsLoadFraud() {
+            try {
+                const saved = localStorage.getItem(FRAUD_STORAGE_KEY)
+                if (saved) {
+                    const parsed = JSON.parse(saved)
+                    if (parsed && typeof parsed === 'object') {
+                        store.dispatch(hydrateFraud(parsed))
+                    }
+                }
+            } catch (e) { console.warn('Failed to load fraud settings from localStorage:', e) }
+        }
+
         function lsLoadContact() {
             try {
                 const saved = localStorage.getItem(CONTACT_STORAGE_KEY)
@@ -284,6 +298,7 @@ export default function StoreProvider({ children }) {
             lsLoadHero()
             lsLoadCategories()
             lsLoadShipping()
+            lsLoadFraud()
             lsLoadContact()
         }
 
@@ -587,6 +602,18 @@ export default function StoreProvider({ children }) {
                 })
             )
 
+            // Fraud settings real-time listener
+            unsubscribers.push(
+                subscribeToDoc('settings', 'fraud', (data) => {
+                    if (data) {
+                        isReceivingFromFirestore = true
+                        store.dispatch(hydrateFraud(data))
+                        try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
+                        isReceivingFromFirestore = false
+                    }
+                })
+            )
+
             // Contact/Store Info real-time listener
             unsubscribers.push(
                 subscribeToDoc('settings', 'contact', (data) => {
@@ -634,6 +661,7 @@ export default function StoreProvider({ children }) {
         let prevWishlist = store.getState().wishlist?.items
         let prevCategories = store.getState().category?.categories
         let prevShipping = store.getState().shipping
+        let prevFraud = store.getState().fraud
         let prevCashflow = store.getState().cashflow
         let prevApiSettings = store.getState().apiSettings
 
@@ -747,6 +775,16 @@ export default function StoreProvider({ children }) {
                 try { localStorage.setItem(SHIPPING_STORAGE_KEY, JSON.stringify(currentShipping)) } catch (e) { /* ignore */ }
                 if (firebaseEnabled && !isReceivingFromFirestore) {
                     saveDocToFirestore('settings', 'shipping', currentShipping)
+                }
+            }
+
+            // --- Fraud (Firestore + localStorage) ---
+            const currentFraud = state.fraud
+            if (currentFraud !== prevFraud) {
+                prevFraud = currentFraud
+                try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(currentFraud)) } catch (e) { /* ignore */ }
+                if (firebaseEnabled && !isReceivingFromFirestore) {
+                    saveDocToFirestore('settings', 'fraud', currentFraud)
                 }
             }
 

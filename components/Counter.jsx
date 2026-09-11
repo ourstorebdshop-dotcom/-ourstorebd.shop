@@ -1,6 +1,9 @@
 'use client'
 import { addToCart, removeFromCart } from "@/lib/features/cart/cartSlice";
 import { useDispatch, useSelector } from "react-redux";
+import toast from 'react-hot-toast';
+
+const MAX_QTY = 100;
 
 const Counter = ({ productId }) => {
 
@@ -9,6 +12,10 @@ const Counter = ({ productId }) => {
     const dispatch = useDispatch();
 
     const addToCartHandler = () => {
+        if (qty >= MAX_QTY) {
+            toast.error(`সর্বোচ্চ ${MAX_QTY}টি পণ্য যোগ করা যাবে`);
+            return;
+        }
         dispatch(addToCart({ productId }))
     }
 

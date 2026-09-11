@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { login, register } from '@/lib/features/user/userSlice'
+import { validateBDPhone, normalizePhone, phonesMatch } from '@/lib/fraud/phoneValidator'
 
 const GoogleIcon = () => (
     <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
@@ -83,7 +84,13 @@ function LoginForm() {
         }
 
         const matchedUser = savedUsers.find(
-            u => (u.email?.toLowerCase() === identifier || u.phone === identifier) && u.password === password
+            u => {
+                const identifierIsPhone = /^\+?\d[\d\s-]{7,}$/.test(identifier)
+                if (identifierIsPhone) {
+                    return phonesMatch(u.phone, identifier) && u.password === password
+                }
+                return u.email?.toLowerCase() === identifier && u.password === password
+            }
         )
 
         if (matchedUser) {
@@ -127,6 +134,14 @@ function LoginForm() {
             return
         }
 
+        // Validate BD phone format
+        const phoneResult = validateBDPhone(regPhone)
+        if (!phoneResult.valid) {
+            toast.error(phoneResult.message)
+            setLoading(false)
+            return
+        }
+
         if (regPassword.length < 6) {
             toast.error('পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে')
             setLoading(false)
@@ -145,8 +160,9 @@ function LoginForm() {
             return
         }
 
+        const normalizedRegPhone = normalizePhone(regPhone)
         const exists = savedUsers.some(
-            u => (regEmail && u.email?.toLowerCase() === regEmail.trim().toLowerCase()) || u.phone === regPhone.trim()
+            u => (regEmail && u.email?.toLowerCase() === regEmail.trim().toLowerCase()) || phonesMatch(u.phone, regPhone)
         )
 
         if (exists) {
@@ -159,7 +175,7 @@ function LoginForm() {
             id: `user_${Date.now()}`,
             name: regName.trim(),
             email: regEmail.trim() || `${regPhone.trim()}@customer.ourstorebd.com`,
-            phone: regPhone.trim(),
+            phone: normalizedRegPhone,
             password: regPassword,
             role: "CUSTOMER",
             joinedDate: new Date().toISOString(),

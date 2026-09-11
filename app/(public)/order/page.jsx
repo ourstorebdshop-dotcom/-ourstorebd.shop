@@ -55,6 +55,9 @@ export default function OrderPage() {
     const [cartArray, setCartArray] = useState([])
     const [totalPrice, setTotalPrice] = useState(0)
     const [placedOrder, setPlacedOrder] = useState(null)
+    const [failedImages, setFailedImages] = useState({})
+    const [idempotencyKey] = useState(() => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'ord_' + Math.random().toString(36).slice(2) + Date.now().toString(36))
+    const [formLoadedAt] = useState(() => Date.now())
 
     const defaultAddr = currentUser?.addresses?.find(a => a.isDefault) || currentUser?.addresses?.[0]
     const isOutsideDefault = defaultAddr?.city?.toLowerCase().includes('outside') || defaultAddr?.city?.includes('বাইরে')
@@ -92,13 +95,15 @@ export default function OrderPage() {
                 const qty = typeof value === 'number' ? value : value.quantity
                 const color = typeof value === 'object' ? value.color : null
                 const size = typeof value === 'object' ? value.size : null
+                const effectivePrice = product.offerPrice || product.price
                 items.push({
                     ...product,
                     quantity: qty,
                     selectedColor: color,
                     selectedSize: size,
+                    effectivePrice,
                 })
-                total += product.price * qty
+                total += effectivePrice * qty
             }
         }
         setCartArray(items)
@@ -187,7 +192,7 @@ export default function OrderPage() {
                                                     className="relative size-16 sm:size-20 rounded-xl border border-slate-200/80 bg-slate-50 overflow-hidden shadow-2xs shrink-0 flex items-center justify-center group"
                                                 >
                                                     <Image 
-                                                        src={getItemImage(item)} 
+                                                        src={failedImages[item.id] ? '/placeholder.svg' : getItemImage(item)} 
                                                         alt={item.name || 'Product'} 
                                                         fill
                                                         sizes="(max-width: 640px) 64px, 80px"
@@ -196,8 +201,8 @@ export default function OrderPage() {
                                                                 ? 'object-cover'
                                                                 : 'object-contain p-1.5'
                                                         }`}
-                                                        onError={(e) => {
-                                                            e.currentTarget.src = '/placeholder.svg'
+                                                        onError={() => {
+                                                            setFailedImages(prev => ({ ...prev, [item.id]: true }))
                                                         }}
                                                     />
                                                 </Link>
@@ -213,7 +218,7 @@ export default function OrderPage() {
 
                                                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                                                         <span className="text-xs font-bold text-slate-800">
-                                                            {currency}{item.price}
+                                                            {currency}{item.effectivePrice || item.price}
                                                         </span>
                                                         {item.selectedColor && (
                                                             <span 
@@ -223,7 +228,7 @@ export default function OrderPage() {
                                                             />
                                                         )}
                                                         {item.selectedSize && (
-                                                            <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded font-medium">
+                                                            <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-medium">
                                                                 {item.selectedSize}
                                                             </span>
                                                         )}
@@ -236,7 +241,7 @@ export default function OrderPage() {
 
                                                     <div className="text-right min-w-[70px]">
                                                         <span className="text-xs sm:text-sm font-bold text-slate-900">
-                                                            {currency}{(item.price * item.quantity).toLocaleString()}
+                                                            {currency}{((item.effectivePrice || item.price) * item.quantity).toLocaleString()}
                                                         </span>
                                                     </div>
 
@@ -272,6 +277,8 @@ export default function OrderPage() {
                                         deliveryInfo={deliveryInfo} 
                                         setDeliveryInfo={setDeliveryInfo} 
                                         onOrderSuccess={(order) => setPlacedOrder(order)}
+                                        idempotencyKey={idempotencyKey}
+                                        formLoadedAt={formLoadedAt}
                                         className="w-full shadow-md bg-white border border-slate-200"
                                     />
                                 </div>

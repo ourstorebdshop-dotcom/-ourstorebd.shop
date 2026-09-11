@@ -14,13 +14,19 @@ import {
     ClockIcon, 
     TruckIcon, 
     PackageCheckIcon,
-    XCircleIcon
+    XCircleIcon,
+    ShieldAlertIcon,
+    ShieldCheckIcon,
+    ShieldXIcon,
+    BanIcon
 } from "lucide-react"
+import { blockPhone, unblockPhone } from "@/lib/features/fraud/fraudSlice"
 
 export default function AdminOrders() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
     const orders = useSelector(state => state.order.orders)
+    const blockedPhones = useSelector(state => state.fraud?.blockedPhones) || []
 
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
@@ -74,6 +80,10 @@ export default function AdminOrders() {
                 return <span className="px-2.5 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold inline-flex items-center gap-1"><ClockIcon size={13} /> PROCESSING</span>
             case "CANCELLED":
                 return <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold inline-flex items-center gap-1"><XCircleIcon size={13} /> CANCELLED</span>
+            case "PENDING_REVIEW":
+                return <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold inline-flex items-center gap-1 border border-amber-300/60"><ShieldAlertIcon size={13} /> PENDING REVIEW</span>
+            case "FRAUD_REJECTED":
+                return <span className="px-2.5 py-1 bg-rose-100 text-rose-800 rounded-full text-xs font-semibold inline-flex items-center gap-1 border border-rose-300/60"><ShieldXIcon size={13} /> FRAUD REJECTED</span>
             default:
                 return <span className="px-2.5 py-1 bg-slate-100 text-slate-700 rounded-full text-xs font-semibold inline-flex items-center gap-1"><PackageCheckIcon size={13} /> ORDER PLACED</span>
         }
@@ -109,8 +119,8 @@ export default function AdminOrders() {
                     )}
                 </div>
 
-                <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto">
-                    {["ALL", "ORDER_PLACED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"].map((status) => (
+                <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+                    {["ALL", "PENDING_REVIEW", "ORDER_PLACED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "FRAUD_REJECTED"].map((status) => (
                         <button
                             key={status}
                             onClick={() => setStatusFilter(status)}
@@ -160,6 +170,25 @@ export default function AdminOrders() {
                                         <td className="px-4 py-4">
                                             <p className="font-semibold text-slate-800">{order.user?.name}</p>
                                             <p className="text-xs text-slate-400">{order.user?.email}</p>
+                                            {order._fraud && (
+                                                <div className="mt-1">
+                                                    {order._fraud.riskLevel === 'HIGH' && (
+                                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200">
+                                                            <ShieldAlertIcon size={10} /> HIGH RISK ({order._fraud.riskScore})
+                                                        </span>
+                                                    )}
+                                                    {order._fraud.riskLevel === 'MEDIUM' && (
+                                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
+                                                            <ShieldAlertIcon size={10} /> REVIEW ({order._fraud.riskScore})
+                                                        </span>
+                                                    )}
+                                                    {order._fraud.riskLevel === 'LOW' && (
+                                                        <span className="inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600">
+                                                            <ShieldCheckIcon size={10} /> SAFE ({order._fraud.riskScore})
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-4 py-4 font-bold text-slate-800">
                                             {currency}{Number(order.total).toLocaleString('en-IN')}
@@ -185,10 +214,12 @@ export default function AdminOrders() {
                                                 className="border border-slate-200 rounded-lg text-xs py-1.5 px-2 font-medium bg-white focus:ring-2 focus:ring-green-100 outline-none"
                                             >
                                                 <option value="ORDER_PLACED">ORDER PLACED</option>
+                                                <option value="PENDING_REVIEW">PENDING REVIEW</option>
                                                 <option value="PROCESSING">PROCESSING</option>
                                                 <option value="SHIPPED">SHIPPED</option>
                                                 <option value="DELIVERED">DELIVERED</option>
                                                 <option value="CANCELLED">CANCELLED</option>
+                                                <option value="FRAUD_REJECTED">FRAUD REJECTED</option>
                                             </select>
                                         </td>
                                         <td className="px-4 py-4 text-xs text-slate-400">
@@ -242,7 +273,36 @@ export default function AdminOrders() {
                                 <h3 className="font-semibold text-slate-800 mb-1.5 text-sm">Customer Info</h3>
                                 <p><strong className="text-slate-700">Name:</strong> {modalOrder.user?.name}</p>
                                 <p><strong className="text-slate-700">Email:</strong> {modalOrder.user?.email}</p>
-                                <p><strong className="text-slate-700">Phone:</strong> {modalOrder.address?.phone}</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <p><strong className="text-slate-700">Phone:</strong> {modalOrder.address?.phone || modalOrder.user?.phone}</p>
+                                    {(() => {
+                                        const phone = modalOrder.address?.phone || modalOrder.user?.phone;
+                                        if (!phone) return null;
+                                        const isBlocked = blockedPhones.includes(phone);
+                                        return (
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (isBlocked) {
+                                                        dispatch(unblockPhone(phone));
+                                                        toast.success(`Phone ${phone} unblocked!`);
+                                                    } else {
+                                                        dispatch(blockPhone(phone));
+                                                        toast.error(`Phone ${phone} blocked from placing orders!`);
+                                                    }
+                                                }}
+                                                className={`text-[10px] px-2 py-0.5 rounded font-semibold border transition cursor-pointer flex items-center gap-1 ${
+                                                    isBlocked
+                                                        ? 'bg-red-600 text-white border-red-700 hover:bg-red-700'
+                                                        : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'
+                                                }`}
+                                            >
+                                                <BanIcon size={10} />
+                                                {isBlocked ? 'Blocked (Unblock)' : 'Block Phone'}
+                                            </button>
+                                        );
+                                    })()}
+                                </div>
                             </div>
                             <div>
                                 <h3 className="font-semibold text-slate-800 mb-1.5 text-sm">Shipping Address</h3>
@@ -251,6 +311,43 @@ export default function AdminOrders() {
                                 </p>
                             </div>
                         </div>
+
+                        {/* Fraud Risk Assessment Card (if metadata exists) */}
+                        {modalOrder._fraud && (
+                            <div className="mb-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                                <div className="flex items-center justify-between mb-2">
+                                    <span className="font-semibold text-slate-800 flex items-center gap-1 text-sm">
+                                        <ShieldAlertIcon size={15} className={
+                                            modalOrder._fraud.riskLevel === 'HIGH' ? 'text-rose-600' :
+                                            modalOrder._fraud.riskLevel === 'MEDIUM' ? 'text-amber-600' : 'text-emerald-600'
+                                        } />
+                                        Fraud Risk Assessment
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
+                                        modalOrder._fraud.riskLevel === 'HIGH' ? 'bg-rose-100 text-rose-700 border border-rose-200' :
+                                        modalOrder._fraud.riskLevel === 'MEDIUM' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                        'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                                    }`}>
+                                        Risk Score: {modalOrder._fraud.riskScore}/100 ({modalOrder._fraud.riskLevel})
+                                    </span>
+                                </div>
+                                <div className="space-y-1 text-slate-600">
+                                    {modalOrder._fraud.ip && (
+                                        <p><strong className="text-slate-700">Client IP:</strong> {modalOrder._fraud.ip}</p>
+                                    )}
+                                    {modalOrder._fraud.reasons && modalOrder._fraud.reasons.length > 0 && (
+                                        <div>
+                                            <strong className="text-slate-700">Detected Signals:</strong>
+                                            <ul className="list-disc list-inside mt-0.5 text-slate-600 space-y-0.5">
+                                                {modalOrder._fraud.reasons.map((r, i) => (
+                                                    <li key={i}>{r}</li>
+                                                ))}
+                                            </ul>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Ordered Items */}
                         <div className="mb-4">
@@ -288,10 +385,12 @@ export default function AdminOrders() {
                                         className="border border-slate-200 rounded-lg text-xs py-1 px-2 font-medium bg-white focus:ring-2 focus:ring-green-100 outline-none"
                                     >
                                         <option value="ORDER_PLACED">ORDER PLACED</option>
+                                        <option value="PENDING_REVIEW">PENDING REVIEW</option>
                                         <option value="PROCESSING">PROCESSING</option>
                                         <option value="SHIPPED">SHIPPED</option>
                                         <option value="DELIVERED">DELIVERED</option>
                                         <option value="CANCELLED">CANCELLED</option>
+                                        <option value="FRAUD_REJECTED">FRAUD REJECTED</option>
                                     </select>
                                 </div>
                             </div>

@@ -4,6 +4,7 @@ import { useState } from "react"
 import { toast } from "react-hot-toast"
 import { useDispatch } from "react-redux"
 import { addAddress } from "@/lib/features/address/addressSlice"
+import { validateBDPhone, normalizePhone } from '@/lib/fraud/phoneValidator'
 
 const AddressModal = ({ setShowAddressModal }) => {
 
@@ -29,7 +30,20 @@ const AddressModal = ({ setShowAddressModal }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
-        dispatch(addAddress(address))
+
+        // Validate phone if provided
+        if (address.phone) {
+            const phoneResult = validateBDPhone(address.phone)
+            if (!phoneResult.valid) {
+                toast.error(phoneResult.message)
+                return
+            }
+        }
+
+        dispatch(addAddress({
+            ...address,
+            phone: address.phone ? normalizePhone(address.phone) : ''
+        }))
         toast.success('Address saved successfully!')
         setShowAddressModal(false)
     }

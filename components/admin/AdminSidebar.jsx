@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import { useSelector } from "react-redux"
-import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon } from "lucide-react"
+import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon, ShieldAlertIcon } from "lucide-react"
 import Link from "next/link"
 import { getLocalMonthStr } from "@/lib/features/cashflow/cashflowSlice"
 
@@ -34,6 +34,10 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         return b.limit > 0 && spent >= (b.limit * (b.alertThreshold || 80) / 100)
     }).length
 
+    // Fraud Guard pending review badge
+    const orders = useSelector(state => state.order?.orders) || []
+    const pendingFraudCount = orders.filter(o => o.status === 'PENDING_REVIEW').length
+
     const sidebarLinks = [
         { name: 'Dashboard', href: '/admin', icon: HomeIcon },
         { name: 'Cash Flow', href: '/admin/cash-flow', icon: CircleDollarSignIcon, badge: budgetAlertsCount },
@@ -41,6 +45,7 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         { name: 'Manage Products', href: '/admin/manage-product', icon: SquarePenIcon },
         { name: 'Categories', href: '/admin/categories', icon: Grid3X3Icon },
         { name: 'Orders', href: '/admin/orders', icon: LayoutListIcon },
+        { name: 'Fraud Guard', href: '/admin/fraud', icon: ShieldAlertIcon, badge: pendingFraudCount },
         { name: 'Customers', href: '/admin/customers', icon: UsersIcon },
         { name: 'Messages', href: '/admin/contact', icon: MessageSquareIcon, badge: unreadCount },
         { name: 'Live Chat', href: '/admin/chat', icon: HeadphonesIcon, badge: chatUnreadCount },

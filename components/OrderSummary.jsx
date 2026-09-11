@@ -1,7 +1,7 @@
 'use client'
 
 import { CreditCardIcon, TruckIcon, XIcon, Loader2Icon, ArrowRightIcon, MapPinIcon } from 'lucide-react';
-import React, { useState } from 'react'
+import React, { useState, useRef } from 'react'
 import { useSelector, useDispatch } from 'react-redux';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
@@ -9,10 +9,11 @@ import { addOrder } from '@/lib/features/order/orderSlice';
 import { saveAddressFromOrder } from '@/lib/features/user/userSlice';
 import { clearCart } from '@/lib/features/cart/cartSlice';
 import { useCoupon } from '@/lib/features/coupon/couponSlice';
+import { validateBDPhone, normalizePhone } from '@/lib/fraud/phoneValidator';
 
 const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳';
 
-const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrderSuccess, className }) => {
+const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrderSuccess, className, idempotencyKey, formLoadedAt }) => {
 
     const router = useRouter();
     const dispatch = useDispatch();
@@ -22,13 +23,18 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
     const shippingSettings = useSelector(state => state.shipping);
 
     const [paymentMethod, setPaymentMethod] = useState('COD');
-    const [trxId, setTrxId] = useState('');
+    const [bkashTrxId, setBkashTrxId] = useState('');
+    const [nagadTrxId, setNagadTrxId] = useState('');
     const [bankName, setBankName] = useState('');
     const [bankTrxId, setBankTrxId] = useState('');
     const [couponCodeInput, setCouponCodeInput] = useState('');
     const [coupon, setCoupon] = useState(null);
     const [placingOrder, setPlacingOrder] = useState(false);
     const [applyingCoupon, setApplyingCoupon] = useState(false);
+    const honeypotRef = useRef(null);
+    const hasSubmittedRef = useRef(false);
+    const fallbackIdempotencyRef = useRef(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'ord_' + Math.random().toString(36).slice(2) + Date.now().toString(36));
+    const fallbackFormLoadedAtRef = useRef(Date.now());
 
     const handleDeliveryChange = (e) => {
         setDeliveryInfo(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -115,17 +121,30 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
         setApplyingCoupon(false);
     }
 
-    const handlePlaceOrder = (e) => {
+    const handlePlaceOrder = async (e) => {
         e.preventDefault();
+
+        // Prevent double-click / double-submission
+        if (placingOrder || hasSubmittedRef.current) return;
         setPlacingOrder(true);
 
+        // Client-side quick validations (server re-validates everything)
         if (!deliveryInfo?.name || !deliveryInfo?.phone || !deliveryInfo?.address) {
             toast.error('অনুগ্রহ করে ডেলিভারি তথ্য পূরণ করুন');
             setPlacingOrder(false);
             return;
         }
 
-        if ((paymentMethod === 'BKASH' || paymentMethod === 'NAGAD') && !trxId.trim()) {
+        // Phone format validation using shared BD phone validator
+        const phoneResult = validateBDPhone(deliveryInfo.phone);
+        if (!phoneResult.valid) {
+            toast.error(phoneResult.message);
+            setPlacingOrder(false);
+            return;
+        }
+
+        const activeTrxId = paymentMethod === 'BKASH' ? bkashTrxId : nagadTrxId;
+        if ((paymentMethod === 'BKASH' || paymentMethod === 'NAGAD') && !activeTrxId.trim()) {
             toast.error('অনুগ্রহ করে ট্রানসেকশন আইডি দিন');
             setPlacingOrder(false);
             return;
@@ -137,82 +156,85 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
             return;
         }
 
-        const discountAmount = calculateDiscount(coupon, totalPrice);
-        const shippingCost = deliveryInfo.location === 'outsideDhaka' ? (shippingSettings?.outsideDhaka?.cost || 120) : (shippingSettings?.insideDhaka?.cost || 70);
-        const finalCalculatedTotal = coupon ? Math.max(0, totalPrice - discountAmount + shippingCost) : (totalPrice + shippingCost);
+        try {
+            const response = await fetch('/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    items: (items || []).map(item => ({
+                        productId: item.id,
+                        quantity: item.quantity,
+                        color: item.selectedColor || null,
+                        size: item.selectedSize || null,
+                    })),
+                    deliveryInfo: {
+                        name: deliveryInfo.name,
+                        phone: normalizePhone(deliveryInfo.phone),
+                        address: deliveryInfo.address,
+                        location: deliveryInfo.location,
+                    },
+                    paymentMethod,
+                    trxId: (paymentMethod === 'BKASH' ? bkashTrxId : paymentMethod === 'NAGAD' ? nagadTrxId : '') || null,
+                    bankName: bankName || null,
+                    bankTrxId: bankTrxId || null,
+                    couponCode: coupon?.code || null,
+                    idempotencyKey: idempotencyKey || fallbackIdempotencyRef.current,
+                    honeypot: honeypotRef.current?.value || '',
+                    formLoadedAt: formLoadedAt || fallbackFormLoadedAtRef.current,
+                    userId: currentUser?.id || null,
+                    userEmail: currentUser?.email || null,
+                }),
+            });
 
-        const newOrder = {
-            id: `ord_${Date.now()}`,
-            total: Number(finalCalculatedTotal.toFixed(2)),
-            status: "ORDER_PLACED",
-            userId: currentUser?.id || "user_guest",
-            isPaid: paymentMethod !== 'COD',
-            paymentMethod: paymentMethod,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            isCouponUsed: !!coupon,
-            coupon: coupon || null,
-            orderItems: (items || []).map(item => ({
-                productId: item.id,
-                quantity: item.quantity,
-                price: item.price,
-                color: item.selectedColor || null,
-                size: item.selectedSize || null,
-                product: {
-                    id: item.id,
-                    name: item.name,
-                    price: item.price,
-                    images: item.images,
-                    category: item.category
-                }
-            })),
-            address: {
-                id: `addr_${Date.now()}`,
+            const data = await response.json();
+
+            if (!response.ok) {
+                toast.error(data.error || 'অর্ডার প্রসেস করা যায়নি।');
+                setPlacingOrder(false);
+                return;
+            }
+
+            // Mark as submitted to prevent any further submissions
+            hasSubmittedRef.current = true;
+
+            // Server created the order — add to Redux for immediate UI update
+            if (data.order) {
+                dispatch(addOrder(data.order));
+            }
+            dispatch(clearCart());
+
+            // Save address to customer account
+            dispatch(saveAddressFromOrder({
                 name: deliveryInfo.name,
                 phone: deliveryInfo.phone,
+                address: deliveryInfo.address,
                 street: deliveryInfo.address,
-                city: deliveryInfo.location === 'insideDhaka' ? 'Dhaka' : 'Outside Dhaka',
-                country: 'Bangladesh',
-            },
-            shippingCost: shippingCost,
-            user: currentUser || {
-                id: "user_guest",
-                name: deliveryInfo.name,
-                email: `${deliveryInfo.phone}@customer.ourstorebd.com`,
-                phone: deliveryInfo.phone,
+                location: deliveryInfo.location,
+                city: deliveryInfo.location === 'insideDhaka' ? 'ঢাকা (Dhaka)' : 'ঢাকার বাইরে (Outside Dhaka)',
+                userId: currentUser?.id
+            }));
+
+            // Update coupon usage stats
+            if (coupon) {
+                dispatch(useCoupon({ code: coupon.code, savedAmount: calculateDiscount(coupon, totalPrice) }));
             }
-        };
 
-        dispatch(addOrder(newOrder));
-        dispatch(clearCart());
+            toast.success(data.message || 'অর্ডারটি সফলভাবে সম্পন্ন হয়েছে!');
+            setPlacingOrder(false);
 
-        // Automatically save address to customer account
-        dispatch(saveAddressFromOrder({
-            name: deliveryInfo.name,
-            phone: deliveryInfo.phone,
-            address: deliveryInfo.address,
-            street: deliveryInfo.address,
-            location: deliveryInfo.location,
-            city: deliveryInfo.location === 'insideDhaka' ? 'ঢাকা (Dhaka)' : 'ঢাকার বাইরে (Outside Dhaka)',
-            userId: currentUser?.id
-        }));
-
-        // Update coupon usage stats
-        if (coupon) {
-            dispatch(useCoupon({ code: coupon.code, savedAmount: discountAmount }));
-        }
-
-        toast.success('অর্ডারটি সফলভাবে সম্পন্ন হয়েছে!');
-        setPlacingOrder(false);
-
-        if (onOrderSuccess) {
-            onOrderSuccess(newOrder);
-        } else {
-            if (currentUser) {
-                router.push('/profile?tab=orders');
+            if (onOrderSuccess) {
+                onOrderSuccess(data.order);
             } else {
-                router.push('/orders');
+                if (currentUser) {
+                    router.push('/profile?tab=orders');
+                } else {
+                    router.push('/orders');
+                }
             }
+        } catch (error) {
+            console.error('[Order] Failed:', error);
+            toast.error('সার্ভারে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+            setPlacingOrder(false);
         }
     }
 
@@ -231,7 +253,9 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
     ].filter(Boolean);
 
     return (
-        <div className={`w-full bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-5 sm:p-7 ${className || 'lg:max-w-[340px]'}`}>
+        <form onSubmit={handlePlaceOrder} className={`w-full bg-slate-50/30 border border-slate-200 text-slate-500 text-sm rounded-xl p-5 sm:p-7 ${className || 'lg:max-w-[340px]'}`}>
+            {/* Bot Honeypot: completely hidden from real users */}
+            <input type="text" ref={honeypotRef} name="company_site_hp" tabIndex={-1} autoComplete="off" style={{ display: 'none', position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none' }} aria-hidden="true" />
 
             {/* Delivery Info Header */}
             <div className='flex items-center justify-between'>
@@ -275,7 +299,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                                 >
                                     <span>{addr.label || addr.name || 'ঠিকানা'}</span>
                                     {addr.isDefault && (
-                                        <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isSelected ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
+                                        <span className={`text-[9px] px-1 py-0.5 rounded font-bold ${isSelected ? 'bg-white/25 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
                                             ডিফল্ট
                                         </span>
                                     )}
@@ -342,7 +366,9 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                                     name="paymentMethod"
                                     value={option.id}
                                     checked={paymentMethod === option.id}
-                                    onChange={(e) => setPaymentMethod(e.target.value)}
+                                    onChange={(e) => {
+                                        setPaymentMethod(e.target.value);
+                                    }}
                                     className='accent-slate-600'
                                 />
                                 {option.iconUrl ? (
@@ -355,7 +381,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                                 <span className='font-semibold text-slate-700 text-sm'>{option.label}</span>
                                 {option.badge && (
                                     <span className='ml-auto text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-full'>
-                                        {option.badge} &gt;
+                                        {option.badge}
                                     </span>
                                 )}
                             </label>
@@ -371,8 +397,8 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                                         <label className='text-xs font-medium text-slate-600'>ট্রানসেকশন আইডি (TrxID) <span className='text-red-500'>*</span></label>
                                         <input
                                             type="text"
-                                            value={trxId}
-                                            onChange={(e) => setTrxId(e.target.value)}
+                                            value={bkashTrxId}
+                                            onChange={(e) => setBkashTrxId(e.target.value)}
                                             placeholder='যেমন: 8N7A6D5C'
                                             className='w-full mt-1 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-slate-400 transition-colors bg-white'
                                         />
@@ -391,8 +417,8 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                                         <label className='text-xs font-medium text-slate-600'>ট্রানসেকশন আইডি (TrxID) <span className='text-red-500'>*</span></label>
                                         <input
                                             type="text"
-                                            value={trxId}
-                                            onChange={(e) => setTrxId(e.target.value)}
+                                            value={nagadTrxId}
+                                            onChange={(e) => setNagadTrxId(e.target.value)}
                                             placeholder='যেমন: 8N7A6D5C'
                                             className='w-full mt-1 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-slate-400 transition-colors bg-white'
                                         />
@@ -446,9 +472,9 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
             <div className='pt-4 mt-4 border-t border-slate-200 pb-4 border-b'>
                 <div className='flex justify-between'>
                     <div className='flex flex-col gap-1 text-slate-400'>
-                        <p>Subtotal:</p>
-                        <p>Shipping:</p>
-                        {coupon && <p>Coupon:</p>}
+                        <p>পণ্যমূল্য:</p>
+                        <p>ডেলিভারি চার্জ:</p>
+                        {coupon && <p>কুপন ছাড়:</p>}
                     </div>
                     <div className='flex flex-col gap-1 font-medium text-right'>
                         <p>{currency}{totalPrice.toLocaleString()}</p>
@@ -458,25 +484,27 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                 </div>
                 {
                     !coupon ? (
-                        <form onSubmit={handleCouponCode} className='flex justify-center gap-3 mt-3'>
+                        <div className='flex justify-center gap-3 mt-3'>
                             <input onChange={(e) => setCouponCodeInput(e.target.value)} value={couponCodeInput} type="text" placeholder='কুপন কোড লিখুন' className='border border-slate-300 p-2 rounded-lg w-full outline-none focus:border-slate-500 transition text-sm' />
-                            <button disabled={applyingCoupon} className='bg-slate-600 text-white px-4 rounded-lg hover:bg-slate-800 active:scale-95 transition-all text-sm font-medium disabled:opacity-50'>{applyingCoupon ? '...' : 'Apply'}</button>
-                        </form>
+                            <button type="button" onClick={handleCouponCode} disabled={applyingCoupon} className='bg-slate-600 text-white px-4 rounded-lg hover:bg-slate-800 active:scale-95 transition-all text-sm font-medium disabled:opacity-50'>{applyingCoupon ? '...' : 'প্রয়োগ'}</button>
+                        </div>
                     ) : (
                         <div className='w-full flex items-center justify-center gap-2 text-xs mt-2'>
                             <p>Code: <span className='font-semibold ml-1'>{coupon.code.toUpperCase()}</span></p>
                             <p>{coupon.discountType === 'fixed' ? `${currency}${coupon.discount} OFF` : `${coupon.discount}% OFF`}</p>
-                            <XIcon size={18} onClick={() => setCoupon(null)} className='hover:text-red-700 transition cursor-pointer' />
+                            <button type="button" onClick={() => setCoupon(null)} className='hover:text-red-700 transition cursor-pointer p-0.5 rounded-md hover:bg-red-50' aria-label='কুপন সরান'>
+                                <XIcon size={18} />
+                            </button>
                         </div>
                     )
                 }
             </div>
             <div className='flex justify-between py-4'>
-                <p>Total:</p>
+                <p>সর্বমোট:</p>
                 <p className='font-medium text-right'>{currency}{finalTotal.toLocaleString()}</p>
             </div>
             <button
-                onClick={handlePlaceOrder}
+                type="submit"
                 disabled={placingOrder}
                 className='group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-emerald-500 bg-[length:200%_auto] hover:bg-[position:right_center] py-3.5 px-6 text-white font-semibold text-sm shadow-lg shadow-green-600/30 hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 disabled:opacity-60 disabled:pointer-events-none disabled:transform-none flex items-center justify-center gap-2 cursor-pointer'
             >
@@ -499,7 +527,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                 </span>
             </button>
 
-        </div>
+        </form>
     )
 }
 
