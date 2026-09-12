@@ -19,6 +19,7 @@ import {
 import toast from 'react-hot-toast'
 import { login, register } from '@/lib/features/user/userSlice'
 import { validateBDPhone, normalizePhone, phonesMatch } from '@/lib/fraud/phoneValidator'
+import { trackLogin, trackSignUp } from '@/lib/tracking/clientTracker'
 
 const GoogleIcon = () => (
     <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
@@ -95,6 +96,7 @@ function LoginForm() {
 
         if (matchedUser) {
             dispatch(login(matchedUser))
+            trackLogin({ email: matchedUser.email, phone: matchedUser.phone, method: 'credentials' })
             toast.success(`স্বাগতম, ${matchedUser.name}!`)
             router.push(redirectUrl)
         } else {
@@ -108,6 +110,7 @@ function LoginForm() {
                     addresses: []
                 }
                 dispatch(login(defaultUser))
+                trackLogin({ email: defaultUser.email, phone: defaultUser.phone, method: 'demo' })
                 toast.success(`স্বাগতম, ${defaultUser.name}!`)
                 router.push(redirectUrl)
             } else {
@@ -184,6 +187,7 @@ function LoginForm() {
         }
 
         dispatch(register(newUser))
+        trackSignUp({ email: newUser.email, phone: newUser.phone, name: newUser.name, method: 'credentials' })
         toast.success(`একাউন্ট সফলভাবে তৈরি হয়েছে! স্বাগতম ${newUser.name}`)
         router.push(redirectUrl)
         setLoading(false)
@@ -198,6 +202,7 @@ function LoginForm() {
 
         if (existing) {
             dispatch(login(existing))
+            trackLogin({ email: existing.email, name: existing.name, method: 'google' })
             toast.success(`Google দিয়ে সফলভাবে সাইন ইন হয়েছে! স্বাগতম ${existing.name}`, { icon: '👋' })
         } else {
             const timestamp = Date.now()
@@ -213,6 +218,7 @@ function LoginForm() {
                 addresses: []
             }
             dispatch(register(newGoogleUser))
+            trackSignUp({ email: newGoogleUser.email, name: newGoogleUser.name, method: 'google' })
             toast.success(`Google দিয়ে একাউন্ট তৈরি ও সাইন ইন সফল হয়েছে! স্বাগতম ${newGoogleUser.name}`, { icon: '🎉' })
         }
 

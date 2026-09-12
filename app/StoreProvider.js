@@ -16,6 +16,8 @@ import { hydrateFraud } from '@/lib/features/fraud/fraudSlice'
 import { hydrateCashflow, defaultCashflowData } from '@/lib/features/cashflow/cashflowSlice'
 import { hydrateHero, defaultHeroData } from '@/lib/features/hero/heroSlice'
 import { hydrateApiSettings, defaultApiSettings } from '@/lib/features/apiSettings/apiSettingsSlice'
+import { hydrateHeaderFooter, defaultHeaderFooterData } from '@/lib/features/headerFooter/headerFooterSlice'
+import { hydrateTracking, defaultTrackingSettings } from '@/lib/features/tracking/trackingSlice'
 import { couponDummyData, orderDummyData } from '@/assets/assets'
 import {
     isFirebaseConfigured,
@@ -46,6 +48,8 @@ const SHIPPING_STORAGE_KEY = 'gocart_shipping'
 const FRAUD_STORAGE_KEY = 'gocart_fraud'
 const CASHFLOW_STORAGE_KEY = 'gocart_cashflow'
 const API_SETTINGS_STORAGE_KEY = 'gocart_api_settings'
+const HEADER_FOOTER_STORAGE_KEY = 'gocart_header_footer'
+const TRACKING_STORAGE_KEY = 'gocart_tracking_settings'
 
 // Helper to identify untouched demo dummy products (e.g. prod_1 to prod_16)
 const DUMMY_IDS = new Set([
@@ -291,6 +295,44 @@ export default function StoreProvider({ children }) {
             }
         }
 
+        function lsLoadHeaderFooter() {
+            try {
+                const saved = localStorage.getItem(HEADER_FOOTER_STORAGE_KEY)
+                if (saved) {
+                    const parsed = JSON.parse(saved)
+                    if (parsed && typeof parsed === 'object') {
+                        store.dispatch(hydrateHeaderFooter(parsed))
+                    } else {
+                        store.dispatch(hydrateHeaderFooter(defaultHeaderFooterData))
+                    }
+                } else {
+                    store.dispatch(hydrateHeaderFooter(defaultHeaderFooterData))
+                }
+            } catch (e) {
+                console.warn('Failed to load header/footer from localStorage:', e)
+                store.dispatch(hydrateHeaderFooter(defaultHeaderFooterData))
+            }
+        }
+
+        function lsLoadTracking() {
+            try {
+                const saved = localStorage.getItem(TRACKING_STORAGE_KEY)
+                if (saved) {
+                    const parsed = JSON.parse(saved)
+                    if (parsed && typeof parsed === 'object') {
+                        store.dispatch(hydrateTracking(parsed))
+                    } else {
+                        store.dispatch(hydrateTracking(defaultTrackingSettings))
+                    }
+                } else {
+                    store.dispatch(hydrateTracking(defaultTrackingSettings))
+                }
+            } catch (e) {
+                console.warn('Failed to load tracking settings from localStorage:', e)
+                store.dispatch(hydrateTracking(defaultTrackingSettings))
+            }
+        }
+
         function lsLoadAllAdmin() {
             lsLoadProducts()
             lsLoadCoupons()
@@ -300,6 +342,8 @@ export default function StoreProvider({ children }) {
             lsLoadShipping()
             lsLoadFraud()
             lsLoadContact()
+            lsLoadHeaderFooter()
+            lsLoadTracking()
         }
 
         function lsLoadUserSpecific() {
@@ -442,6 +486,7 @@ export default function StoreProvider({ children }) {
                         heroRes,
                         shippingRes,
                         contactRes,
+                        headerFooterRes,
                     ] = await Promise.allSettled([
                         loadCollectionFromFirestore('products'),
                         loadCollectionFromFirestore('categories'),
@@ -450,6 +495,7 @@ export default function StoreProvider({ children }) {
                         loadDocFromFirestore('settings', 'hero'),
                         loadDocFromFirestore('settings', 'shipping'),
                         loadDocFromFirestore('settings', 'contact'),
+                        loadDocFromFirestore('settings', 'header_footer'),
                     ])
 
                     // --- 1. Products ---
@@ -510,13 +556,26 @@ export default function StoreProvider({ children }) {
                         }))
                         try { localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(fsContact)) } catch (e) { /* ignore */ }
                     }
+
+                    // --- 8. Header & Footer ---
+                    if (headerFooterRes.status === 'fulfilled' && headerFooterRes.value) {
+                        store.dispatch(hydrateHeaderFooter(headerFooterRes.value))
+                        try { localStorage.setItem(HEADER_FOOTER_STORAGE_KEY, JSON.stringify(headerFooterRes.value)) } catch (e) { /* ignore */ }
+                    }
                 } catch (e) {
                     console.warn('[Firestore] Background parallel hydration failed:', e)
                 }
             }
         }
 
-        hydrateData()
+        // Defer background network fetch to idle time to let UI paint in 0ms without contention
+        const scheduleBackgroundHydration = typeof window !== 'undefined' && 'requestIdleCallback' in window
+            ? window.requestIdleCallback
+            : (fn) => setTimeout(fn, 120)
+
+        scheduleBackgroundHydration(() => {
+            hydrateData()
+        })
 
         // ===== REAL-TIME LISTENERS (Firestore → Redux) =====
         const unsubscribers = []
@@ -602,18 +661,6 @@ export default function StoreProvider({ children }) {
                 })
             )
 
-            // Fraud settings real-time listener
-            unsubscribers.push(
-                subscribeToDoc('settings', 'fraud', (data) => {
-                    if (data) {
-                        isReceivingFromFirestore = true
-                        store.dispatch(hydrateFraud(data))
-                        try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
-                    }
-                })
-            )
-
             // Contact/Store Info real-time listener
             unsubscribers.push(
                 subscribeToDoc('settings', 'contact', (data) => {
@@ -629,12 +676,52 @@ export default function StoreProvider({ children }) {
                 })
             )
 
-            // Chat admin unread count real-time listener (lightweight — counts only)
+            // Header & Footer real-time listener
             unsubscribers.push(
-                subscribeToAdminUnreadCount((count) => {
-                    store.dispatch(setAdminUnreadCount(count))
+                subscribeToDoc('settings', 'header_footer', (data) => {
+                    if (data) {
+                        isReceivingFromFirestore = true
+                        store.dispatch(hydrateHeaderFooter(data))
+                        try { localStorage.setItem(HEADER_FOOTER_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
+                        isReceivingFromFirestore = false
+                    }
                 })
             )
+
+            // Tracking & Advertising real-time listener
+            unsubscribers.push(
+                subscribeToDoc('settings', 'tracking', (data) => {
+                    if (data) {
+                        isReceivingFromFirestore = true
+                        store.dispatch(hydrateTracking(data))
+                        try { localStorage.setItem(TRACKING_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
+                        isReceivingFromFirestore = false
+                    }
+                })
+            )
+
+            // Admin-only real-time listeners (only active when visiting admin routes)
+            const isAdminPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+            if (isAdminPath) {
+                // Fraud settings real-time listener
+                unsubscribers.push(
+                    subscribeToDoc('settings', 'fraud', (data) => {
+                        if (data) {
+                            isReceivingFromFirestore = true
+                            store.dispatch(hydrateFraud(data))
+                            try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
+                            isReceivingFromFirestore = false
+                        }
+                    })
+                )
+
+                // Chat admin unread count real-time listener (lightweight — counts only)
+                unsubscribers.push(
+                    subscribeToAdminUnreadCount((count) => {
+                        store.dispatch(setAdminUnreadCount(count))
+                    })
+                )
+            }
         }
 
         // ===== BroadcastChannel for product sync across tabs =====
@@ -664,6 +751,8 @@ export default function StoreProvider({ children }) {
         let prevFraud = store.getState().fraud
         let prevCashflow = store.getState().cashflow
         let prevApiSettings = store.getState().apiSettings
+        let prevHeaderFooter = store.getState().headerFooter
+        let prevTracking = store.getState().tracking
 
         const unsubscribe = store.subscribe(() => {
             const state = store.getState()
@@ -800,6 +889,26 @@ export default function StoreProvider({ children }) {
             if (currentApiSettings !== prevApiSettings) {
                 prevApiSettings = currentApiSettings
                 try { localStorage.setItem(API_SETTINGS_STORAGE_KEY, JSON.stringify(currentApiSettings)) } catch (e) { /* ignore */ }
+            }
+
+            // --- Header & Footer (Firestore + localStorage) ---
+            const currentHeaderFooter = state.headerFooter
+            if (currentHeaderFooter !== prevHeaderFooter) {
+                prevHeaderFooter = currentHeaderFooter
+                try { localStorage.setItem(HEADER_FOOTER_STORAGE_KEY, JSON.stringify(currentHeaderFooter)) } catch (e) { /* ignore */ }
+                if (firebaseEnabled && !isReceivingFromFirestore) {
+                    saveDocToFirestore('settings', 'header_footer', currentHeaderFooter)
+                }
+            }
+
+            // --- Tracking & Advertising Settings (Firestore + localStorage) ---
+            const currentTracking = state.tracking
+            if (currentTracking !== prevTracking) {
+                prevTracking = currentTracking
+                try { localStorage.setItem(TRACKING_STORAGE_KEY, JSON.stringify(currentTracking)) } catch (e) { /* ignore */ }
+                if (firebaseEnabled && !isReceivingFromFirestore) {
+                    saveDocToFirestore('settings', 'tracking', currentTracking)
+                }
             }
 
             // --- Products: BroadcastChannel + localStorage ---

@@ -10,6 +10,7 @@ import { saveAddressFromOrder } from '@/lib/features/user/userSlice';
 import { clearCart } from '@/lib/features/cart/cartSlice';
 import { useCoupon } from '@/lib/features/coupon/couponSlice';
 import { validateBDPhone, normalizePhone } from '@/lib/fraud/phoneValidator';
+import { trackPurchase, trackAddShippingInfo, trackAddPaymentInfo } from '@/lib/tracking/clientTracker';
 
 const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳';
 
@@ -38,6 +39,10 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
 
     const handleDeliveryChange = (e) => {
         setDeliveryInfo(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        if (e.target.name === 'location') {
+            const cost = e.target.value === 'outsideDhaka' ? (shippingSettings?.outsideDhaka?.cost || 120) : (shippingSettings?.insideDhaka?.cost || 70);
+            trackAddShippingInfo(e.target.value === 'outsideDhaka' ? 'Outside Dhaka' : 'Inside Dhaka', cost, totalPrice + cost);
+        }
     }
 
     // Calculate discount based on coupon type
@@ -200,6 +205,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
             // Server created the order — add to Redux for immediate UI update
             if (data.order) {
                 dispatch(addOrder(data.order));
+                trackPurchase(data.order);
             }
             dispatch(clearCart());
 
@@ -368,6 +374,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                                     checked={paymentMethod === option.id}
                                     onChange={(e) => {
                                         setPaymentMethod(e.target.value);
+                                        trackAddPaymentInfo(e.target.value, finalTotal);
                                     }}
                                     className='accent-slate-600'
                                 />

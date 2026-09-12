@@ -57,11 +57,10 @@ const generateSecureToken = () => {
     return Array.from(array, b => b.toString(16).padStart(2, '0')).join('')
 }
 
-// Build the session signature — ties together email + time + fingerprint + secret
+// Build the session signature — ties together email + time + fingerprint + client salt
 const createSignature = (email, loginTime, fingerprint, token) => {
-    const adminPw = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || '@idris@1I@idris@1I@idris@1I'
-    const secretKey = `gocart_${adminPw.slice(0, 8)}_${adminPw.length}_admin_2026`
-    return computeHMAC(`${email}:${loginTime}:${fingerprint}:${token}`, secretKey)
+    const salt = 'gocart_secure_client_session_salt_2026'
+    return computeHMAC(`${email}:${loginTime}:${fingerprint}:${token}`, salt)
 }
 
 // ============================================================================
@@ -127,9 +126,19 @@ const AdminLayout = ({ children }) => {
         }
     }, [])
 
-    const checkAdminAuth = useCallback(() => {
+    const checkAdminAuth = useCallback(async () => {
         // Clean up any legacy insecure keys
         localStorage.removeItem('adminAuthenticated')
+
+        // First check server-side HttpOnly cookie session
+        try {
+            const res = await fetch('/api/admin/verify')
+            if (res.ok) {
+                setIsAdmin(true)
+                setLoading(false)
+                return
+            }
+        } catch { /* fallback to client validation */ }
 
         const valid = validateSession()
         setIsAdmin(valid)
@@ -155,7 +164,10 @@ const AdminLayout = ({ children }) => {
         setIsAdmin(true)
     }, [])
 
-    const handleLogout = useCallback(() => {
+    const handleLogout = useCallback(async () => {
+        try {
+            await fetch('/api/admin/logout', { method: 'POST' })
+        } catch { /* ignore */ }
         localStorage.removeItem(STORAGE_KEY)
         localStorage.removeItem('adminAuthenticated')
         setIsAdmin(false)

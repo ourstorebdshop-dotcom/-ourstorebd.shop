@@ -10,27 +10,31 @@ const LatestProducts = () => {
     const products = useSelector(state => state.product?.list || [])
     const isHydrated = useSelector(state => state.product?.isHydrated)
 
-    // Filter out any demo dummy products
-    const realProducts = products.filter(p => !isDemoProduct(p))
+    const { realProducts, latestProducts } = React.useMemo(() => {
+        // Filter out any demo dummy products
+        const real = products.filter(p => !isDemoProduct(p))
 
-    // Explicitly marked latest products (admin selected "Latest Products")
-    const explicitLatest = realProducts.filter(p =>
-        p.sections && Array.isArray(p.sections) && p.sections.includes('latest')
-    )
+        // Explicitly marked latest products (admin selected "Latest Products")
+        const explicitLatest = real.filter(p =>
+            p.sections && Array.isArray(p.sections) && p.sections.includes('latest')
+        )
 
-    // Products without explicit latest section
-    const otherProducts = realProducts.filter(p =>
-        !p.sections || !Array.isArray(p.sections) || !p.sections.includes('latest')
-    )
+        // Products without explicit latest section
+        const otherProducts = real.filter(p =>
+            !p.sections || !Array.isArray(p.sections) || !p.sections.includes('latest')
+        )
 
-    // Sort explicit first (newest first), then other real products (newest first)
-    const sortedExplicit = explicitLatest.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-    const sortedOther = otherProducts.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        // Sort explicit first (newest first), then other real products (newest first)
+        const sortedExplicit = explicitLatest.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        const sortedOther = otherProducts.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
 
-    // If explicit exists, use explicit first; if not, use newest real products
-    const latestProducts = sortedExplicit.length > 0
-        ? [...sortedExplicit, ...sortedOther]
-        : sortedOther
+        // If explicit exists, use explicit first; if not, use newest real products
+        const latest = sortedExplicit.length > 0
+            ? [...sortedExplicit, ...sortedOther]
+            : sortedOther
+
+        return { realProducts: real, latestProducts: latest }
+    }, [products])
 
     const showingCount = Math.min(displayQuantity, latestProducts.length)
 

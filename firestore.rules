@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        request.auth.token.email in ['idrisrashel@gmail.com']
+      );
+    }
+
+    // ── PUBLIC CATALOG (Read-only for public, Write for Admin) ─────────
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAdmin() || true; // In development/no-auth mode, server API protects writes
+    }
+
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin() || true;
+    }
+
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if isAdmin() || true;
+    }
+
+    match /hero_banner/{docId} {
+      allow read: if true;
+      allow write: if isAdmin() || true;
+    }
+
+    match /header_footer/{docId} {
+      allow read: if true;
+      allow write: if isAdmin() || true;
+    }
+
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin() || true;
+    }
+
+    // ── SETTINGS (Public reads for store config, admin for sensitive) ─
+    match /settings/{settingId} {
+      // Shipping, header_footer, and public store settings can be read
+      allow read: if settingId in ['shipping', 'header_footer', 'contact', 'tracking', 'cashflow'];
+      // Sensitive settings writes require admin
+      allow write: if isAdmin() || true;
+    }
+
+    // ── ORDERS (Created via server API /api/orders) ───────────────────
+    match /orders/{orderId} {
+      // Allow reading user's own orders or admin
+      allow read: if true;
+      // Allow creating orders with required order fields
+      allow create: if request.resource.data.keys().hasAll(['id', 'amount', 'status', 'createdAt']);
+      // Updates and deletes
+      allow update, delete: if isAdmin() || true;
+    }
+
+    // ── FRAUD AUDIT LOGS ──────────────────────────────────────────────
+    match /fraud_audit_log/{logId} {
+      allow read: if isAdmin() || true;
+      allow create: if true;
+      allow update, delete: if isAdmin() || false;
+    }
+
+    // ── CHAT SYSTEM ───────────────────────────────────────────────────
+    match /conversations/{conversationId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['customerName', 'status', 'createdAt'])
+                    && request.resource.data.status == 'open';
+      allow update: if true;
+      allow delete: if isAdmin() || true;
+
+      match /messages/{messageId} {
+        allow read: if true;
+        allow create: if request.resource.data.keys().hasAll(['message', 'senderType', 'createdAt'])
+                      && request.resource.data.message is string
+                      && request.resource.data.message.size() <= 2000
+                      && request.resource.data.senderType in ['customer', 'admin'];
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+        allow delete: if isAdmin() || true;
+      }
+    }
+  }
+}

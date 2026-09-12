@@ -21,6 +21,7 @@ import {
     BanIcon
 } from "lucide-react"
 import { blockPhone, unblockPhone } from "@/lib/features/fraud/fraudSlice"
+import { trackRefund } from "@/lib/tracking/clientTracker"
 
 export default function AdminOrders() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
@@ -36,6 +37,10 @@ export default function AdminOrders() {
 
     const handleUpdateOrderStatus = (orderId, newStatus) => {
         dispatch(setOrderStatusRedux({ orderId, status: newStatus }))
+        if (newStatus === 'CANCELLED' || newStatus === 'REFUNDED') {
+            const ord = orders.find(o => o.id === orderId)
+            if (ord) trackRefund(ord)
+        }
         toast.success(`Order status updated to ${newStatus}`)
     }
 

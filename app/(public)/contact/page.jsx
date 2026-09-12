@@ -7,6 +7,7 @@ import { submitMessage } from '@/lib/features/contact/contactSlice'
 import { BreadcrumbJsonLd, FaqJsonLd, OrganizationJsonLd } from '@/components/seo/JsonLd'
 import toast from 'react-hot-toast'
 import { validateBDPhone, normalizePhone } from '@/lib/fraud/phoneValidator'
+import { trackContact, trackLead } from '@/lib/tracking/clientTracker'
 import { 
     Phone, 
     Mail, 
@@ -131,6 +132,19 @@ export default function ContactPage() {
                 subject: formData.subject,
                 message: formData.message.trim(),
             }))
+
+            trackContact({
+                channel: 'Contact Form',
+                email: formData.email.trim(),
+                phone: formData.phone.trim(),
+                name: formData.name.trim(),
+            })
+            trackLead({
+                category: formData.subject,
+                email: formData.email.trim(),
+                phone: formData.phone.trim(),
+                name: formData.name.trim(),
+            })
 
             setSubmitting(false)
             setSubmitted(true)

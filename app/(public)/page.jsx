@@ -1,11 +1,15 @@
 'use client'
-import BestSelling from "@/components/BestSelling";
+
+import dynamic from "next/dynamic";
 import Hero from "@/components/Hero";
-import Newsletter from "@/components/Newsletter";
-import OurSpecs from "@/components/OurSpec";
 import LatestProducts from "@/components/LatestProducts";
-import CustomerRatings from "@/components/CustomerRatings";
 import { FaqJsonLd, BreadcrumbJsonLd } from "@/components/seo/JsonLd";
+
+// Code split below-the-fold sections to minimize initial JavaScript bundle size
+const BestSelling = dynamic(() => import("@/components/BestSelling"), { ssr: true });
+const OurSpecs = dynamic(() => import("@/components/OurSpec"), { ssr: true });
+const CustomerRatings = dynamic(() => import("@/components/CustomerRatings"), { ssr: true });
+const Newsletter = dynamic(() => import("@/components/Newsletter"), { ssr: true });
 
 const homeFaqs = [
     {

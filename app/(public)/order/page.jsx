@@ -15,6 +15,7 @@ import {
     PackageCheck,
     Lock
 } from 'lucide-react'
+import { trackInitiateCheckout, trackRemoveFromCart } from '@/lib/tracking/clientTracker'
 
 const getItemImage = (item) => {
     if (!item) return '/placeholder.svg'
@@ -108,10 +109,17 @@ export default function OrderPage() {
         }
         setCartArray(items)
         setTotalPrice(total)
+        if (items.length > 0) {
+            trackInitiateCheckout(items, total)
+        }
     }, [cartItems, products])
 
     const handleDeleteItem = (productId) => {
+        const itemToRemove = cartArray.find(i => i.id === productId)
         dispatch(deleteItemFromCart({ productId }))
+        if (itemToRemove) {
+            trackRemoveFromCart(itemToRemove, itemToRemove.quantity || 1)
+        }
     }
 
     return (
@@ -186,10 +194,11 @@ export default function OrderPage() {
                                     {/* Items List */}
                                     <div className="divide-y divide-slate-100">
                                         {cartArray.map((item) => (
-                                            <div key={item.id} className="py-4 flex items-center gap-3.5 sm:gap-4">
+                                            <div key={item.id} className="py-4 flex gap-3 sm:gap-4">
+                                                {/* Left: Product Image */}
                                                 <Link 
                                                     href={`/product/${item.id}`}
-                                                    className="relative size-16 sm:size-20 rounded-xl border border-slate-200/80 bg-slate-50 overflow-hidden shadow-2xs shrink-0 flex items-center justify-center group"
+                                                    className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-xl border border-slate-200/80 bg-slate-50 overflow-hidden shadow-2xs shrink-0 group"
                                                 >
                                                     <Image 
                                                         src={failedImages[item.id] ? '/placeholder.svg' : getItemImage(item)} 
@@ -207,22 +216,26 @@ export default function OrderPage() {
                                                     />
                                                 </Link>
 
-                                                <div className="flex-1 min-w-0">
+                                                {/* Right: All product details stacked vertically */}
+                                                <div className="flex-1 min-w-0 flex flex-col gap-2">
+                                                    {/* Product Name */}
                                                     <Link 
                                                         href={`/product/${item.id}`}
-                                                        className="text-xs sm:text-sm font-semibold text-slate-800 hover:text-green-600 transition line-clamp-1"
+                                                        className="text-xs sm:text-sm font-semibold text-slate-800 hover:text-green-600 transition line-clamp-2 leading-snug"
                                                     >
                                                         {item.name}
                                                     </Link>
-                                                    <p className="text-[11px] text-slate-400 mt-0.5">{item.category}</p>
 
-                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                        <span className="text-xs font-bold text-slate-800">
+                                                    {/* Category + Unit Price + Variants */}
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <span className="text-[11px] text-slate-400">{item.category}</span>
+                                                        <span className="text-[11px] text-slate-300">•</span>
+                                                        <span className="text-xs font-bold text-slate-700">
                                                             {currency}{item.effectivePrice || item.price}
                                                         </span>
                                                         {item.selectedColor && (
                                                             <span 
-                                                                className="w-3.5 h-3.5 rounded-full border border-slate-300 inline-block" 
+                                                                className="w-3 h-3 rounded-full border border-slate-300 inline-block" 
                                                                 style={{ backgroundColor: item.selectedColor }} 
                                                                 title={item.selectedColor} 
                                                             />
@@ -233,26 +246,24 @@ export default function OrderPage() {
                                                             </span>
                                                         )}
                                                     </div>
-                                                </div>
 
-                                                {/* Quantity Counter */}
-                                                <div className="shrink-0 flex items-center gap-3">
-                                                    <Counter productId={item.id} />
-
-                                                    <div className="text-right min-w-[70px]">
-                                                        <span className="text-xs sm:text-sm font-bold text-slate-900">
+                                                    {/* Counter + Total + Delete in one row */}
+                                                    <div className="flex items-center gap-3 mt-0.5">
+                                                        <Counter productId={item.id} />
+                                                        
+                                                        <span className="text-sm font-bold text-slate-900 ml-auto">
                                                             {currency}{((item.effectivePrice || item.price) * item.quantity).toLocaleString()}
                                                         </span>
-                                                    </div>
 
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => handleDeleteItem(item.id)} 
-                                                        className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
-                                                        title="পণ্যটি বাদ দিন"
-                                                    >
-                                                        <Trash2Icon size={16} />
-                                                    </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => handleDeleteItem(item.id)} 
+                                                            className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+                                                            title="পণ্যটি বাদ দিন"
+                                                        >
+                                                            <Trash2Icon size={16} />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}

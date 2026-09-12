@@ -3,7 +3,7 @@
 import { Search, ShoppingCart, MenuIcon, XIcon, User, LogOut, ShieldCheck, ChevronDown, Package, LayoutDashboard, Heart, Grid3X3, Headphones, Watch, Speaker, Camera, Pen, Monitor, Ear, Mouse, Sparkles, Lamp, Tag } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import toast from "react-hot-toast";
 import { logout } from "@/lib/features/user/userSlice";
@@ -23,10 +23,12 @@ const Navbar = () => {
 
     // Managed categories from Redux store (admin-controlled order & visibility)
     const managedCategories = useSelector(state => state.category?.categories || []);
-    const categories = [...managedCategories]
-        .filter(c => c.visible !== false)
-        .sort((a, b) => a.order - b.order)
-        .map(c => c.name);
+    const categories = useMemo(() => {
+        return [...managedCategories]
+            .filter(c => c.visible !== false)
+            .sort((a, b) => a.order - b.order)
+            .map(c => c.name);
+    }, [managedCategories]);
 
     // Category icon mapping
     const categoryIcons = {
@@ -43,21 +45,53 @@ const Navbar = () => {
     };
 
     const cartItems = useSelector(state => state.cart.cartItems);
-    const cartCount = Object.values(cartItems).reduce((sum, item) => sum + (typeof item === 'number' ? item : (item?.quantity || 0)), 0);
+    const cartCount = useMemo(() => {
+        return Object.values(cartItems).reduce((sum, item) => sum + (typeof item === 'number' ? item : (item?.quantity || 0)), 0);
+    }, [cartItems]);
+
     const allProducts = useSelector(state => state.product?.list || []);
     const wishlistItems = useSelector(state => state.wishlist?.items || []);
-    // Only count products that actually exist
-    const validWishlistItems = wishlistItems.filter(id => {
-        if (!id) return false;
-        // Exclude legacy template dummy IDs (prod_1 to prod_16)
-        if (/^prod_([1-9]|1[0-6])$/.test(id)) return false;
-        if (allProducts.length > 0) {
-            return allProducts.some(p => p.id === id || p._id === id);
-        }
-        return true;
-    });
+
+    // Only count products that actually exist (O(1) set lookup instead of O(N*M))
+    const validWishlistItems = useMemo(() => {
+        const validProductIds = new Set(allProducts.map(p => p.id || p._id));
+        return wishlistItems.filter(id => {
+            if (!id) return false;
+            // Exclude legacy template dummy IDs (prod_1 to prod_16)
+            if (/^prod_([1-9]|1[0-6])$/.test(id)) return false;
+            if (allProducts.length > 0) {
+                return validProductIds.has(id);
+            }
+            return true;
+        });
+    }, [wishlistItems, allProducts]);
     const wishlistCount = validWishlistItems.length;
     const { currentUser, isAuthenticated } = useSelector(state => state.user);
+    const headerSettings = useSelector(state => state.headerFooter?.header) || {};
+
+    const logoType = headerSettings.logoType || 'text';
+    const logoTextPrefix = headerSettings.logoTextPrefix !== undefined ? headerSettings.logoTextPrefix : 'Our';
+    const logoTextMiddle = headerSettings.logoTextMiddle !== undefined ? headerSettings.logoTextMiddle : 'Store';
+    const logoTextSuffix = headerSettings.logoTextSuffix !== undefined ? headerSettings.logoTextSuffix : 'BD';
+    const logoImageUrl = headerSettings.logoImageUrl || '';
+    const showSearch = headerSettings.showSearch !== false;
+    const searchPlaceholder = headerSettings.searchPlaceholder || 'Search products...';
+    const showCategoriesDropdown = headerSettings.showCategoriesDropdown !== false;
+    const categoriesDropdownLabel = headerSettings.categoriesDropdownLabel || 'Categories';
+    const categoriesDropdownAllText = headerSettings.categoriesDropdownAllText || 'সকল প্রোডাক্ট দেখুন';
+    const showWishlist = headerSettings.showWishlist !== false;
+    const wishlistLabel = headerSettings.wishlistLabel || 'Wishlist';
+    const showCart = headerSettings.showCart !== false;
+    const cartLabel = headerSettings.cartLabel || 'Cart';
+    const showLogin = headerSettings.showLogin !== false;
+    const loginLabel = headerSettings.loginLabel || 'Login';
+    const isSticky = headerSettings.isSticky !== false;
+    const navLinks = (headerSettings.navLinks || [
+        { id: 'nav_home', label: 'Home', path: '/', isExternal: false, isEnabled: true },
+        { id: 'nav_shop', label: 'Shop', path: '/shop', isExternal: false, isEnabled: true },
+        { id: 'nav_about', label: 'About', path: '/about', isExternal: false, isEnabled: true },
+        { id: 'nav_contact', label: 'Contact', path: '/contact', isExternal: false, isEnabled: true },
+    ]).filter(link => link.isEnabled !== false);
 
     useEffect(() => {
         setMounted(true);
@@ -112,102 +146,125 @@ const Navbar = () => {
     };
 
     return (
-        <nav className="bg-white sticky top-0 z-40 shadow-xs border-b border-slate-100">
+        <nav className={`bg-white ${isSticky ? 'sticky top-0' : 'relative'} z-40 shadow-xs border-b border-slate-100`}>
             <div className="mx-6">
                 <div className="flex items-center justify-between max-w-7xl mx-auto py-3.5 transition-all">
 
-                    <Link href="/" className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight">
-                        <span className="text-green-600">Our</span> Store <span className="text-green-600">BD</span>
+                    <Link href="/" className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight flex items-center">
+                        {logoType === 'image' && logoImageUrl ? (
+                            <img src={logoImageUrl} alt={`${logoTextPrefix} ${logoTextMiddle} ${logoTextSuffix}`} className="h-8 sm:h-9 object-contain" />
+                        ) : (
+                            <>
+                                <span className="text-green-600">{logoTextPrefix}</span>{' '}
+                                <span>{logoTextMiddle}</span>{' '}
+                                <span className="text-green-600">{logoTextSuffix}</span>
+                            </>
+                        )}
                     </Link>
 
                     {/* Desktop Menu */}
                     <div className="hidden sm:flex items-center gap-4 lg:gap-7 text-sm font-medium text-slate-600">
-                        <Link href="/" className="hover:text-green-600 transition">Home</Link>
-                        <Link href="/shop" className="hover:text-green-600 transition">Shop</Link>
+                        {navLinks.map((link) => (
+                            <Link 
+                                key={link.id} 
+                                href={link.path}
+                                target={link.isExternal ? "_blank" : undefined}
+                                rel={link.isExternal ? "noopener noreferrer" : undefined}
+                                className="hover:text-green-600 transition"
+                            >
+                                {link.label}
+                            </Link>
+                        ))}
 
                         {/* Categories Dropdown */}
-                        <div className="relative" ref={categoryRef}>
-                            <button
-                                onClick={() => setCategoryDropdown(!categoryDropdown)}
-                                onMouseEnter={() => setCategoryDropdown(true)}
-                                className={`flex items-center gap-1 hover:text-green-600 transition cursor-pointer ${
-                                    categoryDropdown ? 'text-green-600' : ''
-                                }`}
-                            >
-                                Categories
-                                <ChevronDown size={14} className={`transition-transform duration-200 ${categoryDropdown ? 'rotate-180' : ''}`} />
-                            </button>
-
-                            {categoryDropdown && (
-                                <div
-                                    onMouseLeave={() => setCategoryDropdown(false)}
-                                    className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-[fadeIn_0.15s_ease-out]"
+                        {showCategoriesDropdown && (
+                            <div className="relative" ref={categoryRef}>
+                                <button
+                                    onClick={() => setCategoryDropdown(!categoryDropdown)}
+                                    onMouseEnter={() => setCategoryDropdown(true)}
+                                    className={`flex items-center gap-1 hover:text-green-600 transition cursor-pointer ${
+                                        categoryDropdown ? 'text-green-600' : ''
+                                    }`}
                                 >
-                                    <div className="px-4 py-2 border-b border-slate-100">
-                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">All Categories</p>
-                                    </div>
-                                    <div className="py-1 max-h-72 overflow-y-auto">
-                                        {categories.map((cat) => {
-                                            const IconComp = categoryIcons[cat] || Tag;
-                                            return (
-                                                <Link
-                                                    key={cat}
-                                                    href={`/shop?search=${encodeURIComponent(cat)}`}
-                                                    onClick={() => setCategoryDropdown(false)}
-                                                    className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-slate-700 hover:bg-green-50 hover:text-green-700 transition"
-                                                >
-                                                    <IconComp size={15} className="text-slate-400" />
-                                                    {cat}
-                                                </Link>
-                                            );
-                                        })}
-                                    </div>
-                                    <div className="border-t border-slate-100 pt-1 mt-1">
-                                        <Link
-                                            href="/shop"
-                                            onClick={() => setCategoryDropdown(false)}
-                                            className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-green-700 hover:bg-green-50 transition"
-                                        >
-                                            <Grid3X3 size={15} />
-                                            সকল প্রোডাক্ট দেখুন
-                                        </Link>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                        <Link href="/about" className="hover:text-green-600 transition">About</Link>
-                        <Link href="/contact" className="hover:text-green-600 transition">Contact</Link>
+                                    {categoriesDropdownLabel}
+                                    <ChevronDown size={14} className={`transition-transform duration-200 ${categoryDropdown ? 'rotate-180' : ''}`} />
+                                </button>
 
-                        <form onSubmit={handleSearch} className="hidden xl:flex items-center w-64 text-sm gap-2 bg-slate-100 px-4 py-2 rounded-full border border-slate-200/50 focus-within:border-green-500 transition">
-                            <Search size={16} className="text-slate-400" />
-                            <input 
-                                className="w-full bg-transparent outline-none placeholder-slate-400 text-xs" 
-                                type="text" 
-                                placeholder="Search products..." 
-                                value={search} 
-                                onChange={(e) => setSearch(e.target.value)} 
-                            />
-                        </form>
+                                {categoryDropdown && (
+                                    <div
+                                        onMouseLeave={() => setCategoryDropdown(false)}
+                                        className="absolute top-full left-1/2 -translate-x-1/2 mt-3 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-[fadeIn_0.15s_ease-out]"
+                                    >
+                                        <div className="px-4 py-2 border-b border-slate-100">
+                                            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">All Categories</p>
+                                        </div>
+                                        <div className="py-1 max-h-72 overflow-y-auto">
+                                            {categories.map((cat) => {
+                                                const IconComp = categoryIcons[cat] || Tag;
+                                                return (
+                                                    <Link
+                                                        key={cat}
+                                                        href={`/shop?search=${encodeURIComponent(cat)}`}
+                                                        onClick={() => setCategoryDropdown(false)}
+                                                        className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-slate-700 hover:bg-green-50 hover:text-green-700 transition"
+                                                    >
+                                                        <IconComp size={15} className="text-slate-400" />
+                                                        {cat}
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="border-t border-slate-100 pt-1 mt-1">
+                                            <Link
+                                                href="/shop"
+                                                onClick={() => setCategoryDropdown(false)}
+                                                className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-green-700 hover:bg-green-50 transition"
+                                            >
+                                                <Grid3X3 size={15} />
+                                                {categoriesDropdownAllText}
+                                            </Link>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
-                        <Link href="/profile?tab=wishlist" className="relative flex items-center gap-1.5 text-slate-700 hover:text-rose-500 transition font-medium" title="পছন্দের তালিকা">
-                            <Heart size={19} className={safeWishlistCount > 0 ? "text-rose-500 fill-rose-500" : "text-slate-600"} />
-                            <span className="hidden lg:inline">Wishlist</span>
-                            {safeWishlistCount > 0 && (
-                                <span className="text-[10px] font-bold text-white bg-rose-500 px-1.5 py-0.5 rounded-full">
-                                    {safeWishlistCount}
-                                </span>
-                            )}
-                        </Link>
+                        {showSearch && (
+                            <form onSubmit={handleSearch} className="hidden xl:flex items-center w-64 text-sm gap-2 bg-slate-100 px-4 py-2 rounded-full border border-slate-200/50 focus-within:border-green-500 transition">
+                                <Search size={16} className="text-slate-400" />
+                                <input 
+                                    className="w-full bg-transparent outline-none placeholder-slate-400 text-xs" 
+                                    type="text" 
+                                    placeholder={searchPlaceholder} 
+                                    value={search} 
+                                    onChange={(e) => setSearch(e.target.value)} 
+                                />
+                            </form>
+                        )}
 
-                        <Link href="/cart" className="relative flex items-center gap-1.5 text-slate-700 hover:text-green-600 transition font-medium">
-                            <ShoppingCart size={19} />
-                            <span>Cart</span>
-                            {safeCartCount > 0 && (
-                                <span className="text-[10px] font-bold text-white bg-green-600 px-1.5 py-0.5 rounded-full">
-                                    {safeCartCount}
-                                </span>
-                            )}
-                        </Link>
+                        {showWishlist && (
+                            <Link href="/profile?tab=wishlist" className="relative flex items-center gap-1.5 text-slate-700 hover:text-rose-500 transition font-medium" title="পছন্দের তালিকা">
+                                <Heart size={19} className={safeWishlistCount > 0 ? "text-rose-500 fill-rose-500" : "text-slate-600"} />
+                                <span className="hidden lg:inline">{wishlistLabel}</span>
+                                {safeWishlistCount > 0 && (
+                                    <span className="text-[10px] font-bold text-white bg-rose-500 px-1.5 py-0.5 rounded-full">
+                                        {safeWishlistCount}
+                                    </span>
+                                )}
+                            </Link>
+                        )}
+
+                        {showCart && (
+                            <Link href="/cart" className="relative flex items-center gap-1.5 text-slate-700 hover:text-green-600 transition font-medium">
+                                <ShoppingCart size={19} />
+                                <span>{cartLabel}</span>
+                                {safeCartCount > 0 && (
+                                    <span className="text-[10px] font-bold text-white bg-green-600 px-1.5 py-0.5 rounded-full">
+                                        {safeCartCount}
+                                    </span>
+                                )}
+                            </Link>
+                        )}
 
                         {/* User Profile / Auth button */}
                         {safeIsAuthenticated && safeCurrentUser ? (
@@ -295,14 +352,14 @@ const Navbar = () => {
                                     </div>
                                 )}
                             </div>
-                        ) : (
+                        ) : showLogin ? (
                             <Link
                                 href="/login"
                                 className="px-8 py-2 bg-indigo-500 hover:bg-indigo-600 active:scale-95 text-white font-medium rounded-full transition shadow-sm flex items-center gap-1.5"
                             >
-                                Login
+                                {loginLabel}
                             </Link>
-                        )}
+                        ) : null}
 
                     </div>
 
@@ -334,72 +391,87 @@ const Navbar = () => {
                     {/* Menu Panel */}
                     <div className="sm:hidden fixed top-[57px] left-0 right-0 bottom-0 bg-white z-50 overflow-y-auto">
                         <div className="flex flex-col p-5 pb-8 gap-2 text-slate-600 text-sm">
-                            <form onSubmit={handleSearch} className="flex items-center gap-2 bg-slate-100 px-4 py-3 rounded-xl mb-2">
-                                <Search size={18} className="text-slate-400 shrink-0" />
-                                <input 
-                                    className="w-full bg-transparent outline-none placeholder-slate-400" 
-                                    type="text" 
-                                    placeholder="Search products..." 
-                                    value={search} 
-                                    onChange={(e) => setSearch(e.target.value)} 
-                                />
-                            </form>
+                            {showSearch && (
+                                <form onSubmit={handleSearch} className="flex items-center gap-2 bg-slate-100 px-4 py-3 rounded-xl mb-2">
+                                    <Search size={18} className="text-slate-400 shrink-0" />
+                                    <input 
+                                        className="w-full bg-transparent outline-none placeholder-slate-400" 
+                                        type="text" 
+                                        placeholder={searchPlaceholder} 
+                                        value={search} 
+                                        onChange={(e) => setSearch(e.target.value)} 
+                                    />
+                                </form>
+                            )}
                             
-                            <Link href="/" onClick={closeMobileMenu} className="py-3 px-2 border-b border-slate-100 font-medium active:bg-slate-50 rounded-lg">Home</Link>
-                            <Link href="/shop" onClick={closeMobileMenu} className="py-3 px-2 border-b border-slate-100 font-medium active:bg-slate-50 rounded-lg">Shop</Link>
+                            {navLinks.map((link) => (
+                                <Link 
+                                    key={link.id} 
+                                    href={link.path} 
+                                    target={link.isExternal ? "_blank" : undefined}
+                                    rel={link.isExternal ? "noopener noreferrer" : undefined}
+                                    onClick={closeMobileMenu} 
+                                    className="py-3 px-2 border-b border-slate-100 font-medium active:bg-slate-50 rounded-lg"
+                                >
+                                    {link.label}
+                                </Link>
+                            ))}
 
                             {/* Mobile Categories Accordion */}
-                            <div className="border-b border-slate-100">
-                                <button
-                                    onClick={() => setMobileCategoryOpen(!mobileCategoryOpen)}
-                                    className="w-full py-3 px-2 font-medium flex items-center justify-between active:bg-slate-50 rounded-lg text-left"
-                                >
-                                    <span className="flex items-center gap-2">
-                                        <Grid3X3 size={16} className="text-green-600" />
-                                        Categories
-                                    </span>
-                                    <ChevronDown size={16} className={`text-slate-400 transition-transform duration-200 ${mobileCategoryOpen ? 'rotate-180' : ''}`} />
-                                </button>
-                                {mobileCategoryOpen && (
-                                    <div className="pl-4 pb-2 space-y-0.5 animate-[fadeIn_0.15s_ease-out]">
-                                        {categories.map((cat) => {
-                                            const IconComp = categoryIcons[cat] || Tag;
-                                            return (
-                                                <Link
-                                                    key={cat}
-                                                    href={`/shop?search=${encodeURIComponent(cat)}`}
-                                                    onClick={() => { closeMobileMenu(); setMobileCategoryOpen(false); }}
-                                                    className="flex items-center gap-2.5 py-2.5 px-3 text-sm text-slate-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition"
-                                                >
-                                                    <IconComp size={15} className="text-slate-400" />
-                                                    {cat}
-                                                </Link>
-                                            );
-                                        })}
-                                        <Link
-                                            href="/shop"
-                                            onClick={() => { closeMobileMenu(); setMobileCategoryOpen(false); }}
-                                            className="flex items-center gap-2.5 py-2.5 px-3 text-sm font-semibold text-green-700 hover:bg-green-50 rounded-lg transition"
-                                        >
-                                            <Grid3X3 size={15} />
-                                            সকল প্রোডাক্ট দেখুন
-                                        </Link>
-                                    </div>
-                                )}
-                            </div>
-                            <Link href="/about" onClick={closeMobileMenu} className="py-3 px-2 border-b border-slate-100 font-medium active:bg-slate-50 rounded-lg">About</Link>
-                            <Link href="/contact" onClick={closeMobileMenu} className="py-3 px-2 border-b border-slate-100 font-medium active:bg-slate-50 rounded-lg">Contact</Link>
-                            <Link href="/profile?tab=wishlist" onClick={closeMobileMenu} className="py-3 px-2 border-b border-slate-100 font-medium text-rose-600 flex items-center justify-between active:bg-rose-50 rounded-lg">
-                                <span>পছন্দের তালিকা (Wishlist)</span>
-                                <div className="flex items-center gap-1.5">
-                                    <Heart size={16} fill={safeWishlistCount > 0 ? '#f43f5e' : 'none'} />
-                                    {safeWishlistCount > 0 && (
-                                        <span className="text-[10px] font-bold text-white bg-rose-500 px-1.5 py-0.5 rounded-full">
-                                            {safeWishlistCount}
+                            {showCategoriesDropdown && (
+                                <div className="border-b border-slate-100">
+                                    <button
+                                        onClick={() => setMobileCategoryOpen(!mobileCategoryOpen)}
+                                        className="w-full py-3 px-2 font-medium flex items-center justify-between active:bg-slate-50 rounded-lg text-left"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <Grid3X3 size={16} className="text-green-600" />
+                                            {categoriesDropdownLabel}
                                         </span>
+                                        <ChevronDown size={16} className={`text-slate-400 transition-transform duration-200 ${mobileCategoryOpen ? 'rotate-180' : ''}`} />
+                                    </button>
+                                    {mobileCategoryOpen && (
+                                        <div className="pl-4 pb-2 space-y-0.5 animate-[fadeIn_0.15s_ease-out]">
+                                            {categories.map((cat) => {
+                                                const IconComp = categoryIcons[cat] || Tag;
+                                                return (
+                                                    <Link
+                                                        key={cat}
+                                                        href={`/shop?search=${encodeURIComponent(cat)}`}
+                                                        onClick={() => { closeMobileMenu(); setMobileCategoryOpen(false); }}
+                                                        className="flex items-center gap-2.5 py-2.5 px-3 text-sm text-slate-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition"
+                                                    >
+                                                        <IconComp size={15} className="text-slate-400" />
+                                                        {cat}
+                                                    </Link>
+                                                );
+                                            })}
+                                            <Link
+                                                href="/shop"
+                                                onClick={() => { closeMobileMenu(); setMobileCategoryOpen(false); }}
+                                                className="flex items-center gap-2.5 py-2.5 px-3 text-sm font-semibold text-green-700 hover:bg-green-50 rounded-lg transition"
+                                            >
+                                                <Grid3X3 size={15} />
+                                                {categoriesDropdownAllText}
+                                            </Link>
+                                        </div>
                                     )}
                                 </div>
-                            </Link>
+                            )}
+
+                            {showWishlist && (
+                                <Link href="/profile?tab=wishlist" onClick={closeMobileMenu} className="py-3 px-2 border-b border-slate-100 font-medium text-rose-600 flex items-center justify-between active:bg-rose-50 rounded-lg">
+                                    <span>পছন্দের তালিকা ({wishlistLabel})</span>
+                                    <div className="flex items-center gap-1.5">
+                                        <Heart size={16} fill={safeWishlistCount > 0 ? '#f43f5e' : 'none'} />
+                                        {safeWishlistCount > 0 && (
+                                            <span className="text-[10px] font-bold text-white bg-rose-500 px-1.5 py-0.5 rounded-full">
+                                                {safeWishlistCount}
+                                            </span>
+                                        )}
+                                    </div>
+                                </Link>
+                            )}
                             
                             {safeIsAuthenticated && safeCurrentUser ? (
                                 <>

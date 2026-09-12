@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import { useSelector } from "react-redux"
-import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon, ShieldAlertIcon } from "lucide-react"
+import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon, ShieldAlertIcon, LayoutTemplateIcon, RadarIcon } from "lucide-react"
 import Link from "next/link"
 import { getLocalMonthStr } from "@/lib/features/cashflow/cashflowSlice"
 
@@ -18,6 +18,14 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
     // API settings status
     const googleAuth = useSelector(state => state.apiSettings?.googleAuth)
     const isGoogleConfigured = Boolean(googleAuth?.clientId?.trim())
+
+    // Tracking settings status
+    const trackingState = useSelector(state => state.tracking)
+    const isTrackingConfigured = Boolean(
+        (trackingState?.meta?.enabled && trackingState?.meta?.pixelId) ||
+        (trackingState?.googleAds?.enabled && trackingState?.googleAds?.conversionId) ||
+        (trackingState?.ga4?.enabled && trackingState?.ga4?.measurementId)
+    )
 
     // Cash Flow Budget alert badge count
     const cashflowTransactions = useSelector(state => state.cashflow?.transactions) || []
@@ -51,7 +59,9 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         { name: 'Live Chat', href: '/admin/chat', icon: HeadphonesIcon, badge: chatUnreadCount },
         { name: 'Coupons', href: '/admin/coupons', icon: TicketPercentIcon },
         { name: 'Banners', href: '/admin/banners', icon: MegaphoneIcon },
+        { name: 'Header & Footer', href: '/admin/header-footer', icon: LayoutTemplateIcon },
         { name: 'Shipping', href: '/admin/shipping', icon: TruckIcon },
+        { name: 'Ad Tracking', href: '/admin/tracking', icon: RadarIcon, statusDot: !isTrackingConfigured ? 'amber' : 'green' },
         { name: 'API Settings', href: '/admin/api-settings', icon: KeyRoundIcon, statusDot: !isGoogleConfigured ? 'amber' : 'green' },
     ]
 

@@ -9,6 +9,7 @@ import Image from "next/image";
 import Counter from "./Counter";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
+import { trackViewContent, trackAddToCart, trackWishlist, trackContact } from "@/lib/tracking/clientTracker";
 
 const resolveImage = (img) => {
     if (!img) return '/products/product_img1.png'
@@ -88,102 +89,120 @@ const ProductDetails = ({ product }) => {
         }
 
         let isCancelled = false;
-        const img = new window.Image();
-        img.crossOrigin = 'anonymous';
+        const scheduleIdle = typeof window !== 'undefined' && 'requestIdleCallback' in window 
+            ? window.requestIdleCallback 
+            : (fn) => setTimeout(fn, 200);
 
-        img.onload = () => {
+        const idleId = scheduleIdle(() => {
             if (isCancelled) return;
-            try {
-                const nw = img.naturalWidth || 1;
-                const nh = img.naturalHeight || 1;
-                const aspectRatio = nw / nh;
+            const img = new window.Image();
+            img.crossOrigin = 'anonymous';
 
-                const canvas = document.createElement('canvas');
-                canvas.width = 16;
-                canvas.height = 16;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+            img.onload = () => {
+                if (isCancelled) return;
+                try {
+                    const nw = img.naturalWidth || 1;
+                    const nh = img.naturalHeight || 1;
+                    const aspectRatio = nw / nh;
 
-                if (!ctx) {
-                    const fallback = srcStr.includes('.png') || srcStr.includes('product_img')
-                        ? { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' }
-                        : { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' };
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 16;
+                    canvas.height = 16;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+                    if (!ctx) {
+                        const fallback = srcStr.includes('.png') || srcStr.includes('product_img')
+                            ? { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' }
+                            : { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' };
+                        styleCache.set(srcStr, fallback);
+                        setImgStyle(fallback);
+                        return;
+                    }
+
+                    ctx.drawImage(img, 0, 0, 16, 16);
+                    const data = ctx.getImageData(0, 0, 16, 16).data;
+
+                    const corners = [0, 15, 15 * 16, 15 * 16 + 15];
+                    let hasTransparentCorner = false;
+                    let whiteCornersCount = 0;
+
+                    for (const idx of corners) {
+                        const p = idx * 4;
+                        const r = data[p];
+                        const g = data[p + 1];
+                        const b = data[p + 2];
+                        const a = data[p + 3];
+
+                        if (a < 40) {
+                            hasTransparentCorner = true;
+                        }
+                        if (a >= 200 && r > 230 && g > 230 && b > 230) {
+                            whiteCornersCount++;
+                        }
+                    }
+
+                    let style;
+                    if (hasTransparentCorner) {
+                        style = { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' };
+                    } else if (whiteCornersCount >= 3) {
+                        style = { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-white' };
+                    } else if (aspectRatio > 1.8 || aspectRatio < 0.45) {
+                        style = { fit: 'contain', padding: 'p-4', bg: 'bg-slate-100' };
+                    } else {
+                        style = { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' };
+                    }
+
+                    styleCache.set(srcStr, style);
+                    setImgStyle(style);
+                } catch (e) {
+                    const isJpeg = srcStr.startsWith('data:image/jpeg') || srcStr.endsWith('.jpg') || srcStr.endsWith('.jpeg');
+                    const fallback = isJpeg
+                        ? { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' }
+                        : { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' };
                     styleCache.set(srcStr, fallback);
                     setImgStyle(fallback);
-                    return;
                 }
+            };
 
-                ctx.drawImage(img, 0, 0, 16, 16);
-                const data = ctx.getImageData(0, 0, 16, 16).data;
-
-                const corners = [0, 15, 15 * 16, 15 * 16 + 15];
-                let hasTransparentCorner = false;
-                let whiteCornersCount = 0;
-
-                for (const idx of corners) {
-                    const p = idx * 4;
-                    const r = data[p];
-                    const g = data[p + 1];
-                    const b = data[p + 2];
-                    const a = data[p + 3];
-
-                    if (a < 40) {
-                        hasTransparentCorner = true;
-                    }
-                    if (a >= 200 && r > 230 && g > 230 && b > 230) {
-                        whiteCornersCount++;
-                    }
-                }
-
-                let style;
-                if (hasTransparentCorner) {
-                    style = { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' };
-                } else if (whiteCornersCount >= 3) {
-                    style = { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-white' };
-                } else if (aspectRatio > 1.8 || aspectRatio < 0.45) {
-                    style = { fit: 'contain', padding: 'p-4', bg: 'bg-slate-100' };
-                } else {
-                    style = { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' };
-                }
-
-                styleCache.set(srcStr, style);
-                setImgStyle(style);
-            } catch (e) {
-                const isJpeg = srcStr.startsWith('data:image/jpeg') || srcStr.endsWith('.jpg') || srcStr.endsWith('.jpeg');
-                const fallback = isJpeg
-                    ? { fit: 'cover', padding: 'p-0', bg: 'bg-slate-100' }
-                    : { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' };
+            img.onerror = () => {
+                const fallback = { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' };
                 styleCache.set(srcStr, fallback);
                 setImgStyle(fallback);
-            }
-        };
+            };
 
-        img.onerror = () => {
-            if (!isCancelled) {
-                const fallback = { fit: 'contain', padding: 'p-4 sm:p-8', bg: 'bg-slate-50' };
-                setImgStyle(fallback);
-            }
-        };
-
-        img.src = srcStr;
+            img.src = srcStr;
+        });
 
         return () => {
             isCancelled = true;
+            if (typeof window !== 'undefined' && 'cancelIdleCallback' in window && typeof idleId === 'number') {
+                window.cancelIdleCallback(idleId);
+            }
         };
     }, [mainImage]);
+
+    // Track ViewContent on product page mount
+    useEffect(() => {
+        if (product) {
+            trackViewContent(product);
+        }
+    }, [productId]);
 
     const isInCart = Boolean(cart[productId]);
 
     const addToCartHandler = () => {
         if (!product.inStock || isInCart) return;
-        dispatch(addToCart({ productId, color: selectedColor, size: selectedSize }))
+        dispatch(addToCart({ productId, color: selectedColor, size: selectedSize }));
+        trackAddToCart(product, 1, selectedColor, selectedSize);
     }
 
     const orderNowHandler = () => {
         if (!product.inStock) return;
         if (!cart[productId]) {
-            dispatch(addToCart({ productId, color: selectedColor, size: selectedSize }))
+            dispatch(addToCart({ productId, color: selectedColor, size: selectedSize }));
         }
-        router.push('/order')
+        trackAddToCart(product, 1, selectedColor, selectedSize);
+        router.push('/order');
     }
 
     const ratings = Array.isArray(product?.rating) ? product.rating : [];
@@ -199,6 +218,7 @@ const ProductDetails = ({ product }) => {
     const handleWishlistToggle = () => {
         dispatch(toggleWishlist(productId));
         if (!isWishlisted) {
+            trackWishlist(product);
             toast.success(`"${product.name}" পছন্দের তালিকায় যোগ করা হয়েছে! ❤️`, {
                 id: `wishlist-${productId}`,
                 duration: 2500,
@@ -233,7 +253,7 @@ const ProductDetails = ({ product }) => {
                                     fill
                                     sizes="88px"
                                     src={resolved}
-                                    onError={(e) => { e.currentTarget.src = '/products/product_img1.png' }}
+                                    onError={(e) => { e.currentTarget.src = '/placeholder.svg' }}
                                     className="object-cover transition-transform duration-200 hover:scale-105"
                                     alt={`${product.name} thumbnail view ${index + 1} - Our Store BD`}
                                 />
@@ -392,6 +412,7 @@ const ProductDetails = ({ product }) => {
                             href={`https://wa.me/${cleanWhatsApp}?text=${encodeURIComponent(waFinalMessage)}`}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={() => trackContact({ channel: 'WhatsApp', name: product.name })}
                             className={`w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium rounded bg-[#25D366] hover:bg-[#20bd5a] text-white shadow-sm hover:shadow active:scale-95 transition-all duration-200 cursor-pointer ${!isCallEnabled ? 'col-span-2' : ''}`}
                         >
                             <svg className="w-4 h-4 fill-current flex-shrink-0" viewBox="0 0 24 24">
@@ -405,6 +426,7 @@ const ProductDetails = ({ product }) => {
                     {isCallEnabled && (
                         <a
                             href={`tel:${cleanPhone}`}
+                            onClick={() => trackContact({ channel: 'Phone Call', name: product.name })}
                             className={`w-full flex items-center justify-center gap-2 py-3 px-4 text-sm font-medium rounded bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow active:scale-95 transition-all duration-200 cursor-pointer ${!isWaEnabled ? 'col-span-2' : ''}`}
                         >
                             <PhoneCallIcon size={16} className="flex-shrink-0" />

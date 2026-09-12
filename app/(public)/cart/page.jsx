@@ -7,6 +7,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { deleteItemFromCart, clearCart } from '@/lib/features/cart/cartSlice'
 import Counter from '@/components/Counter'
 import toast from 'react-hot-toast'
+import { trackViewCart, trackRemoveFromCart } from '@/lib/tracking/clientTracker'
 import { 
     Trash2Icon, 
     ShoppingBag, 
@@ -58,6 +59,7 @@ export default function CartPage() {
 
     const [cartArray, setCartArray] = useState([])
     const [totalPrice, setTotalPrice] = useState(0)
+    const [failedImages, setFailedImages] = useState({})
 
     useEffect(() => {
         document.title = "Shopping Cart - Our Store BD | Review Your Items"
@@ -72,21 +74,30 @@ export default function CartPage() {
                 const qty = typeof value === 'number' ? value : value.quantity
                 const color = typeof value === 'object' ? value.color : null
                 const size = typeof value === 'object' ? value.size : null
+                const effectivePrice = product.offerPrice || product.price
                 items.push({
                     ...product,
                     quantity: qty,
                     selectedColor: color,
                     selectedSize: size,
+                    effectivePrice,
                 })
-                total += product.price * qty
+                total += effectivePrice * qty
             }
         }
         setCartArray(items)
         setTotalPrice(total)
+        if (items.length > 0) {
+            trackViewCart(items, total)
+        }
     }, [cartItems, products])
 
     const handleDeleteItem = (productId, name) => {
+        const itemToRemove = cartArray.find(i => i.id === productId)
         dispatch(deleteItemFromCart({ productId }))
+        if (itemToRemove) {
+            trackRemoveFromCart(itemToRemove, itemToRemove.quantity || 1)
+        }
         toast.success(`"${name || 'পণ্য'}" কার্ট থেকে সরানো হয়েছে`)
     }
 
@@ -181,7 +192,7 @@ export default function CartPage() {
                                                                     className="relative size-18 rounded-2xl border border-slate-200/80 bg-slate-50 overflow-hidden shadow-2xs shrink-0 flex items-center justify-center group"
                                                                 >
                                                                     <Image 
-                                                                        src={getItemImage(item)} 
+                                                                        src={failedImages[item.id] ? '/placeholder.svg' : getItemImage(item)} 
                                                                         alt={item.name || 'Product'} 
                                                                         fill
                                                                         sizes="72px"
@@ -190,8 +201,8 @@ export default function CartPage() {
                                                                                 ? 'object-cover'
                                                                                 : 'object-contain p-1.5'
                                                                         }`}
-                                                                        onError={(e) => {
-                                                                            e.currentTarget.src = '/placeholder.svg'
+                                                                        onError={() => {
+                                                                            setFailedImages(prev => ({ ...prev, [item.id]: true }))
                                                                         }}
                                                                     />
                                                                 </Link>
@@ -204,7 +215,7 @@ export default function CartPage() {
                                                                     </Link>
                                                                     <p className="text-xs text-slate-400 mt-0.5">{item.category}</p>
                                                                     <div className="flex items-center gap-2 mt-1">
-                                                                        <span className="font-bold text-slate-900 text-sm">{currency}{item.price}</span>
+                                                                        <span className="font-bold text-slate-900 text-sm">{currency}{item.effectivePrice || item.price}</span>
                                                                         {item.selectedColor && (
                                                                             <span 
                                                                                 className="w-3.5 h-3.5 rounded-full border border-slate-300 inline-block" 
@@ -227,7 +238,7 @@ export default function CartPage() {
                                                             </div>
                                                         </td>
                                                         <td className="py-4 px-4 text-right font-bold text-slate-900 text-sm sm:text-base whitespace-nowrap">
-                                                            {currency}{(item.price * item.quantity).toLocaleString()}
+                                                            {currency}{((item.effectivePrice || item.price) * item.quantity).toLocaleString()}
                                                         </td>
                                                         <td className="py-4 px-4 text-center">
                                                             <button 
@@ -255,11 +266,14 @@ export default function CartPage() {
                                                         className="relative size-16 rounded-xl border border-slate-200/80 bg-slate-50 overflow-hidden shrink-0 flex items-center justify-center"
                                                     >
                                                         <Image 
-                                                            src={getItemImage(item)} 
+                                                            src={failedImages[item.id] ? '/placeholder.svg' : getItemImage(item)} 
                                                             alt={item.name || 'Product'} 
                                                             fill
                                                             sizes="64px"
                                                             className={isPhoto(getItemImage(item)) ? 'object-cover' : 'object-contain p-1'}
+                                                            onError={() => {
+                                                                setFailedImages(prev => ({ ...prev, [item.id]: true }))
+                                                            }}
                                                         />
                                                     </Link>
                                                     <div className="flex-1 min-w-0">
@@ -270,7 +284,7 @@ export default function CartPage() {
                                                             {item.name}
                                                         </Link>
                                                         <p className="text-[11px] text-slate-400">{item.category}</p>
-                                                        <p className="text-xs font-bold text-slate-900 mt-0.5">{currency}{item.price}</p>
+                                                        <p className="text-xs font-bold text-slate-900 mt-0.5">{currency}{item.effectivePrice || item.price}</p>
                                                     </div>
                                                 </div>
 
@@ -278,7 +292,7 @@ export default function CartPage() {
                                                     <Counter productId={item.id} />
                                                     <div className="flex items-center gap-3">
                                                         <span className="font-bold text-sm text-slate-900">
-                                                            {currency}{(item.price * item.quantity).toLocaleString()}
+                                                            {currency}{((item.effectivePrice || item.price) * item.quantity).toLocaleString()}
                                                         </span>
                                                         <button 
                                                             type="button"

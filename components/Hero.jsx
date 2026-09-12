@@ -118,10 +118,14 @@ const Hero = () => {
                             className='sm:absolute bottom-0 right-0 md:right-8 w-full sm:max-w-sm max-h-96 object-contain z-0 pointer-events-none' 
                             src={mainBanner.image} 
                             alt={mainBanner.title || "Shop gadgets"} 
+                            fetchPriority="high"
+                            loading="eager"
+                            decoding="async"
                         />
                     ) : (
                         <Image 
                             priority
+                            sizes="(max-width: 640px) 100vw, 384px"
                             className='sm:absolute bottom-0 right-0 md:right-8 w-full sm:max-w-sm max-h-96 object-contain pointer-events-none' 
                             src={assets.hero_model_img} 
                             alt="Shop gadgets" 

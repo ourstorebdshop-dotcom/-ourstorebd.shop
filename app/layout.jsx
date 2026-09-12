@@ -1,10 +1,17 @@
+import { Suspense } from "react";
 import { Outfit } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import StoreProvider from "@/app/StoreProvider";
 import { OrganizationJsonLd, WebsiteJsonLd } from "@/components/seo/JsonLd";
+import TrackingManager from "@/components/tracking/TrackingManager";
 import "./globals.css";
 
-const outfit = Outfit({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
+const outfit = Outfit({ 
+    subsets: ["latin"], 
+    weight: ["400", "500", "600", "700"],
+    display: "swap",
+    preload: true,
+});
 
 export const metadata = {
     title: {
@@ -85,6 +92,18 @@ export default function RootLayout({ children }) {
     return (
         <html lang="bn" className="scroll-smooth">
             <head>
+                {/* Preconnect to critical third-party domains */}
+                <link rel="preconnect" href="https://res.cloudinary.com" crossOrigin="anonymous" />
+                <link rel="dns-prefetch" href="https://res.cloudinary.com" />
+                <link rel="preconnect" href="https://firestore.googleapis.com" crossOrigin="anonymous" />
+                <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
+                <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+                <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+                <link rel="preconnect" href="https://connect.facebook.net" crossOrigin="anonymous" />
+                <link rel="dns-prefetch" href="https://connect.facebook.net" />
+                <link rel="preconnect" href="https://www.googletagmanager.com" crossOrigin="anonymous" />
+                <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
+
                 <link rel="icon" href="/favicon.ico" sizes="any" />
                 <link rel="apple-touch-icon" href="/apple-icon.png" />
                 <OrganizationJsonLd />
@@ -92,6 +111,9 @@ export default function RootLayout({ children }) {
             </head>
             <body className={`${outfit.className} antialiased selection:bg-green-100 selection:text-green-900`}>
                 <StoreProvider>
+                    <Suspense fallback={null}>
+                        <TrackingManager />
+                    </Suspense>
                     <Toaster position="top-center" reverseOrder={false} />
                     {children}
                 </StoreProvider>

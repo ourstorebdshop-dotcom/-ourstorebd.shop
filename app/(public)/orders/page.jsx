@@ -10,13 +10,24 @@ export default function Orders() {
     const allOrders = useSelector(state => state.order.orders);
     const { currentUser, isAuthenticated } = useSelector(state => state.user);
 
-    // If customer logged in, show user orders; otherwise show all saved/demo orders
+    // If customer logged in, show user orders; otherwise show guest's current session orders only
     const orders = allOrders.filter(order => {
-        if (!currentUser) return true;
-        return order.userId === currentUser.id || 
-               order.user?.email === currentUser.email || 
-               order.user?.phone === currentUser.phone ||
-               currentUser.email === 'customer@ourstorebd.com';
+        if (currentUser) {
+            return order.userId === currentUser.id || 
+                   order.user?.email === currentUser.email || 
+                   order.user?.phone === currentUser.phone ||
+                   currentUser.email === 'customer@ourstorebd.com';
+        }
+        // Guest user: only show orders placed by this guest in their current browser session
+        if (typeof window !== 'undefined') {
+            try {
+                const guestTracked = JSON.parse(localStorage.getItem('gocart_tracked_purchases') || '[]')
+                if (guestTracked.includes(order.id) || guestTracked.includes(`order_${order.id}`)) {
+                    return true
+                }
+            } catch { /* ignore */ }
+        }
+        return false
     });
 
     return (

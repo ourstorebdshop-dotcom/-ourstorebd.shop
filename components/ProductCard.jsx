@@ -8,6 +8,7 @@ import { addToCart } from '@/lib/features/cart/cartSlice'
 import { toggleWishlist } from '@/lib/features/wishlist/wishlistSlice'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
+import { trackAddToCart, trackWishlist } from '@/lib/tracking/clientTracker'
 
 // Helper to resolve and normalize image URLs safely
 const resolveImage = (img) => {
@@ -63,92 +64,97 @@ const ProductCard = ({ product }) => {
         }
 
         let isCancelled = false
-        const img = new window.Image()
-        img.crossOrigin = 'anonymous'
+        const scheduleIdle = typeof window !== 'undefined' && 'requestIdleCallback' in window
+            ? window.requestIdleCallback
+            : (fn) => setTimeout(fn, 300)
 
-        img.onload = () => {
+        const idleId = scheduleIdle(() => {
             if (isCancelled) return
-            try {
-                const nw = img.naturalWidth || 1
-                const nh = img.naturalHeight || 1
-                const aspectRatio = nw / nh
+            const img = new window.Image()
+            img.crossOrigin = 'anonymous'
 
-                // Inspect corner pixels using a small offscreen canvas
-                const canvas = document.createElement('canvas')
-                canvas.width = 16
-                canvas.height = 16
-                const ctx = canvas.getContext('2d', { willReadFrequently: true })
+            img.onload = () => {
+                if (isCancelled) return
+                try {
+                    const nw = img.naturalWidth || 1
+                    const nh = img.naturalHeight || 1
+                    const aspectRatio = nw / nh
 
-                if (!ctx) {
-                    const fallback = srcStr.includes('.png') || srcStr.includes('product_img')
-                        ? { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
-                        : { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
+                    // Inspect corner pixels using a small offscreen canvas
+                    const canvas = document.createElement('canvas')
+                    canvas.width = 16
+                    canvas.height = 16
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+
+                    if (!ctx) {
+                        const fallback = srcStr.includes('.png') || srcStr.includes('product_img')
+                            ? { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+                            : { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
+                        styleCache.set(srcStr, fallback)
+                        setImgStyle(fallback)
+                        return
+                    }
+
+                    ctx.drawImage(img, 0, 0, 16, 16)
+                    const data = ctx.getImageData(0, 0, 16, 16).data
+
+                    // Sample corner pixels: top-left, top-right, bottom-left, bottom-right
+                    const corners = [0, 15, 15 * 16, 15 * 16 + 15]
+                    let hasTransparentCorner = false
+                    let whiteCornersCount = 0
+
+                    for (const idx of corners) {
+                        const p = idx * 4
+                        const r = data[p]
+                        const g = data[p + 1]
+                        const b = data[p + 2]
+                        const a = data[p + 3]
+
+                        if (a < 40) {
+                            hasTransparentCorner = true
+                        }
+                        if (a >= 200 && r > 230 && g > 230 && b > 230) {
+                            whiteCornersCount++;
+                        }
+                    }
+
+                    let style
+                    if (hasTransparentCorner) {
+                        style = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+                    } else if (whiteCornersCount >= 3) {
+                        style = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-white' }
+                    } else if (aspectRatio > 1.75 || aspectRatio < 0.5) {
+                        style = { fit: 'contain', padding: 'p-2', bg: 'bg-[#F5F5F5]' }
+                    } else {
+                        style = { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
+                    }
+
+                    styleCache.set(srcStr, style)
+                    setImgStyle(style)
+                } catch (e) {
+                    const isJpeg = srcStr.startsWith('data:image/jpeg') || srcStr.endsWith('.jpg') || srcStr.endsWith('.jpeg')
+                    const fallback = isJpeg
+                        ? { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
+                        : { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
                     styleCache.set(srcStr, fallback)
                     setImgStyle(fallback)
-                    return
                 }
+            }
 
-                ctx.drawImage(img, 0, 0, 16, 16)
-                const data = ctx.getImageData(0, 0, 16, 16).data
-
-                // Sample corner pixels: top-left, top-right, bottom-left, bottom-right
-                const corners = [0, 15, 15 * 16, 15 * 16 + 15]
-                let hasTransparentCorner = false
-                let whiteCornersCount = 0
-
-                for (const idx of corners) {
-                    const p = idx * 4
-                    const r = data[p]
-                    const g = data[p + 1]
-                    const b = data[p + 2]
-                    const a = data[p + 3]
-
-                    if (a < 40) {
-                        hasTransparentCorner = true
-                    }
-                    if (a >= 200 && r > 230 && g > 230 && b > 230) {
-                        whiteCornersCount++;
-                    }
-                }
-
-                let style
-                if (hasTransparentCorner) {
-                    // Transparent product PNG (e.g. watch, lamp, gadget)
-                    style = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
-                } else if (whiteCornersCount >= 3) {
-                    // Graphic or product with pure white/near-white background
-                    style = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-white' }
-                } else if (aspectRatio > 1.75 || aspectRatio < 0.5) {
-                    // Extreme aspect ratio (panoramic banner)
-                    style = { fit: 'contain', padding: 'p-2', bg: 'bg-[#F5F5F5]' }
-                } else {
-                    // Real photograph (flower, lifestyle, clothing) -> full-bleed cover
-                    style = { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
-                }
-
-                styleCache.set(srcStr, style)
-                setImgStyle(style)
-            } catch (e) {
-                const isJpeg = srcStr.startsWith('data:image/jpeg') || srcStr.endsWith('.jpg') || srcStr.endsWith('.jpeg')
-                const fallback = isJpeg
-                    ? { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
-                    : { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+            img.onerror = () => {
+                const fallback = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
                 styleCache.set(srcStr, fallback)
                 setImgStyle(fallback)
             }
-        }
 
-        img.onerror = () => {
-            if (!isCancelled) {
-                const fallback = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
-                setImgStyle(fallback)
-            }
-        }
-
-        img.src = srcStr
+            img.src = srcStr
+        })
 
         return () => {
             isCancelled = true
+            if (typeof window !== 'undefined' && 'cancelIdleCallback' in window && typeof idleId === 'number') {
+                window.cancelIdleCallback(idleId)
+            }
         }
     }, [product.images])
 
@@ -192,6 +198,7 @@ const ProductCard = ({ product }) => {
         e.preventDefault()
         e.stopPropagation()
         dispatch(addToCart({ productId: product.id }))
+        trackAddToCart(product, 1)
         setAddedToCart(true)
         setTimeout(() => setAddedToCart(false), 1500)
     }
@@ -200,6 +207,7 @@ const ProductCard = ({ product }) => {
         e.preventDefault()
         e.stopPropagation()
         dispatch(addToCart({ productId: product.id }))
+        trackAddToCart(product, 1)
         router.push('/order')
     }
 
@@ -209,6 +217,7 @@ const ProductCard = ({ product }) => {
         const prodId = product.id || product._id
         dispatch(toggleWishlist(prodId))
         if (!isWishlisted) {
+            trackWishlist(product)
             toast.success(`"${product.name}" পছন্দের তালিকায় যোগ করা হয়েছে! ❤️`, {
                 id: `wishlist-${prodId}`,
                 duration: 2500,
@@ -344,4 +353,12 @@ const ProductCard = ({ product }) => {
     )
 }
 
-export default ProductCard
+export default React.memo(ProductCard, (prev, next) => {
+    return (
+        prev.product?.id === next.product?.id &&
+        prev.product?.price === next.product?.price &&
+        prev.product?.inStock === next.product?.inStock &&
+        prev.product?.images?.[0] === next.product?.images?.[0] &&
+        prev.product?.rating?.length === next.product?.rating?.length
+    );
+});

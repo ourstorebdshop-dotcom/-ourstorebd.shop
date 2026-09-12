@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
 import {
@@ -47,14 +47,15 @@ export default function AdminFraudPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
 
-    const fraudState = useSelector(state => state.fraud) || {}
+    const fraudState = useSelector(state => state.fraud)
     const orders = useSelector(state => state.order?.orders) || []
 
-    const blockedPhones = fraudState.blockedPhones || []
-    const blockedIPs = fraudState.blockedIPs || []
-    const watchlist = fraudState.watchlist || []
-    const trustedPhones = fraudState.trustedPhones || []
-    const savedSettings = fraudState.settings || {}
+    const blockedPhones = fraudState?.blockedPhones || []
+    const blockedIPs = fraudState?.blockedIPs || []
+    const watchlist = fraudState?.watchlist || []
+    const trustedPhones = fraudState?.trustedPhones || []
+    const savedSettings = fraudState?.settings || null
+    const hasSyncedRef = useRef(false)
 
     // Active tab
     const [activeTab, setActiveTab] = useState('pending') // 'pending' | 'blocked_phones' | 'blocked_ips' | 'watchlist' | 'settings' | 'logs'
@@ -74,18 +75,37 @@ export default function AdminFraudPage() {
     // Search filter inside lists
     const [searchTerm, setSearchTerm] = useState('')
 
-    // Settings state
+    // Settings state with safe fallbacks
     const [settingsForm, setSettingsForm] = useState({
-        maxOrdersPerPhonePerHour: savedSettings.maxOrdersPerPhonePerHour ?? FRAUD_DEFAULTS.MAX_ORDERS_PER_PHONE_PER_HOUR,
-        maxOrdersPerIPPerHour: savedSettings.maxOrdersPerIPPerHour ?? FRAUD_DEFAULTS.MAX_ORDERS_PER_IP_PER_HOUR,
-        duplicateOrderWindowMinutes: savedSettings.duplicateOrderWindowMinutes ?? FRAUD_DEFAULTS.DUPLICATE_ORDER_WINDOW_MINUTES,
-        minOrderSubmissionTimeMs: (savedSettings.minOrderSubmissionTimeMs ?? FRAUD_DEFAULTS.MIN_ORDER_SUBMISSION_TIME_MS) / 1000,
-        codRiskMultiplier: savedSettings.codRiskMultiplier ?? FRAUD_DEFAULTS.COD_RISK_MULTIPLIER,
-        requireVerificationForMediumRisk: savedSettings.requireVerificationForMediumRisk ?? FRAUD_DEFAULTS.REQUIRE_VERIFICATION_FOR_MEDIUM_RISK,
-        autoBlockHighRisk: savedSettings.autoBlockHighRisk ?? FRAUD_DEFAULTS.AUTO_BLOCK_HIGH_RISK,
-        riskThresholdMedium: savedSettings.riskThresholds?.MEDIUM ?? FRAUD_DEFAULTS.RISK_THRESHOLDS.MEDIUM,
-        riskThresholdHigh: savedSettings.riskThresholds?.HIGH ?? FRAUD_DEFAULTS.RISK_THRESHOLDS.HIGH,
+        maxOrdersPerPhonePerHour: savedSettings?.maxOrdersPerPhonePerHour ?? FRAUD_DEFAULTS?.maxOrdersPerPhonePerHour ?? 3,
+        maxOrdersPerIPPerHour: savedSettings?.maxOrdersPerIPPerHour ?? FRAUD_DEFAULTS?.maxOrdersPerIPPerHour ?? 5,
+        duplicateOrderWindowMinutes: savedSettings?.duplicateOrderWindowMinutes ?? FRAUD_DEFAULTS?.duplicateOrderWindowMinutes ?? 30,
+        minOrderSubmissionTimeMs: (savedSettings?.minOrderSubmissionTimeMs ?? FRAUD_DEFAULTS?.minOrderSubmissionTimeMs ?? 3000) / 1000,
+        codRiskMultiplier: savedSettings?.codRiskMultiplier ?? FRAUD_DEFAULTS?.codRiskMultiplier ?? 1.5,
+        requireVerificationForMediumRisk: savedSettings?.requireVerificationForMediumRisk ?? true,
+        autoBlockHighRisk: savedSettings?.autoBlockHighRisk ?? false,
+        riskThresholdMedium: savedSettings?.riskThresholds?.MEDIUM ?? savedSettings?.riskThresholds?.low ?? FRAUD_DEFAULTS?.riskThresholds?.low ?? 30,
+        riskThresholdHigh: savedSettings?.riskThresholds?.HIGH ?? savedSettings?.riskThresholds?.medium ?? FRAUD_DEFAULTS?.riskThresholds?.medium ?? 60,
     })
+
+    // Sync settingsForm only once when savedSettings first becomes available from Redux/Firestore
+    useEffect(() => {
+        if (hasSyncedRef.current) return
+        if (savedSettings && typeof savedSettings === 'object' && Object.keys(savedSettings).length > 0) {
+            hasSyncedRef.current = true
+            setSettingsForm({
+                maxOrdersPerPhonePerHour: savedSettings.maxOrdersPerPhonePerHour ?? FRAUD_DEFAULTS?.maxOrdersPerPhonePerHour ?? 3,
+                maxOrdersPerIPPerHour: savedSettings.maxOrdersPerIPPerHour ?? FRAUD_DEFAULTS?.maxOrdersPerIPPerHour ?? 5,
+                duplicateOrderWindowMinutes: savedSettings.duplicateOrderWindowMinutes ?? FRAUD_DEFAULTS?.duplicateOrderWindowMinutes ?? 30,
+                minOrderSubmissionTimeMs: (savedSettings.minOrderSubmissionTimeMs ?? FRAUD_DEFAULTS?.minOrderSubmissionTimeMs ?? 3000) / 1000,
+                codRiskMultiplier: savedSettings.codRiskMultiplier ?? FRAUD_DEFAULTS?.codRiskMultiplier ?? 1.5,
+                requireVerificationForMediumRisk: savedSettings.requireVerificationForMediumRisk ?? true,
+                autoBlockHighRisk: savedSettings.autoBlockHighRisk ?? false,
+                riskThresholdMedium: savedSettings.riskThresholds?.MEDIUM ?? savedSettings.riskThresholds?.low ?? FRAUD_DEFAULTS?.riskThresholds?.low ?? 30,
+                riskThresholdHigh: savedSettings.riskThresholds?.HIGH ?? savedSettings.riskThresholds?.medium ?? FRAUD_DEFAULTS?.riskThresholds?.medium ?? 60,
+            })
+        }
+    }, [savedSettings])
 
     // Audit logs state
     const [auditLogs, setAuditLogs] = useState([])

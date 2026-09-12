@@ -1,8 +1,10 @@
+import dynamic from "next/dynamic";
 import Banner from "@/components/Banner";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileBottomNav from "@/components/MobileBottomNav";
-import ChatButton from "@/components/chat/ChatButton";
+
+const ChatButton = dynamic(() => import("@/components/chat/ChatButton"));
 
 export default function PublicLayout({ children }) {
     return (

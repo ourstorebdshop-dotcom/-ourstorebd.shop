@@ -1,15 +1,17 @@
 'use client'
+import { useMemo } from "react";
 import { useSelector } from "react-redux";
-
 import Link from "next/link";
 
 const CategoriesMarquee = () => {
     // Dynamic categories from Redux store (admin-controlled)
     const reduxCategories = useSelector(state => state.category?.categories || [])
-    const categories = [...reduxCategories]
-        .filter(c => c.visible !== false)
-        .sort((a, b) => a.order - b.order)
-        .map(c => c.name)
+    const categories = useMemo(() => {
+        return [...reduxCategories]
+            .filter(c => c.visible !== false)
+            .sort((a, b) => a.order - b.order)
+            .map(c => c.name)
+    }, [reduxCategories])
 
     if (categories.length === 0) return null
 

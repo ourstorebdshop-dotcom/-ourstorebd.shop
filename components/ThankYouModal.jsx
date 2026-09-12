@@ -17,11 +17,18 @@ import {
     SparklesIcon,
     PackageCheckIcon
 } from 'lucide-react';
+import { trackPurchase } from '@/lib/tracking/clientTracker';
 
 export default function ThankYouModal({ order, onClose }) {
     const router = useRouter();
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳';
     const [copied, setCopied] = useState(false);
+
+    React.useEffect(() => {
+        if (order?.id) {
+            trackPurchase(order);
+        }
+    }, [order?.id]);
 
     if (!order) return null;
 
@@ -187,7 +194,7 @@ export default function ThankYouModal({ order, onClose }) {
                                                 </div>
                                             </div>
                                             <span className="font-bold text-slate-800 shrink-0">
-                                                {currency}{(item.price * item.quantity).toLocaleString()}
+                                                {currency}{((item.offerPrice || item.effectivePrice || item.price) * item.quantity).toLocaleString()}
                                             </span>
                                         </div>
                                     ))}

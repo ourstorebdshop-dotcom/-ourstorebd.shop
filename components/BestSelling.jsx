@@ -10,26 +10,30 @@ const BestSelling = () => {
     const products = useSelector(state => state.product?.list || [])
     const isHydrated = useSelector(state => state.product?.isHydrated)
 
-    // Filter out any demo dummy products
-    const realProducts = products.filter(p => !isDemoProduct(p))
+    const { realProducts, bestProducts } = React.useMemo(() => {
+        // Filter out any demo dummy products
+        const real = products.filter(p => !isDemoProduct(p))
 
-    // Explicitly marked bestSelling products (admin selected "Best Selling")
-    const explicitBest = realProducts.filter(p =>
-        p.sections && Array.isArray(p.sections) && p.sections.includes('bestSelling')
-    )
+        // Explicitly marked bestSelling products (admin selected "Best Selling")
+        const explicitBest = real.filter(p =>
+            p.sections && Array.isArray(p.sections) && p.sections.includes('bestSelling')
+        )
 
-    // Other real products
-    const otherProducts = realProducts.filter(p =>
-        !p.sections || !Array.isArray(p.sections) || !p.sections.includes('bestSelling')
-    )
+        // Other real products
+        const otherProducts = real.filter(p =>
+            !p.sections || !Array.isArray(p.sections) || !p.sections.includes('bestSelling')
+        )
 
-    // Sort explicit first, then other products
-    const sortedExplicit = explicitBest.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-    const sortedOther = otherProducts.slice().sort((a, b) => (b.rating?.length || 0) - (a.rating?.length || 0))
+        // Sort explicit first, then other products
+        const sortedExplicit = explicitBest.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+        const sortedOther = otherProducts.slice().sort((a, b) => (b.rating?.length || 0) - (a.rating?.length || 0))
 
-    const bestProducts = sortedExplicit.length > 0
-        ? [...sortedExplicit, ...sortedOther]
-        : sortedOther
+        const best = sortedExplicit.length > 0
+            ? [...sortedExplicit, ...sortedOther]
+            : sortedOther
+
+        return { realProducts: real, bestProducts: best }
+    }, [products])
 
     const showingCount = Math.min(displayQuantity, bestProducts.length)
 

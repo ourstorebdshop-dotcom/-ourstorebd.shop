@@ -38,8 +38,7 @@ const AdminLoginForm = ({ onLoginSuccess }) => {
     const [lockoutCount, setLockoutCount] = useState(0) // How many times locked out
     const lockoutTimerRef = useRef(null)
 
-    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || ''
-    const adminPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || ''
+    const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'idrisrashel@gmail.com'
 
     // Restore lockout state on mount
     useEffect(() => {
@@ -102,7 +101,7 @@ const AdminLoginForm = ({ onLoginSuccess }) => {
 
     const isLockedOut = lockoutEnd && Date.now() < lockoutEnd
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault()
 
         if (isLockedOut) {
@@ -112,65 +111,71 @@ const AdminLoginForm = ({ onLoginSuccess }) => {
 
         setLoading(true)
 
-        // Intentional 800ms delay — mitigates timing attacks
-        setTimeout(() => {
-            const inputEmail = email.trim().toLowerCase()
-            const inputPassword = password
+        const inputEmail = email.trim().toLowerCase()
+        const inputPassword = password
 
-            if (inputEmail === adminEmail.toLowerCase() && inputPassword === adminPassword) {
-                // Success — reset everything
+        try {
+            const res = await fetch('/api/admin/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: inputEmail, password: inputPassword }),
+            })
+
+            const data = await res.json().catch(() => ({}))
+
+            if (res.ok) {
+                // Success — reset lockout states
                 setFailedAttempts(0)
                 setLockoutCount(0)
                 localStorage.removeItem(LOCKOUT_KEY)
                 localStorage.removeItem(ATTEMPT_LOG_KEY)
                 toast.success('এডমিন অথেনটিকেশন সফল হয়েছে!', { icon: '🔓' })
-                onLoginSuccess()
+                onLoginSuccess(data.session)
+            } else if (res.status === 429) {
+                // Server rate limit / lockout triggered
+                const durationMs = (data.lockoutRemaining || 300) * 1000
+                const newLockoutEnd = Date.now() + durationMs
+                const newLockoutCount = data.lockoutCount || (lockoutCount + 1)
+
+                setLockoutEnd(newLockoutEnd)
+                setLockoutCount(newLockoutCount)
+                setFailedAttempts(MAX_ATTEMPTS)
+
+                const lockoutData = {
+                    lockoutEnd: newLockoutEnd,
+                    attempts: MAX_ATTEMPTS,
+                    lockoutCount: newLockoutCount,
+                }
+                lockoutData.hash = computeLockoutHash(lockoutData)
+                localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutData))
+
+                toast.error(
+                    data.error || `${MAX_ATTEMPTS} বার ভুল চেষ্টা! লক করা হয়েছে।`,
+                    { duration: 5000, icon: '🔒' }
+                )
             } else {
+                // Failed login
                 const newAttempts = failedAttempts + 1
                 setFailedAttempts(newAttempts)
 
-                // Log the attempt timestamp
+                // Log the attempt timestamp locally for client metrics
                 try {
                     const logs = JSON.parse(localStorage.getItem(ATTEMPT_LOG_KEY) || '[]')
                     logs.push({ time: Date.now(), email: inputEmail })
-                    // Keep only last 20 entries
                     if (logs.length > 20) logs.splice(0, logs.length - 20)
                     localStorage.setItem(ATTEMPT_LOG_KEY, JSON.stringify(logs))
                 } catch { /* ignore */ }
 
-                if (newAttempts >= MAX_ATTEMPTS) {
-                    // Escalating lockout duration
-                    const newLockoutCount = lockoutCount + 1
-                    const duration = Math.min(
-                        LOCKOUT_DURATION * Math.pow(ESCALATION_FACTOR, newLockoutCount - 1),
-                        MAX_LOCKOUT
-                    )
-                    const newLockoutEnd = Date.now() + duration
-
-                    setLockoutEnd(newLockoutEnd)
-                    setLockoutCount(newLockoutCount)
-
-                    const lockoutData = {
-                        lockoutEnd: newLockoutEnd,
-                        attempts: newAttempts,
-                        lockoutCount: newLockoutCount
-                    }
-                    lockoutData.hash = computeLockoutHash(lockoutData)
-                    localStorage.setItem(LOCKOUT_KEY, JSON.stringify(lockoutData))
-
-                    const durationMins = Math.ceil(duration / 60000)
-                    toast.error(
-                        `${MAX_ATTEMPTS} বার ভুল চেষ্টা! ${durationMins} মিনিটের জন্য লক করা হয়েছে।`,
-                        { duration: 5000, icon: '🔒' }
-                    )
-                } else {
-                    const remaining = MAX_ATTEMPTS - newAttempts
-                    toast.error(`ভুল ইমেইল অথবা পাসওয়ার্ড! আর ${remaining} বার চেষ্টা করতে পারবেন।`)
-                }
+                const attemptsRemainingMsg = data.remainingAttempts !== undefined
+                    ? `আর ${data.remainingAttempts} বার চেষ্টা করতে পারবেন।`
+                    : ''
+                toast.error(data.error || `ভুল ইমেইল অথবা পাসওয়ার্ড! ${attemptsRemainingMsg}`)
             }
-
+        } catch {
+            toast.error('সার্ভারে যোগাযোগ করতে সমস্যা হয়েছে। অনুগ্রহ করে পুনরায় চেষ্টা করুন।')
+        } finally {
             setLoading(false)
-        }, 800)
+        }
     }
 
     const formatLockoutTime = (seconds) => {

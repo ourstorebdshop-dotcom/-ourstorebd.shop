@@ -21,6 +21,7 @@ import { checkDuplicateOrder, countRecentOrdersByPhone, getPhoneOrderHistory } f
 import { calculateRiskScore } from '@/lib/fraud/riskScorer'
 import { logFraudEvent } from '@/lib/fraud/auditLog'
 import { getFraudConfig } from '@/lib/fraud/config'
+import { productDummyData } from '@/assets/assets'
 
 // In-memory idempotency store (prevents duplicate processing within the same serverless instance)
 const processedKeys = new Map()
@@ -48,9 +49,18 @@ function getClientIP(request) {
 export async function POST(request) {
     const ip = getClientIP(request)
 
+    // Check request payload size (max 100KB) to prevent DoS
+    const contentLength = parseInt(request.headers.get('content-length') || '0', 10)
+    if (contentLength > 100 * 1024) {
+        return NextResponse.json(
+            { error: 'অনুরোধের সাইজ অনেক বড়।', code: 'PAYLOAD_TOO_LARGE' },
+            { status: 413 }
+        )
+    }
+
     try {
         // ── Parse request body ──────────────────────────────────────────
-        const body = await request.json()
+        const body = await request.json().catch(() => ({}))
         const {
             items,           // [{ productId, quantity, color?, size? }]
             deliveryInfo,    // { name, phone, address, location }
@@ -193,7 +203,8 @@ export async function POST(request) {
         const validatedItems = []
 
         for (const item of items) {
-            const serverProduct = serverProducts.find(p => String(p.id) === String(item.productId))
+            const serverProduct = serverProducts.find(p => String(p.id) === String(item.productId)) ||
+                                  (Array.isArray(productDummyData) && productDummyData.find(p => String(p.id) === String(item.productId)))
             
             if (!serverProduct) {
                 // Product not found — might be deleted or invalid
@@ -417,6 +428,56 @@ export async function POST(request) {
             reason: riskLevel === 'MEDIUM' ? 'মাঝারি ঝুঁকি — পর্যালোচনা প্রয়োজন' : 'স্বাভাবিক অর্ডার',
             metadata: { paymentMethod, total: finalTotal },
         })
+
+        // ── 16.5 Fire Server-Side Meta CAPI Purchase event (non-blocking) ──
+        try {
+            if (isFirebaseConfigured()) {
+                getDoc(doc(db, 'settings', 'tracking')).then(async (snap) => {
+                    if (!snap.exists()) return
+                    const tracking = snap.data()
+                    if (!tracking?.meta?.capiEnabled || !tracking?.meta?.accessToken || !tracking?.meta?.pixelId) return
+
+                    const capiPayload = {
+                        action: 'DISPATCH_EVENT',
+                        eventName: 'Purchase',
+                        eventId: `order_${orderId}`,
+                        eventSourceUrl: request.headers.get('referer') || 'https://ourstorebd.shop/order',
+                        userData: {
+                            email: body.userEmail || newOrder.user?.email,
+                            phone: normalizedPhone,
+                            name: deliveryInfo.name,
+                            city: deliveryInfo.location === 'insideDhaka' ? 'Dhaka' : 'Outside Dhaka',
+                        },
+                        customData: {
+                            currency: 'BDT',
+                            value: finalTotal,
+                            order_id: orderId,
+                            coupon: coupon?.code || null,
+                            shipping: deliveryInfo.location,
+                            contents: validatedItems.map(item => ({
+                                id: item.productId,
+                                quantity: item.quantity,
+                                item_price: item.price,
+                            })),
+                        },
+                        pixelId: tracking.meta.pixelId,
+                        pixelId2: tracking.meta.pixelId2,
+                        accessToken: tracking.meta.accessToken,
+                        testEventCode: tracking.meta.testEventCode,
+                        force: true,
+                    }
+
+                    const origin = request.nextUrl?.origin || 'http://localhost:3000'
+                    fetch(`${origin}/api/tracking`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(capiPayload),
+                    }).catch(e => console.warn('[OrderAPI] Meta CAPI non-blocking error:', e))
+                }).catch(() => {})
+            }
+        } catch (e) {
+            // Non-blocking safeguard
+        }
 
         // ── 17. Return the created order ────────────────────────────────
         return NextResponse.json({

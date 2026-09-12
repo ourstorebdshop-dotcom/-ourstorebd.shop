@@ -1,5 +1,5 @@
 'use client'
-import { Suspense } from "react"
+import { Suspense, useEffect } from "react"
 import ProductCard from "@/components/ProductCard"
 import { MoveLeftIcon, HomeIcon, ChevronRight } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -7,6 +7,7 @@ import { useSelector } from "react-redux"
 import Link from "next/link"
 import { BreadcrumbJsonLd, ItemListJsonLd } from "@/components/seo/JsonLd"
 import { isDemoProduct } from "@/app/StoreProvider"
+import { trackSearch } from "@/lib/tracking/clientTracker"
 
 function ShopContent() {
     const searchParams = useSearchParams()
@@ -28,6 +29,12 @@ function ShopContent() {
             return nameMatch || descMatch || catMatch
         })
         : products;
+
+    useEffect(() => {
+        if (search && search.trim()) {
+            trackSearch(search.trim(), filteredProducts.length)
+        }
+    }, [search, filteredProducts.length])
 
     const breadcrumbs = [
         { name: "Home", url: "/" },
