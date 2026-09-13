@@ -20,6 +20,7 @@ import toast from 'react-hot-toast'
 import { login, register } from '@/lib/features/user/userSlice'
 import { validateBDPhone, normalizePhone, phonesMatch } from '@/lib/fraud/phoneValidator'
 import { trackLogin, trackSignUp } from '@/lib/tracking/clientTracker'
+import { saveDocToFirestore } from '@/lib/firestore'
 
 const GoogleIcon = () => (
     <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
@@ -96,22 +97,38 @@ function LoginForm() {
 
         if (matchedUser) {
             dispatch(login(matchedUser))
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.setItem('gocart_current_user', JSON.stringify(matchedUser))
+                } catch (e) { /* ignore */ }
+            }
+            const { password: _lp, ...safeMatched } = matchedUser
+            saveDocToFirestore('customers', matchedUser.id, safeMatched).catch(e => console.warn('Firestore customer save:', e))
             trackLogin({ email: matchedUser.email, phone: matchedUser.phone, method: 'credentials' })
             toast.success(`স্বাগতম, ${matchedUser.name}!`)
             router.push(redirectUrl)
         } else {
             if ((identifier === 'customer@ourstorebd.com' || identifier === '01712345678') && password === 'password123') {
-                const defaultUser = savedUsers[0] || {
+                // Check if demo user has been deleted
+                let deletedIds = []
+                try { deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]') } catch (e) { /* ignore */ }
+                if (deletedIds.includes('user_demo_1')) {
+                    toast.error('এই ডেমো একাউন্টটি মুছে ফেলা হয়েছে')
+                    setLoading(false)
+                    return
+                }
+                const demoUser = savedUsers.find(u => u.id === 'user_demo_1') || {
                     id: "user_demo_1",
                     name: "Tanvir Ahmed",
                     email: "customer@ourstorebd.com",
                     phone: "01712345678",
+                    password: "password123",
                     role: "CUSTOMER",
                     addresses: []
                 }
-                dispatch(login(defaultUser))
-                trackLogin({ email: defaultUser.email, phone: defaultUser.phone, method: 'demo' })
-                toast.success(`স্বাগতম, ${defaultUser.name}!`)
+                dispatch(login(demoUser))
+                trackLogin({ email: demoUser.email, phone: demoUser.phone, method: 'demo' })
+                toast.success(`স্বাগতম, ${demoUser.name}!`)
                 router.push(redirectUrl)
             } else {
                 toast.error('ভুল ইমেইল/ফোন অথবা পাসওয়ার্ড!')
@@ -187,6 +204,20 @@ function LoginForm() {
         }
 
         dispatch(register(newUser))
+        if (typeof window !== 'undefined') {
+            try {
+                localStorage.setItem('gocart_current_user', JSON.stringify(newUser))
+                const existing = JSON.parse(localStorage.getItem('gocart_users') || '[]')
+                const withoutDupe = existing.filter(u => u && u.id !== newUser.id)
+                withoutDupe.push(newUser)
+                localStorage.setItem('gocart_users', JSON.stringify(withoutDupe))
+            } catch (e) { /* ignore */ }
+        }
+
+        // Direct async upsert to Firestore (password stripped)
+        const { password: _regPass, ...safeNewUser } = newUser
+        saveDocToFirestore('customers', newUser.id, safeNewUser).catch(e => console.warn('Firestore customer save err:', e))
+
         trackSignUp({ email: newUser.email, phone: newUser.phone, name: newUser.name, method: 'credentials' })
         toast.success(`একাউন্ট সফলভাবে তৈরি হয়েছে! স্বাগতম ${newUser.name}`)
         router.push(redirectUrl)
@@ -202,6 +233,12 @@ function LoginForm() {
 
         if (existing) {
             dispatch(login(existing))
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.setItem('gocart_current_user', JSON.stringify(existing))
+                } catch (e) { /* ignore */ }
+            }
+            saveDocToFirestore('customers', existing.id, existing).catch(e => console.warn('Firestore customer save err:', e))
             trackLogin({ email: existing.email, name: existing.name, method: 'google' })
             toast.success(`Google দিয়ে সফলভাবে সাইন ইন হয়েছে! স্বাগতম ${existing.name}`, { icon: '👋' })
         } else {
@@ -218,6 +255,16 @@ function LoginForm() {
                 addresses: []
             }
             dispatch(register(newGoogleUser))
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.setItem('gocart_current_user', JSON.stringify(newGoogleUser))
+                    const existingUsers = JSON.parse(localStorage.getItem('gocart_users') || '[]')
+                    const withoutDupe = existingUsers.filter(u => u && u.id !== newGoogleUser.id)
+                    withoutDupe.push(newGoogleUser)
+                    localStorage.setItem('gocart_users', JSON.stringify(withoutDupe))
+                } catch (e) { /* ignore */ }
+            }
+            saveDocToFirestore('customers', newGoogleUser.id, newGoogleUser).catch(e => console.warn('Firestore customer save err:', e))
             trackSignUp({ email: newGoogleUser.email, name: newGoogleUser.name, method: 'google' })
             toast.success(`Google দিয়ে একাউন্ট তৈরি ও সাইন ইন সফল হয়েছে! স্বাগতম ${newGoogleUser.name}`, { icon: '🎉' })
         }

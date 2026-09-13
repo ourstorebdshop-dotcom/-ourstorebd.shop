@@ -56,8 +56,10 @@ import {
     updateUserAddress, 
     deleteUserAddress, 
     setDefaultUserAddress,
-    saveAddressFromOrder
+    saveAddressFromOrder,
+    hydrateUser
 } from '@/lib/features/user/userSlice'
+import { isFirebaseConfigured, saveDocToFirestore } from '@/lib/firestore'
 import { cancelOrder } from '@/lib/features/order/orderSlice'
 import { addToCart } from '@/lib/features/cart/cartSlice'
 import { removeFromWishlist, clearWishlist, toggleWishlist } from '@/lib/features/wishlist/wishlistSlice'
@@ -86,7 +88,33 @@ function ProfileDashboard() {
     const dispatch = useDispatch()
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
 
-    const { currentUser, isAuthenticated } = useSelector(state => state.user)
+    const { currentUser: reduxUser, isAuthenticated: reduxAuthenticated } = useSelector(state => state.user)
+    const [mounted, setMounted] = useState(false)
+
+    const localUser = useMemo(() => {
+        if (!mounted || typeof window === 'undefined') return null
+        try {
+            const raw = localStorage.getItem('gocart_current_user')
+            if (raw) {
+                const parsed = JSON.parse(raw)
+                const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                if (parsed && parsed.id && parsed.name !== 'Google Customer' && !deletedIds.includes(parsed.id)) {
+                    return parsed
+                }
+            }
+        } catch (e) {}
+        return null
+    }, [mounted])
+
+    const currentUser = reduxUser || (mounted ? localUser : null)
+    const isAuthenticated = reduxAuthenticated || (mounted && !!localUser)
+
+    useEffect(() => {
+        if (mounted && !reduxUser && localUser) {
+            dispatch(hydrateUser(localUser))
+        }
+    }, [mounted, reduxUser, localUser, dispatch])
+
     const allOrders = useSelector(state => state.order.orders)
     const coupons = useSelector(state => state.coupon.coupons)
     const wishlistIds = useSelector(state => state.wishlist?.items || [])
@@ -100,8 +128,6 @@ function ProfileDashboard() {
     if (cleanSupportWa.startsWith('01') && cleanSupportWa.length === 11) {
         cleanSupportWa = '88' + cleanSupportWa
     }
-
-    const [mounted, setMounted] = useState(false)
     const [activeTab, setActiveTab] = useState(initialTab)
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [invoiceOrder, setInvoiceOrder] = useState(null)
@@ -328,13 +354,20 @@ function ProfileDashboard() {
             return
         }
 
-        dispatch(updateProfile({
+        const updated = {
             name: editName.trim(),
             phone: editPhone.trim(),
             email: editEmail.trim(),
             avatar: editAvatar.trim() || currentUser?.avatar,
             deliveryNote: editDeliveryNote.trim()
-        }))
+        }
+
+        dispatch(updateProfile(updated))
+
+        if (isFirebaseConfigured() && currentUser?.id) {
+            const { password, ...safeUser } = { ...currentUser, ...updated }
+            saveDocToFirestore('customers', currentUser.id, safeUser).catch(e => console.warn('Firestore customer update err:', e))
+        }
 
         toast.success('প্রোফাইল তথ্য সফলভাবে আপডেট করা হয়েছে!')
     }

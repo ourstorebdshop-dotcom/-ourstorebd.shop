@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import toast from "react-hot-toast"
-import { deleteUser } from "@/lib/features/user/userSlice"
+import { deleteUser, hydrateSavedUsers } from "@/lib/features/user/userSlice"
+import { isFirebaseConfigured, loadCollectionFromFirestore, deleteDocFromFirestore } from "@/lib/firestore"
 import {
     SearchIcon,
     DownloadIcon,
@@ -36,6 +37,31 @@ export default function AdminCustomers() {
     const [sortBy, setSortBy] = useState("newest") // newest, oldest, name, orders, spent
     const [copiedField, setCopiedField] = useState(null)
     const [deletingId, setDeletingId] = useState(null)
+
+    // Load fresh customers from Firestore on mount
+    useEffect(() => {
+        if (isFirebaseConfigured()) {
+            loadCollectionFromFirestore('customers').then(fsCustomers => {
+                if (Array.isArray(fsCustomers) && fsCustomers.length > 0) {
+                    const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                    const mergedMap = new Map()
+                    fsCustomers.forEach(c => { if (c.id && !deletedIds.includes(c.id)) mergedMap.set(c.id, c) })
+                    savedUsers.forEach(c => {
+                        if (c.id && !deletedIds.includes(c.id)) {
+                            if (!mergedMap.has(c.id)) {
+                                mergedMap.set(c.id, c)
+                            } else {
+                                const existingFs = mergedMap.get(c.id)
+                                mergedMap.set(c.id, { ...existingFs, password: c.password || existingFs.password })
+                            }
+                        }
+                    })
+                    const merged = Array.from(mergedMap.values())
+                    dispatch(hydrateSavedUsers(merged))
+                }
+            }).catch(e => console.warn('Failed to load customers from Firestore in Admin:', e))
+        }
+    }, [])
 
     // Only show CUSTOMER role users (exclude admin)
     const customers = useMemo(() => {
@@ -137,6 +163,10 @@ export default function AdminCustomers() {
             const updated = savedUsers.filter(u => u.id !== customerToDelete.id)
             localStorage.setItem('gocart_users', JSON.stringify(updated))
         } catch (e) { /* ignore */ }
+
+        if (isFirebaseConfigured() && customerToDelete.id) {
+            deleteDocFromFirestore('customers', customerToDelete.id).catch(e => console.warn('Firestore delete customer err:', e))
+        }
 
         dispatch(deleteUser(customerToDelete.id))
         toast.success(`${customerToDelete.name} পার্মানেন্টলি ডিলিট করা হয়েছে`)

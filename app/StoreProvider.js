@@ -85,6 +85,31 @@ export default function StoreProvider({ children }) {
     if (!storeRef.current) {
         storeRef.current = makeStore()
         prevProductsRef.current = storeRef.current.getState().product.list
+        // Synchronous user hydration — MUST happen before first render
+        // so profile page doesn't flash guest view
+        if (typeof window !== 'undefined') {
+            try {
+                const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                const savedUserList = localStorage.getItem(SAVED_USERS_STORAGE_KEY)
+                if (savedUserList !== null) {
+                    let parsedUsers = JSON.parse(savedUserList)
+                    if (Array.isArray(parsedUsers)) {
+                        parsedUsers = parsedUsers.filter(u => u.name !== 'Google Customer' && !deletedIds.includes(u.id))
+                        storeRef.current.dispatch(hydrateSavedUsers(parsedUsers))
+                    }
+                } else {
+                    const initialUsers = defaultUsers.filter(u => !deletedIds.includes(u.id))
+                    storeRef.current.dispatch(hydrateSavedUsers(initialUsers))
+                }
+                const savedCurrentUser = localStorage.getItem(USER_STORAGE_KEY)
+                if (savedCurrentUser) {
+                    const parsedUser = JSON.parse(savedCurrentUser)
+                    if (parsedUser && parsedUser.id && parsedUser.name !== 'Google Customer' && !deletedIds.includes(parsedUser.id)) {
+                        storeRef.current.dispatch(hydrateUser(parsedUser))
+                    }
+                }
+            } catch (e) { /* ignore */ }
+        }
     }
 
     useEffect(() => {
@@ -487,6 +512,7 @@ export default function StoreProvider({ children }) {
                         shippingRes,
                         contactRes,
                         headerFooterRes,
+                        customersRes,
                     ] = await Promise.allSettled([
                         loadCollectionFromFirestore('products'),
                         loadCollectionFromFirestore('categories'),
@@ -496,6 +522,7 @@ export default function StoreProvider({ children }) {
                         loadDocFromFirestore('settings', 'shipping'),
                         loadDocFromFirestore('settings', 'contact'),
                         loadDocFromFirestore('settings', 'header_footer'),
+                        loadCollectionFromFirestore('customers'),
                     ])
 
                     // --- 1. Products ---
@@ -561,6 +588,29 @@ export default function StoreProvider({ children }) {
                     if (headerFooterRes.status === 'fulfilled' && headerFooterRes.value) {
                         store.dispatch(hydrateHeaderFooter(headerFooterRes.value))
                         try { localStorage.setItem(HEADER_FOOTER_STORAGE_KEY, JSON.stringify(headerFooterRes.value)) } catch (e) { /* ignore */ }
+                    }
+
+                    // --- 9. Customers (merge Firestore with localStorage) ---
+                    if (customersRes.status === 'fulfilled' && Array.isArray(customersRes.value) && customersRes.value.length > 0) {
+                        const fsCustomers = customersRes.value
+                        const currentSaved = store.getState().user.savedUsers
+                        // Merge: Firestore customers + local-only customers (by ID)
+                        const mergedMap = new Map()
+                        fsCustomers.forEach(c => { if (c.id) mergedMap.set(c.id, c) })
+                        currentSaved.forEach(c => {
+                            if (c.id && !mergedMap.has(c.id)) {
+                                mergedMap.set(c.id, c)
+                            } else if (c.id && mergedMap.has(c.id)) {
+                                const existingFs = mergedMap.get(c.id)
+                                mergedMap.set(c.id, { ...existingFs, password: c.password || existingFs.password })
+                            }
+                        })
+                        const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                        const merged = Array.from(mergedMap.values()).filter(u => !deletedIds.includes(u.id))
+                        isReceivingFromFirestore = true
+                        store.dispatch(hydrateSavedUsers(merged))
+                        isReceivingFromFirestore = false
+                        try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(merged)) } catch (e) { /* ignore */ }
                     }
                 } catch (e) {
                     console.warn('[Firestore] Background parallel hydration failed:', e)
@@ -721,6 +771,32 @@ export default function StoreProvider({ children }) {
                         store.dispatch(setAdminUnreadCount(count))
                     })
                 )
+
+                // Customers real-time listener (admin-only — syncs registered customers)
+                unsubscribers.push(
+                    subscribeToCollection('customers', (docs) => {
+                        if (docs && Array.isArray(docs)) {
+                            isReceivingFromFirestore = true
+                            const currentSaved = store.getState().user.savedUsers
+                            const mergedMap = new Map()
+                            docs.forEach(c => { if (c.id) mergedMap.set(c.id, c) })
+                            // Keep local-only users (not yet synced to Firestore)
+                            currentSaved.forEach(c => {
+                                if (c.id && !mergedMap.has(c.id)) {
+                                    mergedMap.set(c.id, c)
+                                } else if (c.id && mergedMap.has(c.id)) {
+                                    const existingFs = mergedMap.get(c.id)
+                                    mergedMap.set(c.id, { ...existingFs, password: c.password || existingFs.password })
+                                }
+                            })
+                            const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                            const merged = Array.from(mergedMap.values()).filter(u => !deletedIds.includes(u.id))
+                            store.dispatch(hydrateSavedUsers(merged))
+                            try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(merged)) } catch (e) { /* ignore */ }
+                            isReceivingFromFirestore = false
+                        }
+                    })
+                )
             }
         }
 
@@ -800,7 +876,7 @@ export default function StoreProvider({ children }) {
                 } catch (e) { /* ignore */ }
             }
 
-            // --- Saved Users (localStorage only) ---
+            // --- Saved Users (localStorage + Firestore) ---
             const currentSavedUsers = state.user.savedUsers
             if (currentSavedUsers !== prevSavedUsers) {
                 prevSavedUsers = currentSavedUsers
@@ -809,6 +885,16 @@ export default function StoreProvider({ children }) {
                     const sanitized = currentSavedUsers.filter(u => !deletedIds.includes(u.id))
                     localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(sanitized))
                 } catch (e) { /* ignore */ }
+                // Upsert customers to Firestore individually — NEVER use destructive syncCollectionToFirestore!
+                if (firebaseEnabled && !isReceivingFromFirestore) {
+                    const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                    const toSync = currentSavedUsers
+                        .filter(u => u && u.id && !deletedIds.includes(u.id) && u.role !== 'ADMIN')
+                    toSync.forEach(u => {
+                        const { password, ...safeUser } = u
+                        saveDocToFirestore('customers', u.id, safeUser)
+                    })
+                }
             }
 
             // --- Orders (localStorage only for now) ---
@@ -924,9 +1010,38 @@ export default function StoreProvider({ children }) {
             }
         })
 
+        // ===== Cross-tab user sync via storage event =====
+        // When another tab registers/updates users in localStorage, sync to this tab's Redux
+        const onStorageChange = (e) => {
+            if (!storeRef.current) return
+            try {
+                if (e.key === SAVED_USERS_STORAGE_KEY && e.newValue) {
+                    const parsed = JSON.parse(e.newValue)
+                    if (Array.isArray(parsed)) {
+                        const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                        const filtered = parsed.filter(u => u.name !== 'Google Customer' && !deletedIds.includes(u.id))
+                        store.dispatch(hydrateSavedUsers(filtered))
+                    }
+                }
+                if (e.key === USER_STORAGE_KEY) {
+                    if (e.newValue) {
+                        const parsed = JSON.parse(e.newValue)
+                        if (parsed && parsed.id) {
+                            store.dispatch(hydrateUser(parsed))
+                        }
+                    } else {
+                        // User logged out in another tab
+                        store.dispatch(hydrateUser(null))
+                    }
+                }
+            } catch (err) { /* ignore parse errors */ }
+        }
+        window.addEventListener('storage', onStorageChange)
+
         return () => {
             unsubscribe()
             channel.close()
+            window.removeEventListener('storage', onStorageChange)
             // Cleanup Firestore real-time listeners
             unsubscribers.forEach(unsub => unsub())
         }

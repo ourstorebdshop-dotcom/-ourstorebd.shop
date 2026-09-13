@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import toast from "react-hot-toast";
-import { logout } from "@/lib/features/user/userSlice";
+import { logout, hydrateUser } from "@/lib/features/user/userSlice";
 
 const Navbar = () => {
     const router = useRouter();
@@ -66,7 +66,32 @@ const Navbar = () => {
         });
     }, [wishlistItems, allProducts]);
     const wishlistCount = validWishlistItems.length;
-    const { currentUser, isAuthenticated } = useSelector(state => state.user);
+    const { currentUser: reduxUser, isAuthenticated: reduxAuthenticated } = useSelector(state => state.user);
+
+    const localUser = useMemo(() => {
+        if (!mounted || typeof window === 'undefined') return null;
+        try {
+            const raw = localStorage.getItem('gocart_current_user');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                const deleted = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]');
+                if (parsed && parsed.id && parsed.name !== 'Google Customer' && !deleted.includes(parsed.id)) {
+                    return parsed;
+                }
+            }
+        } catch (e) {}
+        return null;
+    }, [mounted]);
+
+    const currentUser = reduxUser || (mounted ? localUser : null);
+    const isAuthenticated = reduxAuthenticated || (mounted && !!localUser);
+
+    useEffect(() => {
+        if (mounted && !reduxUser && localUser) {
+            dispatch(hydrateUser(localUser));
+        }
+    }, [mounted, reduxUser, localUser, dispatch]);
+
     const headerSettings = useSelector(state => state.headerFooter?.header) || {};
 
     const logoType = headerSettings.logoType || 'text';
