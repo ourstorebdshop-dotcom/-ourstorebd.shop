@@ -18,6 +18,7 @@ import { hydrateHero, defaultHeroData } from '@/lib/features/hero/heroSlice'
 import { hydrateApiSettings, defaultApiSettings } from '@/lib/features/apiSettings/apiSettingsSlice'
 import { hydrateHeaderFooter, defaultHeaderFooterData } from '@/lib/features/headerFooter/headerFooterSlice'
 import { hydrateTracking, defaultTrackingSettings } from '@/lib/features/tracking/trackingSlice'
+import { hydrateFavicon, defaultFaviconSettings } from '@/lib/features/favicon/faviconSlice'
 import { couponDummyData, orderDummyData } from '@/assets/assets'
 import {
     isFirebaseConfigured,
@@ -50,6 +51,7 @@ const CASHFLOW_STORAGE_KEY = 'gocart_cashflow'
 const API_SETTINGS_STORAGE_KEY = 'gocart_api_settings'
 const HEADER_FOOTER_STORAGE_KEY = 'gocart_header_footer'
 const TRACKING_STORAGE_KEY = 'gocart_tracking_settings'
+const FAVICON_STORAGE_KEY = 'gocart_favicon_settings'
 
 // Helper to identify untouched demo dummy products (e.g. prod_1 to prod_16)
 const DUMMY_IDS = new Set([
@@ -358,6 +360,52 @@ export default function StoreProvider({ children }) {
             }
         }
 
+        function applyFaviconToDocument(faviconUrl, appleTouchIconUrl, updatedAt) {
+            if (typeof document === 'undefined' || !faviconUrl) return
+
+            const updateLinkTag = (rel, href) => {
+                if (!href) return
+                const finalHref = href.startsWith('data:')
+                    ? href
+                    : `${href}${href.includes('?') ? '&' : '?'}v=${updatedAt || Date.now()}`
+                let link = document.querySelector(`link[rel='${rel}']`)
+                if (!link) {
+                    link = document.createElement('link')
+                    link.rel = rel
+                    document.head.appendChild(link)
+                }
+                link.href = finalHref
+            }
+
+            updateLinkTag('icon', faviconUrl)
+            updateLinkTag('shortcut icon', faviconUrl)
+            if (appleTouchIconUrl) {
+                updateLinkTag('apple-touch-icon', appleTouchIconUrl)
+            }
+        }
+
+        function lsLoadFavicon() {
+            try {
+                const saved = localStorage.getItem(FAVICON_STORAGE_KEY)
+                if (saved) {
+                    const parsed = JSON.parse(saved)
+                    if (parsed && typeof parsed === 'object') {
+                        store.dispatch(hydrateFavicon(parsed))
+                        if (parsed.faviconUrl) {
+                            applyFaviconToDocument(parsed.faviconUrl, parsed.appleTouchIconUrl, parsed.updatedAt)
+                        }
+                    } else {
+                        store.dispatch(hydrateFavicon(defaultFaviconSettings))
+                    }
+                } else {
+                    store.dispatch(hydrateFavicon(defaultFaviconSettings))
+                }
+            } catch (e) {
+                console.warn('Failed to load favicon settings from localStorage:', e)
+                store.dispatch(hydrateFavicon(defaultFaviconSettings))
+            }
+        }
+
         function lsLoadAllAdmin() {
             lsLoadProducts()
             lsLoadCoupons()
@@ -369,6 +417,7 @@ export default function StoreProvider({ children }) {
             lsLoadContact()
             lsLoadHeaderFooter()
             lsLoadTracking()
+            lsLoadFavicon()
         }
 
         function lsLoadUserSpecific() {
@@ -513,6 +562,7 @@ export default function StoreProvider({ children }) {
                         contactRes,
                         headerFooterRes,
                         customersRes,
+                        faviconRes,
                     ] = await Promise.allSettled([
                         loadCollectionFromFirestore('products'),
                         loadCollectionFromFirestore('categories'),
@@ -523,6 +573,7 @@ export default function StoreProvider({ children }) {
                         loadDocFromFirestore('settings', 'contact'),
                         loadDocFromFirestore('settings', 'header_footer'),
                         loadCollectionFromFirestore('customers'),
+                        loadDocFromFirestore('settings', 'favicon'),
                     ])
 
                     // --- 1. Products ---
@@ -588,6 +639,12 @@ export default function StoreProvider({ children }) {
                     if (headerFooterRes.status === 'fulfilled' && headerFooterRes.value) {
                         store.dispatch(hydrateHeaderFooter(headerFooterRes.value))
                         try { localStorage.setItem(HEADER_FOOTER_STORAGE_KEY, JSON.stringify(headerFooterRes.value)) } catch (e) { /* ignore */ }
+                    }
+
+                    // --- 8b. Favicon Settings ---
+                    if (faviconRes?.status === 'fulfilled' && faviconRes.value) {
+                        store.dispatch(hydrateFavicon(faviconRes.value))
+                        try { localStorage.setItem(FAVICON_STORAGE_KEY, JSON.stringify(faviconRes.value)) } catch (e) { /* ignore */ }
                     }
 
                     // --- 9. Customers (merge Firestore with localStorage) ---
@@ -750,6 +807,19 @@ export default function StoreProvider({ children }) {
                 })
             )
 
+            // Favicon real-time listener
+            unsubscribers.push(
+                subscribeToDoc('settings', 'favicon', (data) => {
+                    if (data) {
+                        isReceivingFromFirestore = true
+                        store.dispatch(hydrateFavicon(data))
+                        try { localStorage.setItem(FAVICON_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
+                        applyFaviconToDocument(data.faviconUrl, data.appleTouchIconUrl, data.updatedAt)
+                        isReceivingFromFirestore = false
+                    }
+                })
+            )
+
             // Admin-only real-time listeners (only active when visiting admin routes)
             const isAdminPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
             if (isAdminPath) {
@@ -829,6 +899,7 @@ export default function StoreProvider({ children }) {
         let prevApiSettings = store.getState().apiSettings
         let prevHeaderFooter = store.getState().headerFooter
         let prevTracking = store.getState().tracking
+        let prevFavicon = store.getState().favicon
 
         const unsubscribe = store.subscribe(() => {
             const state = store.getState()
@@ -997,6 +1068,17 @@ export default function StoreProvider({ children }) {
                 }
             }
 
+            // --- Favicon Settings (Firestore + localStorage) ---
+            const currentFavicon = state.favicon
+            if (currentFavicon !== prevFavicon) {
+                prevFavicon = currentFavicon
+                try { localStorage.setItem(FAVICON_STORAGE_KEY, JSON.stringify(currentFavicon)) } catch (e) { /* ignore */ }
+                if (firebaseEnabled && !isReceivingFromFirestore) {
+                    saveDocToFirestore('settings', 'favicon', currentFavicon)
+                }
+                applyFaviconToDocument(currentFavicon.faviconUrl, currentFavicon.appleTouchIconUrl, currentFavicon.updatedAt)
+            }
+
             // --- Products: BroadcastChannel + localStorage ---
             if (!isReceivingRef.current && !isReceivingFromFirestore) {
                 const currentProducts = state.product.list
@@ -1032,6 +1114,13 @@ export default function StoreProvider({ children }) {
                     } else {
                         // User logged out in another tab
                         store.dispatch(hydrateUser(null))
+                    }
+                }
+                if (e.key === FAVICON_STORAGE_KEY && e.newValue) {
+                    const parsed = JSON.parse(e.newValue)
+                    if (parsed && parsed.faviconUrl) {
+                        store.dispatch(hydrateFavicon(parsed))
+                        applyFaviconToDocument(parsed.faviconUrl, parsed.appleTouchIconUrl, parsed.updatedAt)
                     }
                 }
             } catch (err) { /* ignore parse errors */ }

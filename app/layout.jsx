@@ -106,6 +106,27 @@ export default function RootLayout({ children }) {
 
                 <link rel="icon" href="/favicon.ico" sizes="any" />
                 <link rel="apple-touch-icon" href="/apple-icon.png" />
+                {/* Instant zero-flash favicon sync before React hydration */}
+                <script
+                    dangerouslySetInnerHTML={{
+                        __html: `
+                            (function() {
+                                try {
+                                    var raw = localStorage.getItem('gocart_favicon_settings');
+                                    if (raw) {
+                                        var parsed = JSON.parse(raw);
+                                        if (parsed && parsed.faviconUrl) {
+                                            var icon = document.querySelector("link[rel*='icon']");
+                                            if (icon) icon.href = parsed.faviconUrl;
+                                            var apple = document.querySelector("link[rel='apple-touch-icon']");
+                                            if (apple && parsed.appleTouchIconUrl) apple.href = parsed.appleTouchIconUrl;
+                                        }
+                                    }
+                                } catch(e) {}
+                            })();
+                        `,
+                    }}
+                />
                 <OrganizationJsonLd />
                 <WebsiteJsonLd />
             </head>

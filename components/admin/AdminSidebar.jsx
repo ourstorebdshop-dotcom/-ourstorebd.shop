@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import { useSelector } from "react-redux"
-import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon, ShieldAlertIcon, LayoutTemplateIcon, RadarIcon } from "lucide-react"
+import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon, ShieldAlertIcon, LayoutTemplateIcon, RadarIcon, GlobeIcon } from "lucide-react"
 import Link from "next/link"
 import { getLocalMonthStr } from "@/lib/features/cashflow/cashflowSlice"
 
@@ -60,6 +60,7 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         { name: 'Coupons', href: '/admin/coupons', icon: TicketPercentIcon },
         { name: 'Banners', href: '/admin/banners', icon: MegaphoneIcon },
         { name: 'Header & Footer', href: '/admin/header-footer', icon: LayoutTemplateIcon },
+        { name: 'Favicon Settings', href: '/admin/favicon', icon: GlobeIcon },
         { name: 'Shipping', href: '/admin/shipping', icon: TruckIcon },
         { name: 'Ad Tracking', href: '/admin/tracking', icon: RadarIcon, statusDot: !isTrackingConfigured ? 'amber' : 'green' },
         { name: 'API Settings', href: '/admin/api-settings', icon: KeyRoundIcon, statusDot: !isGoogleConfigured ? 'amber' : 'green' },

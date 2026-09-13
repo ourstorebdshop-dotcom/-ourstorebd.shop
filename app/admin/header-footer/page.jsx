@@ -58,6 +58,7 @@ import {
     CheckCircle2,
     Layers,
     SlidersHorizontal,
+    Globe,
 } from 'lucide-react'
 
 // Available social platform definitions with friendly labels
@@ -408,6 +409,14 @@ export default function AdminHeaderFooterPage() {
                     <Eye size={17} className={activeTab === 'preview' ? 'text-green-600' : 'text-slate-400'} />
                     <span>Live Preview (লাইভ প্রিভিউ)</span>
                 </button>
+
+                <Link
+                    href="/admin/favicon"
+                    className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 text-emerald-700 hover:text-emerald-900 hover:bg-white/80"
+                >
+                    <Globe size={17} className="text-emerald-600" />
+                    <span>Favicon Settings (ফেভিকন) &rarr;</span>
+                </Link>
             </div>
 
             {/* ================================================================= */}
@@ -415,6 +424,26 @@ export default function AdminHeaderFooterPage() {
             {/* ================================================================= */}
             {activeTab === 'header' && (
                 <div className="space-y-8">
+                    {/* Favicon Callout */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                                <Globe size={20} />
+                            </div>
+                            <div>
+                                <p className="text-xs sm:text-sm font-bold">ব্রাউজার ট্যাব আইকন (Favicon) পরিবর্তন করতে চান?</p>
+                                <p className="text-[11px] text-emerald-700">ওয়েবসাইটের ব্রাউজার ট্যাব ও মোবাইল বুকমার্ক আইকন আপলোড ও লাইভ প্রিভিউ করুন।</p>
+                            </div>
+                        </div>
+                        <Link
+                            href="/admin/favicon"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition shrink-0 self-start sm:self-auto shadow-xs"
+                        >
+                            <span>ফেভিকন ম্যানেজমেন্ট</span>
+                            <span>&rarr;</span>
+                        </Link>
+                    </div>
+
                     {/* Section: Brand & Logo Controls */}
                     <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200 shadow-xs space-y-5">
                         <div className="flex items-center justify-between pb-4 border-b border-slate-100">
