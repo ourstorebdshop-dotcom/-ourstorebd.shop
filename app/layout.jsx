@@ -76,8 +76,19 @@ export const metadata = {
         },
     },
     verification: {
-        google: "", // Enter Google Search Console verification code here
+        google: "59d4c3937dba4f0b",
     },
+    icons: {
+        icon: [
+            { url: "/favicon.ico", sizes: "any" },
+            { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+            { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
+        ],
+        apple: [
+            { url: "/apple-icon.png", sizes: "180x180", type: "image/png" },
+        ],
+    },
+    manifest: "/manifest.webmanifest",
     category: "ecommerce",
 };
 
@@ -105,7 +116,10 @@ export default function RootLayout({ children }) {
                 <link rel="dns-prefetch" href="https://www.googletagmanager.com" />
 
                 <link rel="icon" href="/favicon.ico" sizes="any" />
-                <link rel="apple-touch-icon" href="/apple-icon.png" />
+                <link rel="icon" href="/icon-192x192.png" type="image/png" sizes="192x192" />
+                <link rel="icon" href="/icon-512x512.png" type="image/png" sizes="512x512" />
+                <link rel="apple-touch-icon" href="/apple-icon.png" sizes="180x180" />
+                <link rel="manifest" href="/manifest.webmanifest" />
                 {/* Instant zero-flash favicon sync before React hydration */}
                 <script
                     dangerouslySetInnerHTML={{

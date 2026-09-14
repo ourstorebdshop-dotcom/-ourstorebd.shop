@@ -28,6 +28,7 @@ import {
     Eye,
     Link2,
     RefreshCw,
+    Search,
 } from 'lucide-react'
 
 export default function FaviconManagementPage() {
@@ -719,6 +720,62 @@ export default function FaviconManagementPage() {
                                 className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 placeholder="Our Store BD - Best Electronics & Gadgets"
                             />
+                        </div>
+                    </div>
+
+                    {/* Google Search Result Live Preview Card */}
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                    <Search size={16} className="text-blue-600" />
+                                    <span>গুগল সার্চ রেজাল্ট প্রিভিউ (Google Search Live Mockup)</span>
+                                </h3>
+                                <p className="text-xs text-slate-500">
+                                    গুগলে আপনার ওয়েবসাইট সার্চ করলে ভিজিটররা যেভাবে আইকন ও টাইটেল দেখতে পাবেন
+                                </p>
+                            </div>
+                            <span className="px-2.5 py-1 text-[11px] font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                                Google SEO
+                            </span>
+                        </div>
+
+                        {/* Google Search Result Card */}
+                        <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-2 shadow-xs max-w-xl">
+                            <div className="flex items-center gap-3">
+                                {/* Google circular favicon avatar (28x28) */}
+                                <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden border border-slate-200/60 shrink-0">
+                                    <img
+                                        src={previewUrl}
+                                        alt="Google Favicon"
+                                        className="w-4 h-4 object-contain"
+                                        onError={(e) => { e.currentTarget.src = '/favicon.ico' }}
+                                    />
+                                </div>
+                                <div className="leading-tight truncate">
+                                    <p className="text-xs font-medium text-slate-800">Our Store BD</p>
+                                    <p className="text-[11px] text-slate-500 truncate">https://www.ourstorebd.shop</p>
+                                </div>
+                            </div>
+                            <div className="pt-1">
+                                <h4 className="text-sm sm:text-base font-medium text-[#1a0dab] hover:underline cursor-pointer leading-snug">
+                                    {siteTitle || 'Our Store BD - Best Electronics & Gadgets Shop in Bangladesh'}
+                                </h4>
+                                <p className="text-xs text-slate-600 mt-1 line-clamp-2 leading-relaxed">
+                                    Best electronics, gadgets & smart appliances at Our Store BD – making life easy! Shop authentic smartphones, smartwatches, headphones, and earbuds with official warranty & fast Cash on Delivery...
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Best Practice Tip Alert */}
+                        <div className="p-3 rounded-xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-900 flex items-start gap-2.5">
+                            <span className="text-amber-600 text-sm mt-0.5">💡</span>
+                            <div className="space-y-1">
+                                <p className="font-semibold text-amber-950">গুগল সার্চ ফেভিকন সম্পর্কিত গুরুত্বপূর্ণ তথ্য:</p>
+                                <p className="text-[11px] text-amber-800 leading-relaxed">
+                                    গুগল সার্চ রেজাল্টে সাইটের আইকন মাত্র ১৮x১৮ পিক্সেলের ছোট্ট গোল বৃত্তে প্রদর্শিত হয়। তাই লোগোর চারপাশে কোনো বাড়তি সবুজ ফ্রেম, চারকোনা ব্যাকগ্রাউন্ড বক্স বা ছোট টেক্সট না রেখে শুধুমাত্র মূল ব্র্যান্ড প্রতীকটিকে ফুল-সাইজে ও স্বচ্ছ ব্যাকগ্রাউন্ডে রাখলে তা সবচেয়ে আকর্ষণীয় ও স্পষ্ট দেখায়।
+                                </p>
+                            </div>
                         </div>
                     </div>
 
