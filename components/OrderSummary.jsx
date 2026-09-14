@@ -274,7 +274,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
 
             {/* Delivery Info Header */}
             <div className='flex items-center justify-between'>
-                <h2 className='text-lg font-semibold text-slate-700 flex items-center gap-2'>
+                <h2 className='text-lg font-bold text-slate-900 flex items-center gap-2'>
                     <TruckIcon size={18} />
                     ডেলিভারি তথ্য
                 </h2>
@@ -327,20 +327,20 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
 
             <div className='mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3'>
                 <div>
-                    <label className='text-xs font-medium text-slate-500'>আপনার নাম <span className='text-red-500'>*</span></label>
+                    <label className='text-xs font-semibold text-slate-800'>আপনার নাম <span className='text-red-500'>*</span></label>
                     <input type="text" name="name" value={deliveryInfo.name} onChange={handleDeliveryChange} placeholder='আপনার পূর্ণ নাম' className='w-full mt-1 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-slate-400 transition-colors bg-white' />
                 </div>
                 <div>
-                    <label className='text-xs font-medium text-slate-500'>মোবাইল নাম্বার <span className='text-red-500'>*</span></label>
+                    <label className='text-xs font-semibold text-slate-800'>মোবাইল নাম্বার <span className='text-red-500'>*</span></label>
                     <input type="tel" name="phone" value={deliveryInfo.phone} onChange={handleDeliveryChange} placeholder='01XXXXXXXXX' className='w-full mt-1 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-slate-400 transition-colors bg-white' />
                 </div>
             </div>
             <div className='mt-3'>
-                <label className='text-xs font-medium text-slate-500'>ঠিকানা <span className='text-red-500'>*</span></label>
+                <label className='text-xs font-semibold text-slate-800'>ঠিকানা <span className='text-red-500'>*</span></label>
                 <input type="text" name="address" value={deliveryInfo.address} onChange={handleDeliveryChange} placeholder='বাড়ি/রোড, এলাকা, থানা, জেলা' className='w-full mt-1 border border-slate-200 rounded-lg p-2.5 text-sm outline-none focus:border-slate-400 transition-colors bg-white' />
             </div>
             <div className='mt-4'>
-                <p className='text-xs font-semibold text-slate-600 mb-2'>ডেলিভারির লোকেশন</p>
+                <p className='text-xs font-bold text-slate-800 mb-2'>ডেলিভারির লোকেশন</p>
                 <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
                     <label htmlFor="insideDhaka" className={`flex items-center gap-2 border rounded-lg p-3 cursor-pointer transition-all ${deliveryInfo.location === 'insideDhaka' ? 'border-slate-500 bg-slate-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                         <input type="radio" id="insideDhaka" name="location" value="insideDhaka" checked={deliveryInfo.location === 'insideDhaka'} onChange={handleDeliveryChange} className='accent-slate-600' />
@@ -361,7 +361,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
 
             {/* Payment Method */}
             <div className='mt-5 pt-5 border-t border-slate-200'>
-                <h2 className='text-base font-semibold text-slate-700 flex items-center gap-2'>
+                <h2 className='text-base font-bold text-slate-900 flex items-center gap-2'>
                     <CreditCardIcon size={18} />
                     পেমেন্ট পদ্ধতি
                 </h2>

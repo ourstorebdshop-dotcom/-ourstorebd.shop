@@ -18,7 +18,8 @@ import {
     ShieldAlertIcon,
     ShieldCheckIcon,
     ShieldXIcon,
-    BanIcon
+    BanIcon,
+    RotateCcwIcon
 } from "lucide-react"
 import { blockPhone, unblockPhone } from "@/lib/features/fraud/fraudSlice"
 import { trackRefund } from "@/lib/tracking/clientTracker"
@@ -81,13 +82,20 @@ export default function AdminOrders() {
         : null
 
 
-    // Filter orders
+    // Filter and sort orders (newest first)
     const filteredOrders = orders.filter(order => {
-        const matchesSearch = (order.user?.name || "").toLowerCase().includes(search.toLowerCase()) ||
-                              (order.user?.email || "").toLowerCase().includes(search.toLowerCase()) ||
-                              (order.id || "").toLowerCase().includes(search.toLowerCase())
+        const q = search.toLowerCase()
+        const matchesSearch = (order.user?.name || "").toLowerCase().includes(q) ||
+                              (order.user?.email || "").toLowerCase().includes(q) ||
+                              (order.id || "").toLowerCase().includes(q) ||
+                              (order.address?.phone || order.user?.phone || "").includes(q) ||
+                              (order.address?.normalizedPhone || "").includes(q)
         const matchesStatus = statusFilter === "ALL" || order.status === statusFilter
         return matchesSearch && matchesStatus
+    }).sort((a, b) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return dateB - dateA
     })
 
     const getStatusBadge = (status) => {
@@ -100,6 +108,8 @@ export default function AdminOrders() {
                 return <span className="px-2.5 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold inline-flex items-center gap-1"><ClockIcon size={13} /> PROCESSING</span>
             case "CANCELLED":
                 return <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold inline-flex items-center gap-1"><XCircleIcon size={13} /> CANCELLED</span>
+            case "REFUNDED":
+                return <span className="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold inline-flex items-center gap-1 border border-purple-300/60"><RotateCcwIcon size={13} /> REFUNDED</span>
             case "PENDING_REVIEW":
                 return <span className="px-2.5 py-1 bg-amber-100 text-amber-800 rounded-full text-xs font-semibold inline-flex items-center gap-1 border border-amber-300/60"><ShieldAlertIcon size={13} /> PENDING REVIEW</span>
             case "FRAUD_REJECTED":
@@ -129,7 +139,7 @@ export default function AdminOrders() {
                         type="text"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search by customer name, email..."
+                        placeholder="Search by name, phone, email, order ID..."
                         className="w-full pl-10 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition"
                     />
                     {search && (
@@ -140,7 +150,7 @@ export default function AdminOrders() {
                 </div>
 
                 <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-                    {["ALL", "PENDING_REVIEW", "ORDER_PLACED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "FRAUD_REJECTED"].map((status) => (
+                    {["ALL", "PENDING_REVIEW", "ORDER_PLACED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED", "REFUNDED", "FRAUD_REJECTED"].map((status) => (
                         <button
                             key={status}
                             onClick={() => setStatusFilter(status)}
@@ -239,6 +249,7 @@ export default function AdminOrders() {
                                                 <option value="SHIPPED">SHIPPED</option>
                                                 <option value="DELIVERED">DELIVERED</option>
                                                 <option value="CANCELLED">CANCELLED</option>
+                                                <option value="REFUNDED">REFUNDED</option>
                                                 <option value="FRAUD_REJECTED">FRAUD REJECTED</option>
                                             </select>
                                         </td>
@@ -327,7 +338,7 @@ export default function AdminOrders() {
                             <div>
                                 <h3 className="font-semibold text-slate-800 mb-1.5 text-sm">Shipping Address</h3>
                                 <p className="text-slate-600 leading-relaxed">
-                                    {modalOrder.address?.street}, {modalOrder.address?.city}, {modalOrder.address?.state} {modalOrder.address?.zip}, {modalOrder.address?.country}
+                                    {[modalOrder.address?.street, modalOrder.address?.city, modalOrder.address?.country].filter(Boolean).join(', ')}
                                 </p>
                             </div>
                         </div>
@@ -392,31 +403,78 @@ export default function AdminOrders() {
                             </div>
                         </div>
 
-                        {/* Summary & Actions */}
-                        <div className="flex justify-between items-center pt-4 border-t border-slate-100 text-sm">
-                            <div className="space-y-1">
-                                <p className="text-xs text-slate-500">Payment: <span className="font-bold text-slate-700">{modalOrder.paymentMethod}</span></p>
-                                <p className="text-xs text-slate-500">Order Date: <span className="text-slate-700" suppressHydrationWarning>{modalOrder.createdAt ? new Date(modalOrder.createdAt).toLocaleDateString() : '—'}</span></p>
-                                <div className="flex items-center gap-2 pt-1">
-                                    <span className="text-xs text-slate-500">Status:</span>
-                                    <select
-                                        value={modalOrder.status}
-                                        onChange={(e) => handleUpdateOrderStatus(modalOrder.id, e.target.value)}
-                                        className="border border-slate-200 rounded-lg text-xs py-1 px-2 font-medium bg-white focus:ring-2 focus:ring-green-100 outline-none"
-                                    >
-                                        <option value="ORDER_PLACED">ORDER PLACED</option>
-                                        <option value="PENDING_REVIEW">PENDING REVIEW</option>
-                                        <option value="PROCESSING">PROCESSING</option>
-                                        <option value="SHIPPED">SHIPPED</option>
-                                        <option value="DELIVERED">DELIVERED</option>
-                                        <option value="CANCELLED">CANCELLED</option>
-                                        <option value="FRAUD_REJECTED">FRAUD REJECTED</option>
-                                    </select>
-                                </div>
+                        {/* Payment & Transaction Details */}
+                        <div className="mb-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
+                            <h3 className="font-semibold text-slate-800 text-sm mb-2">Payment Details</h3>
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Payment Method:</span>
+                                <span className="font-bold text-slate-700">{modalOrder.paymentMethod}</span>
                             </div>
-                            <div className="text-right">
-                                <p className="text-xs text-slate-400">Total Amount</p>
-                                <p className="text-2xl font-bold text-green-600">{currency}{Number(modalOrder.total).toLocaleString('en-IN')}</p>
+                            {modalOrder.trxId && (
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Transaction ID:</span>
+                                    <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">{modalOrder.trxId}</span>
+                                </div>
+                            )}
+                            {modalOrder.bankName && (
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Bank Name:</span>
+                                    <span className="font-semibold text-slate-700">{modalOrder.bankName}</span>
+                                </div>
+                            )}
+                            {modalOrder.bankTrxId && (
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Bank Trx ID:</span>
+                                    <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded">{modalOrder.bankTrxId}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Order Date:</span>
+                                <span className="text-slate-700" suppressHydrationWarning>{modalOrder.createdAt ? new Date(modalOrder.createdAt).toLocaleString('bn-BD') : '—'}</span>
+                            </div>
+                        </div>
+
+                        {/* Financial Breakdown */}
+                        <div className="mb-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1.5">
+                            <h3 className="font-semibold text-slate-800 text-sm mb-2">Financial Summary</h3>
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Subtotal:</span>
+                                <span className="font-semibold text-slate-700">{currency}{Number(modalOrder.subtotal || 0).toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="flex justify-between">
+                                <span className="text-slate-500">Shipping Cost:</span>
+                                <span className="font-semibold text-slate-700">{currency}{Number(modalOrder.shippingCost || 0).toLocaleString('en-IN')}</span>
+                            </div>
+                            {modalOrder.discountAmount > 0 && (
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">Coupon Discount:</span>
+                                    <span className="font-semibold text-green-600">-{currency}{Number(modalOrder.discountAmount).toLocaleString('en-IN')}</span>
+                                </div>
+                            )}
+                            <div className="flex justify-between pt-2 border-t border-slate-200">
+                                <span className="font-bold text-slate-800">Total Amount:</span>
+                                <span className="text-lg font-bold text-green-600">{currency}{Number(modalOrder.total).toLocaleString('en-IN')}</span>
+                            </div>
+                        </div>
+
+                        {/* Status Update & Actions */}
+                        <div className="flex items-center justify-between pt-4 border-t border-slate-100 text-sm">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-500 font-medium">Status:</span>
+                                <select
+                                    value={modalOrder.status}
+                                    onChange={(e) => handleUpdateOrderStatus(modalOrder.id, e.target.value)}
+                                    className="border border-slate-200 rounded-lg text-xs py-1.5 px-2 font-medium bg-white focus:ring-2 focus:ring-green-100 outline-none"
+                                >
+                                    <option value="ORDER_PLACED">ORDER PLACED</option>
+                                    <option value="PENDING_REVIEW">PENDING REVIEW</option>
+                                    <option value="PROCESSING">PROCESSING</option>
+                                    <option value="SHIPPED">SHIPPED</option>
+                                    <option value="DELIVERED">DELIVERED</option>
+                                    <option value="CANCELLED">CANCELLED</option>
+                                    <option value="REFUNDED">REFUNDED</option>
+                                    <option value="FRAUD_REJECTED">FRAUD REJECTED</option>
+                                </select>
                             </div>
                         </div>
                     </div>
