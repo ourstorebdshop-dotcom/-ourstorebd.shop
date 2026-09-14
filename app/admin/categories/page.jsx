@@ -9,6 +9,7 @@ import {
     reorderCategory,
 } from '@/lib/features/category/categorySlice'
 import { updateProduct } from '@/lib/features/product/productSlice'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import {
     Plus,
     PencilIcon,
@@ -103,6 +104,9 @@ export default function AdminCategoriesPage() {
                 }
                 if (needsUpdate) {
                     dispatch(updateProduct(updatedProduct))
+                    if (isFirebaseConfigured()) {
+                        saveDocToFirestore('products', updatedProduct.id, updatedProduct)
+                    }
                 }
             })
         }

@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { blockPhone, unblockPhone } from "@/lib/features/fraud/fraudSlice"
 import { trackRefund } from "@/lib/tracking/clientTracker"
+import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from "@/lib/firestore"
 
 export default function AdminOrders() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
@@ -35,7 +36,14 @@ export default function AdminOrders() {
     const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState("ALL")
 
-    const handleUpdateOrderStatus = (orderId, newStatus) => {
+    const handleUpdateOrderStatus = async (orderId, newStatus) => {
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('orders', orderId, { status: newStatus, updatedAt: new Date().toISOString() })
+            if (!ok) {
+                toast.error('অর্ডার স্ট্যাটাস ডাটাবেজে আপডেট করা যায়নি!')
+                return
+            }
+        }
         dispatch(setOrderStatusRedux({ orderId, status: newStatus }))
         if (newStatus === 'CANCELLED' || newStatus === 'REFUNDED') {
             const ord = orders.find(o => o.id === orderId)
@@ -44,7 +52,14 @@ export default function AdminOrders() {
         toast.success(`Order status updated to ${newStatus}`)
     }
 
-    const confirmDeleteOrder = () => {
+    const confirmDeleteOrder = async () => {
+        if (isFirebaseConfigured()) {
+            const ok = await deleteDocFromFirestore('orders', deletingOrderId)
+            if (!ok) {
+                toast.error('অর্ডারটি ডাটাবেজ থেকে মুছে ফেলা যায়নি!')
+                return
+            }
+        }
         dispatch(removeOrderRedux(deletingOrderId))
         toast.success("Order deleted successfully!")
         setDeletingOrderId(null)

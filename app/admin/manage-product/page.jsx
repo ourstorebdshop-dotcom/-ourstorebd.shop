@@ -4,7 +4,7 @@ import { toast } from "react-hot-toast"
 import Image from "next/image"
 import { useDispatch, useSelector } from "react-redux"
 import { updateProduct, deleteProduct as deleteProductAction, toggleProductStock } from "@/lib/features/product/productSlice"
-import { saveDocToFirestore, deleteDocFromFirestore } from "@/lib/firestore"
+import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from "@/lib/firestore"
 import { isDemoProduct } from "@/app/StoreProvider"
 import { 
     SearchIcon, 
@@ -50,16 +50,22 @@ export default function AdminManageProducts() {
     }))]
 
     // Toggle product stock
-    const toggleStock = (productId) => {
+    const toggleStock = async (productId) => {
         const p = products.find(p => p.id === productId)
         const newStock = !p?.inStock
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('products', productId, { inStock: newStock })
+            if (!ok) {
+                toast.error('স্টক স্ট্যাটাস ডাটাবেজে আপডেট করা যায়নি!')
+                return
+            }
+        }
         dispatch(toggleProductStock(productId))
-        saveDocToFirestore('products', productId, { inStock: newStock })
         toast.success(`Product "${p?.name}" marked as ${newStock ? 'In Stock' : 'Out of Stock'}`)
     }
 
     // Handle Edit Submit
-    const handleEditSubmit = (e) => {
+    const handleEditSubmit = async (e) => {
         e.preventDefault()
 
         const mrpVal = parseFloat(editingProduct.mrp)
@@ -100,8 +106,15 @@ export default function AdminManageProducts() {
             updatedAt: new Date().toISOString()
         }
 
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('products', updatedProduct.id, updatedProduct)
+            if (!ok) {
+                toast.error('প্রোডাক্ট ডাটাবেজে আপডেট করা যায়নি!')
+                return
+            }
+        }
+
         dispatch(updateProduct(updatedProduct))
-        saveDocToFirestore('products', updatedProduct.id, updatedProduct)
         // Immediate localStorage cache update
         try {
             const saved = localStorage.getItem('gocart_products')
@@ -120,8 +133,15 @@ export default function AdminManageProducts() {
     // Handle Delete Confirm
     const handleDeleteConfirm = async () => {
         const prod = products.find(p => p.id === deletingProductId)
+        if (isFirebaseConfigured()) {
+            const ok = await deleteDocFromFirestore('products', deletingProductId)
+            if (!ok) {
+                toast.error('প্রোডাক্ট ডাটাবেজ থেকে মুছে ফেলা যায়নি!')
+                return
+            }
+        }
+
         dispatch(deleteProductAction(deletingProductId))
-        deleteDocFromFirestore('products', deletingProductId)
 
         // Immediate localStorage cache update
         try {

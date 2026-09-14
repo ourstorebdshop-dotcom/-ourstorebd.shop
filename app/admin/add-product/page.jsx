@@ -8,7 +8,7 @@ import { useDispatch, useSelector } from "react-redux"
 import { addProduct } from "@/lib/features/product/productSlice"
 import { useRouter } from "next/navigation"
 import { compressImage } from "@/lib/imageCompressor"
-import { saveDocToFirestore } from "@/lib/firestore"
+import { saveDocToFirestore, isFirebaseConfigured } from "@/lib/firestore"
 
 export default function AdminAddProduct() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
@@ -191,7 +191,14 @@ export default function AdminAddProduct() {
             }
 
             // Save immediately to Firestore (syncs across the entire world instantly)
-            await saveDocToFirestore('products', newProduct.id, newProduct)
+            if (isFirebaseConfigured()) {
+                const saved = await saveDocToFirestore('products', newProduct.id, newProduct)
+                if (!saved) {
+                    toast.error('ডাটাবেজে প্রোডাক্ট সংরক্ষণ করা যায়নি!')
+                    setLoading(false)
+                    return
+                }
+            }
 
             dispatch(addProduct(newProduct))
 

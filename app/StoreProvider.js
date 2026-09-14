@@ -557,24 +557,36 @@ export default function StoreProvider({ children }) {
                         categoriesRes,
                         bannersRes,
                         couponsRes,
+                        ordersRes,
                         heroRes,
                         shippingRes,
                         contactRes,
                         headerFooterRes,
                         customersRes,
                         faviconRes,
+                        fraudRes,
+                        cashflowRes,
+                        apiSettingsRes,
+                        trackingRes,
                     ] = await Promise.allSettled([
                         loadCollectionFromFirestore('products'),
                         loadCollectionFromFirestore('categories'),
                         loadCollectionFromFirestore('banners'),
                         loadCollectionFromFirestore('coupons'),
+                        loadCollectionFromFirestore('orders'),
                         loadDocFromFirestore('settings', 'hero'),
                         loadDocFromFirestore('settings', 'shipping'),
                         loadDocFromFirestore('settings', 'contact'),
                         loadDocFromFirestore('settings', 'header_footer'),
                         loadCollectionFromFirestore('customers'),
                         loadDocFromFirestore('settings', 'favicon'),
+                        loadDocFromFirestore('settings', 'fraud'),
+                        loadDocFromFirestore('settings', 'cashflow'),
+                        loadDocFromFirestore('settings', 'api_settings'),
+                        loadDocFromFirestore('settings', 'tracking'),
                     ])
+
+                    isReceivingFromFirestore = true
 
                     // --- 1. Products ---
                     if (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value)) {
@@ -613,6 +625,16 @@ export default function StoreProvider({ children }) {
                         try { localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(couponsRes.value)) } catch (e) { /* ignore */ }
                     }
 
+                    // --- 4b. Orders ---
+                    if (ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value)) {
+                        const fsOrders = ordersRes.value.filter(o => o && o.id)
+                        if (fsOrders.length > 0) {
+                            store.dispatch(hydrateOrders(fsOrders))
+                            prevOrders = fsOrders
+                            try { localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(fsOrders)) } catch (e) { /* ignore */ }
+                        }
+                    }
+
                     // --- 5. Hero Banner ---
                     if (heroRes.status === 'fulfilled' && heroRes.value) {
                         store.dispatch(hydrateHero(heroRes.value))
@@ -647,42 +669,48 @@ export default function StoreProvider({ children }) {
                         try { localStorage.setItem(FAVICON_STORAGE_KEY, JSON.stringify(faviconRes.value)) } catch (e) { /* ignore */ }
                     }
 
-                    // --- 9. Customers (merge Firestore with localStorage) ---
+                    // --- 8c. Fraud Guard Settings ---
+                    if (fraudRes?.status === 'fulfilled' && fraudRes.value) {
+                        store.dispatch(hydrateFraud(fraudRes.value))
+                        try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(fraudRes.value)) } catch (e) { /* ignore */ }
+                    }
+
+                    // --- 8d. Cash Flow Data ---
+                    if (cashflowRes?.status === 'fulfilled' && cashflowRes.value) {
+                        store.dispatch(hydrateCashflow(cashflowRes.value))
+                        try { localStorage.setItem(CASHFLOW_STORAGE_KEY, JSON.stringify(cashflowRes.value)) } catch (e) { /* ignore */ }
+                    }
+
+                    // --- 8e. API Settings ---
+                    if (apiSettingsRes?.status === 'fulfilled' && apiSettingsRes.value) {
+                        store.dispatch(hydrateApiSettings(apiSettingsRes.value))
+                        try { localStorage.setItem(API_SETTINGS_STORAGE_KEY, JSON.stringify(apiSettingsRes.value)) } catch (e) { /* ignore */ }
+                    }
+
+                    // --- 8f. Tracking & Pixel Settings ---
+                    if (trackingRes?.status === 'fulfilled' && trackingRes.value) {
+                        store.dispatch(hydrateTracking(trackingRes.value))
+                        try { localStorage.setItem(TRACKING_STORAGE_KEY, JSON.stringify(trackingRes.value)) } catch (e) { /* ignore */ }
+                    }
+
+                    // --- 9. Customers (Firestore is source of truth) ---
                     if (customersRes.status === 'fulfilled' && Array.isArray(customersRes.value) && customersRes.value.length > 0) {
                         const fsCustomers = customersRes.value
-                        const currentSaved = store.getState().user.savedUsers
-                        // Merge: Firestore customers + local-only customers (by ID)
-                        const mergedMap = new Map()
-                        fsCustomers.forEach(c => { if (c.id) mergedMap.set(c.id, c) })
-                        currentSaved.forEach(c => {
-                            if (c.id && !mergedMap.has(c.id)) {
-                                mergedMap.set(c.id, c)
-                            } else if (c.id && mergedMap.has(c.id)) {
-                                const existingFs = mergedMap.get(c.id)
-                                mergedMap.set(c.id, { ...existingFs, password: c.password || existingFs.password })
-                            }
-                        })
                         const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
-                        const merged = Array.from(mergedMap.values()).filter(u => !deletedIds.includes(u.id))
-                        isReceivingFromFirestore = true
-                        store.dispatch(hydrateSavedUsers(merged))
-                        isReceivingFromFirestore = false
-                        try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(merged)) } catch (e) { /* ignore */ }
+                        const filtered = fsCustomers.filter(u => u && u.id && !deletedIds.includes(u.id))
+                        store.dispatch(hydrateSavedUsers(filtered))
+                        try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(filtered)) } catch (e) { /* ignore */ }
                     }
                 } catch (e) {
                     console.warn('[Firestore] Background parallel hydration failed:', e)
+                } finally {
+                    isReceivingFromFirestore = false
                 }
             }
         }
 
-        // Defer background network fetch to idle time to let UI paint in 0ms without contention
-        const scheduleBackgroundHydration = typeof window !== 'undefined' && 'requestIdleCallback' in window
-            ? window.requestIdleCallback
-            : (fn) => setTimeout(fn, 120)
-
-        scheduleBackgroundHydration(() => {
-            hydrateData()
-        })
+        // Immediately trigger network hydration on mount (do not delay with idle callback)
+        hydrateData()
 
         // ===== REAL-TIME LISTENERS (Firestore → Redux) =====
         const unsubscribers = []
@@ -739,6 +767,19 @@ export default function StoreProvider({ children }) {
                         isReceivingFromFirestore = true
                         store.dispatch(hydrateCoupons(docs))
                         try { localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(docs)) } catch (e) { /* ignore */ }
+                        isReceivingFromFirestore = false
+                    }
+                })
+            )
+
+            // Orders real-time listener (syncs order changes across all devices/tabs immediately)
+            unsubscribers.push(
+                subscribeToCollection('orders', (docs) => {
+                    if (docs && Array.isArray(docs)) {
+                        isReceivingFromFirestore = true
+                        store.dispatch(hydrateOrders(docs))
+                        prevOrders = docs
+                        try { localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(docs)) } catch (e) { /* ignore */ }
                         isReceivingFromFirestore = false
                     }
                 })
@@ -820,54 +861,62 @@ export default function StoreProvider({ children }) {
                 })
             )
 
-            // Admin-only real-time listeners (only active when visiting admin routes)
-            const isAdminPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
-            if (isAdminPath) {
-                // Fraud settings real-time listener
-                unsubscribers.push(
-                    subscribeToDoc('settings', 'fraud', (data) => {
-                        if (data) {
-                            isReceivingFromFirestore = true
-                            store.dispatch(hydrateFraud(data))
-                            try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                            isReceivingFromFirestore = false
-                        }
-                    })
-                )
+            // Fraud settings real-time listener (always active so navigation to /admin gets immediate updates)
+            unsubscribers.push(
+                subscribeToDoc('settings', 'fraud', (data) => {
+                    if (data) {
+                        isReceivingFromFirestore = true
+                        store.dispatch(hydrateFraud(data))
+                        try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
+                        isReceivingFromFirestore = false
+                    }
+                })
+            )
 
-                // Chat admin unread count real-time listener (lightweight — counts only)
-                unsubscribers.push(
-                    subscribeToAdminUnreadCount((count) => {
-                        store.dispatch(setAdminUnreadCount(count))
-                    })
-                )
+            // Cash Flow real-time listener
+            unsubscribers.push(
+                subscribeToDoc('settings', 'cashflow', (data) => {
+                    if (data) {
+                        isReceivingFromFirestore = true
+                        store.dispatch(hydrateCashflow(data))
+                        try { localStorage.setItem(CASHFLOW_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
+                        isReceivingFromFirestore = false
+                    }
+                })
+            )
 
-                // Customers real-time listener (admin-only — syncs registered customers)
-                unsubscribers.push(
-                    subscribeToCollection('customers', (docs) => {
-                        if (docs && Array.isArray(docs)) {
-                            isReceivingFromFirestore = true
-                            const currentSaved = store.getState().user.savedUsers
-                            const mergedMap = new Map()
-                            docs.forEach(c => { if (c.id) mergedMap.set(c.id, c) })
-                            // Keep local-only users (not yet synced to Firestore)
-                            currentSaved.forEach(c => {
-                                if (c.id && !mergedMap.has(c.id)) {
-                                    mergedMap.set(c.id, c)
-                                } else if (c.id && mergedMap.has(c.id)) {
-                                    const existingFs = mergedMap.get(c.id)
-                                    mergedMap.set(c.id, { ...existingFs, password: c.password || existingFs.password })
-                                }
-                            })
-                            const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
-                            const merged = Array.from(mergedMap.values()).filter(u => !deletedIds.includes(u.id))
-                            store.dispatch(hydrateSavedUsers(merged))
-                            try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(merged)) } catch (e) { /* ignore */ }
-                            isReceivingFromFirestore = false
-                        }
-                    })
-                )
-            }
+            // API Settings real-time listener
+            unsubscribers.push(
+                subscribeToDoc('settings', 'api_settings', (data) => {
+                    if (data) {
+                        isReceivingFromFirestore = true
+                        store.dispatch(hydrateApiSettings(data))
+                        try { localStorage.setItem(API_SETTINGS_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
+                        isReceivingFromFirestore = false
+                    }
+                })
+            )
+
+            // Chat admin unread count real-time listener (lightweight — counts only)
+            unsubscribers.push(
+                subscribeToAdminUnreadCount((count) => {
+                    store.dispatch(setAdminUnreadCount(count))
+                })
+            )
+
+            // Customers real-time listener
+            unsubscribers.push(
+                subscribeToCollection('customers', (docs) => {
+                    if (docs && Array.isArray(docs)) {
+                        isReceivingFromFirestore = true
+                        const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                        const filtered = docs.filter(u => u && u.id && !deletedIds.includes(u.id))
+                        store.dispatch(hydrateSavedUsers(filtered))
+                        try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(filtered)) } catch (e) { /* ignore */ }
+                        isReceivingFromFirestore = false
+                    }
+                })
+            )
         }
 
         // ===== BroadcastChannel for product sync across tabs =====
@@ -1034,18 +1083,24 @@ export default function StoreProvider({ children }) {
                 }
             }
 
-            // --- Cash Flow (localStorage only — admin internal) ---
+            // --- Cash Flow (Firestore + localStorage) ---
             const currentCashflow = state.cashflow
             if (currentCashflow !== prevCashflow) {
                 prevCashflow = currentCashflow
                 try { localStorage.setItem(CASHFLOW_STORAGE_KEY, JSON.stringify(currentCashflow)) } catch (e) { /* ignore */ }
+                if (firebaseEnabled && !isReceivingFromFirestore) {
+                    saveDocToFirestore('settings', 'cashflow', currentCashflow)
+                }
             }
 
-            // --- API Settings (localStorage only — contains secrets) ---
+            // --- API Settings (Firestore + localStorage) ---
             const currentApiSettings = state.apiSettings
             if (currentApiSettings !== prevApiSettings) {
                 prevApiSettings = currentApiSettings
                 try { localStorage.setItem(API_SETTINGS_STORAGE_KEY, JSON.stringify(currentApiSettings)) } catch (e) { /* ignore */ }
+                if (firebaseEnabled && !isReceivingFromFirestore) {
+                    saveDocToFirestore('settings', 'api_settings', currentApiSettings)
+                }
             }
 
             // --- Header & Footer (Firestore + localStorage) ---
