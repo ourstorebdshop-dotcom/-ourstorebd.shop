@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import { useSelector } from "react-redux"
-import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon, ShieldAlertIcon, LayoutTemplateIcon, RadarIcon, GlobeIcon } from "lucide-react"
+import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon, ShieldAlertIcon, LayoutTemplateIcon, RadarIcon, GlobeIcon, ZapIcon } from "lucide-react"
 import Link from "next/link"
 import { getLocalMonthStr } from "@/lib/features/cashflow/cashflowSlice"
 
@@ -25,6 +25,13 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         (trackingState?.meta?.enabled && trackingState?.meta?.pixelId) ||
         (trackingState?.googleAds?.enabled && trackingState?.googleAds?.conversionId) ||
         (trackingState?.ga4?.enabled && trackingState?.ga4?.measurementId)
+    )
+
+    // Order Integrations status (Telegram / Google Sheets)
+    const integrationsState = useSelector(state => state.integrations)
+    const isIntegrationsConfigured = Boolean(
+        (integrationsState?.telegram?.enabled && integrationsState?.telegram?.botToken && integrationsState?.telegram?.chatId) ||
+        (integrationsState?.googleSheets?.enabled && (integrationsState?.googleSheets?.webhookUrl || integrationsState?.googleSheets?.spreadsheetId))
     )
 
     // Cash Flow Budget alert badge count
@@ -65,6 +72,7 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         { name: 'Favicon Settings', href: '/admin/favicon', icon: GlobeIcon },
         { name: 'Shipping', href: '/admin/shipping', icon: TruckIcon },
         { name: 'Ad Tracking', href: '/admin/tracking', icon: RadarIcon, statusDot: !isTrackingConfigured ? 'amber' : 'green' },
+        { name: 'Integrations', href: '/admin/integrations', icon: ZapIcon, statusDot: !isIntegrationsConfigured ? 'amber' : 'green' },
         { name: 'API Settings', href: '/admin/api-settings', icon: KeyRoundIcon, statusDot: !isGoogleConfigured ? 'amber' : 'green' },
     ]
 

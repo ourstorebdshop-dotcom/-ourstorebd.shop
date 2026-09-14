@@ -25,6 +25,7 @@ import { calculateRiskScore } from '@/lib/fraud/riskScorer'
 import { logFraudEvent } from '@/lib/fraud/auditLog'
 import { getFraudConfig } from '@/lib/fraud/config'
 import { productDummyData } from '@/assets/assets'
+import { syncOrderIntegrations } from '@/lib/integrations/syncEngine'
 
 // In-memory idempotency store (prevents duplicate processing within the same serverless instance)
 const processedKeys = new Map()
@@ -489,6 +490,13 @@ export async function POST(request) {
                 }).catch(() => {})
             )
         }
+
+        // Order Automation: Sync order to Telegram Bot & Google Sheets (non-blocking)
+        const requestOrigin = request.nextUrl?.origin || 'https://ourstorebd.shop'
+        bgTasks.push(
+            syncOrderIntegrations(newOrder, requestOrigin)
+                .catch(e => console.warn('[OrderAPI] Order integration sync non-blocking error:', e))
+        )
 
         // Don't await background tasks — let them run after response is sent
 

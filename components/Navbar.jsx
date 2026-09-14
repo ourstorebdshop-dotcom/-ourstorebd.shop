@@ -171,7 +171,7 @@ const Navbar = () => {
     };
 
     return (
-        <nav className={`bg-white ${isSticky ? 'sticky top-0' : 'relative'} z-40 shadow-xs border-b border-slate-100`}>
+        <header className={`bg-white ${isSticky ? 'sticky top-0' : 'relative'} z-40 shadow-xs border-b border-slate-100`}>
             <div className="mx-6">
                 <div className="flex items-center justify-between max-w-7xl mx-auto py-3.5 transition-all">
 
@@ -540,7 +540,7 @@ const Navbar = () => {
                     </div>
                 </>
             )}
-        </nav>
+        </header>
     );
 };
 

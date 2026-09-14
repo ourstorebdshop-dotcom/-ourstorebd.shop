@@ -90,8 +90,6 @@
 /* Body scroll lock when mobile menu is open */
 .body-scroll-lock {
     overflow: hidden;
-    position: fixed;
-    width: 100%;
 }
 
 /* Printable Invoice Styles */
