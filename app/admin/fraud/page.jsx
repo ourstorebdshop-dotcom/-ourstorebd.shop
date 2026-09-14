@@ -38,10 +38,11 @@ import {
 } from '@/lib/features/fraud/fraudSlice'
 import { updateOrderStatus } from '@/lib/features/order/orderSlice'
 import { FRAUD_DEFAULTS } from '@/lib/fraud/config'
-import { normalizePhone, validateBDPhone } from '@/lib/fraud/phoneValidator'
+import { normalizePhone, validateBDPhone, phonesMatch } from '@/lib/fraud/phoneValidator'
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { isFirebaseConfigured } from '@/lib/firestore'
+import { isFirebaseConfigured, saveDocToFirestore } from '@/lib/firestore'
+import { getRecentAuditLogs, logFraudEvent } from '@/lib/fraud/auditLog'
 
 export default function AdminFraudPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
@@ -55,7 +56,11 @@ export default function AdminFraudPage() {
     const watchlist = fraudState?.watchlist || []
     const trustedPhones = fraudState?.trustedPhones || []
     const savedSettings = fraudState?.settings || null
-    const hasSyncedRef = useRef(false)
+
+    // Form dirty tracking and loading states
+    const [isFormDirty, setIsFormDirty] = useState(false)
+    const [actionLoadingId, setActionLoadingId] = useState(null)
+    const [isSavingSettings, setIsSavingSettings] = useState(false)
 
     // Active tab
     const [activeTab, setActiveTab] = useState('pending') // 'pending' | 'blocked_phones' | 'blocked_ips' | 'watchlist' | 'settings' | 'logs'
@@ -84,15 +89,14 @@ export default function AdminFraudPage() {
         codRiskMultiplier: savedSettings?.codRiskMultiplier ?? FRAUD_DEFAULTS?.codRiskMultiplier ?? 1.5,
         requireVerificationForMediumRisk: savedSettings?.requireVerificationForMediumRisk ?? true,
         autoBlockHighRisk: savedSettings?.autoBlockHighRisk ?? false,
-        riskThresholdMedium: savedSettings?.riskThresholds?.MEDIUM ?? savedSettings?.riskThresholds?.low ?? FRAUD_DEFAULTS?.riskThresholds?.low ?? 30,
-        riskThresholdHigh: savedSettings?.riskThresholds?.HIGH ?? savedSettings?.riskThresholds?.medium ?? FRAUD_DEFAULTS?.riskThresholds?.medium ?? 60,
+        riskThresholdMedium: savedSettings?.riskThresholds?.low ?? savedSettings?.riskThresholds?.MEDIUM ?? FRAUD_DEFAULTS?.riskThresholds?.low ?? 30,
+        riskThresholdHigh: savedSettings?.riskThresholds?.medium ?? savedSettings?.riskThresholds?.HIGH ?? FRAUD_DEFAULTS?.riskThresholds?.medium ?? 60,
     })
 
-    // Sync settingsForm only once when savedSettings first becomes available from Redux/Firestore
+    // Sync settingsForm whenever savedSettings updates from Redux/Firestore (as long as user is not actively editing)
     useEffect(() => {
-        if (hasSyncedRef.current) return
+        if (isFormDirty) return
         if (savedSettings && typeof savedSettings === 'object' && Object.keys(savedSettings).length > 0) {
-            hasSyncedRef.current = true
             setSettingsForm({
                 maxOrdersPerPhonePerHour: savedSettings.maxOrdersPerPhonePerHour ?? FRAUD_DEFAULTS?.maxOrdersPerPhonePerHour ?? 3,
                 maxOrdersPerIPPerHour: savedSettings.maxOrdersPerIPPerHour ?? FRAUD_DEFAULTS?.maxOrdersPerIPPerHour ?? 5,
@@ -101,30 +105,36 @@ export default function AdminFraudPage() {
                 codRiskMultiplier: savedSettings.codRiskMultiplier ?? FRAUD_DEFAULTS?.codRiskMultiplier ?? 1.5,
                 requireVerificationForMediumRisk: savedSettings.requireVerificationForMediumRisk ?? true,
                 autoBlockHighRisk: savedSettings.autoBlockHighRisk ?? false,
-                riskThresholdMedium: savedSettings.riskThresholds?.MEDIUM ?? savedSettings.riskThresholds?.low ?? FRAUD_DEFAULTS?.riskThresholds?.low ?? 30,
-                riskThresholdHigh: savedSettings.riskThresholds?.HIGH ?? savedSettings.riskThresholds?.medium ?? FRAUD_DEFAULTS?.riskThresholds?.medium ?? 60,
+                riskThresholdMedium: savedSettings.riskThresholds?.low ?? savedSettings.riskThresholds?.MEDIUM ?? FRAUD_DEFAULTS?.riskThresholds?.low ?? 30,
+                riskThresholdHigh: savedSettings.riskThresholds?.medium ?? savedSettings.riskThresholds?.HIGH ?? FRAUD_DEFAULTS?.riskThresholds?.medium ?? 60,
             })
         }
-    }, [savedSettings])
+    }, [savedSettings, isFormDirty])
 
     // Audit logs state
     const [auditLogs, setAuditLogs] = useState([])
     const [loadingLogs, setLoadingLogs] = useState(false)
 
-    // Load audit logs from Firestore
+    // Load audit logs from Firestore with fallback
     const fetchAuditLogs = async () => {
         if (!isFirebaseConfigured()) return
         setLoadingLogs(true)
         try {
-            const q = query(collection(db, 'fraud_audit_log'), orderBy('timestamp', 'desc'), limit(50))
-            const snapshot = await getDocs(q)
-            const logs = []
-            snapshot.forEach(doc => {
-                logs.push({ id: doc.id, ...doc.data() })
-            })
+            let logs = []
+            try {
+                const q = query(collection(db, 'fraud_audit_log'), orderBy('timestamp', 'desc'), limit(50))
+                const snapshot = await getDocs(q)
+                snapshot.forEach(doc => {
+                    logs.push({ id: doc.id, ...doc.data() })
+                })
+            } catch (queryErr) {
+                console.warn('Ordered query failed, falling back to getRecentAuditLogs:', queryErr)
+                logs = await getRecentAuditLogs(50)
+            }
             setAuditLogs(logs)
         } catch (error) {
             console.error('Failed to fetch fraud logs:', error)
+            toast.error('অডিট লগ লোড করতে সমস্যা হয়েছে')
         } finally {
             setLoadingLogs(false)
         }
@@ -141,35 +151,158 @@ export default function AdminFraudPage() {
     const highRiskOrders = orders.filter(o => o.status === 'FRAUD_REJECTED' || (o._fraud?.riskLevel === 'HIGH'))
 
     // Handlers
-    const handleApproveOrder = (orderId) => {
-        dispatch(updateOrderStatus({ orderId, status: 'ORDER_PLACED' }))
-        toast.success(`অর্ডারটি অনুমোদন করা হয়েছে (ORDER PLACED)`)
+    const handleApproveOrder = async (orderId) => {
+        if (actionLoadingId) return
+        setActionLoadingId(orderId)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('orders', orderId, { 
+                    status: 'ORDER_PLACED', 
+                    updatedAt: new Date().toISOString() 
+                })
+                if (!ok) {
+                    toast.error('অর্ডার অনুমোদন ডাটাবেজে সংরক্ষণ করা যায়নি!')
+                    return
+                }
+            }
+            dispatch(updateOrderStatus({ orderId, status: 'ORDER_PLACED' }))
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                orderId,
+                reason: 'অর্ডার অনুমোদন করা হয়েছে (ORDER PLACED)'
+            })
+            toast.success(`অর্ডারটি অনুমোদন করা হয়েছে (ORDER PLACED)`)
+        } catch (err) {
+            console.error('Failed to approve order:', err)
+            toast.error('অর্ডার অনুমোদন করতে সমস্যা হয়েছে')
+        } finally {
+            setActionLoadingId(null)
+        }
     }
 
-    const handleRejectOrder = (orderId, phone) => {
-        dispatch(updateOrderStatus({ orderId, status: 'FRAUD_REJECTED' }))
-        toast.error(`অর্ডারটি বাতিল ও জালিয়াতি চিহ্নিত করা হয়েছে (FRAUD REJECTED)`)
+    const handleRejectOrder = async (orderId, phone) => {
+        if (actionLoadingId) return
+        setActionLoadingId(orderId)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('orders', orderId, { 
+                    status: 'FRAUD_REJECTED', 
+                    updatedAt: new Date().toISOString() 
+                })
+                if (!ok) {
+                    toast.error('অর্ডার বাতিল ডাটাবেজে সংরক্ষণ করা যায়নি!')
+                    return
+                }
+            }
+            dispatch(updateOrderStatus({ orderId, status: 'FRAUD_REJECTED' }))
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                orderId,
+                phone: phone ? normalizePhone(phone) : null,
+                reason: 'অর্ডার বাতিল ও জালিয়াতি চিহ্নিত করা হয়েছে (FRAUD REJECTED)'
+            })
+            toast.error(`অর্ডারটি বাতিল ও জালিয়াতি চিহ্নিত করা হয়েছে (FRAUD REJECTED)`)
+        } catch (err) {
+            console.error('Failed to reject order:', err)
+            toast.error('অর্ডার বাতিল করতে সমস্যা হয়েছে')
+        } finally {
+            setActionLoadingId(null)
+        }
     }
 
-    const handleAddBlockedPhone = (e) => {
+    const handleToggleBlockPhone = async (phone) => {
+        if (!phone) return
+        const normalized = normalizePhone(phone) || phone
+        const currentlyBlocked = blockedPhones.some(p => phonesMatch(p, normalized) || p === normalized)
+
+        let newBlocked
+        if (currentlyBlocked) {
+            newBlocked = blockedPhones.filter(p => !phonesMatch(p, normalized) && p !== normalized && p !== phone)
+            dispatch(unblockPhone(phone))
+            dispatch(unblockPhone(normalized))
+        } else {
+            newBlocked = [...blockedPhones, normalized]
+            dispatch(blockPhone(normalized))
+        }
+
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('settings', 'fraud', {
+                ...fraudState,
+                blockedPhones: newBlocked,
+                updatedAt: new Date().toISOString()
+            })
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                phone: normalized,
+                reason: currentlyBlocked ? `নম্বর ${normalized} আনব্লক করা হয়েছে` : `নম্বর ${normalized} ব্লক করা হয়েছে`
+            })
+        }
+
+        if (currentlyBlocked) {
+            toast.success(`Phone ${phone} unblocked`)
+        } else {
+            toast.error(`Phone ${phone} blocked`)
+        }
+    }
+
+    const handleAddBlockedPhone = async (e) => {
         e.preventDefault()
         const raw = newPhoneInput.trim()
         if (!raw) return
         const validation = validateBDPhone(raw)
         const normalized = validation.normalized || raw
 
-        if (blockedPhones.includes(normalized)) {
+        if (blockedPhones.some(p => phonesMatch(p, normalized) || p === normalized)) {
             toast.error('এই নম্বরটি ইতিমধ্যে ব্লক তালিকায় আছে')
             return
         }
 
+        const newBlocked = [...blockedPhones, normalized]
         dispatch(blockPhone(normalized))
+
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('settings', 'fraud', {
+                ...fraudState,
+                blockedPhones: newBlocked,
+                updatedAt: new Date().toISOString()
+            })
+            if (!ok) {
+                toast.error('ডাটাবেজে সংরক্ষণ করা যায়নি')
+                return
+            }
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                phone: normalized,
+                reason: `নম্বর ${normalized} ব্লক তালিকায় যুক্ত হয়েছে`
+            })
+        }
+
         toast.success(`নম্বর ${normalized} ব্লক তালিকায় যুক্ত হয়েছে`)
         setNewPhoneInput('')
         setShowAddPhoneModal(false)
     }
 
-    const handleAddBlockedIP = (e) => {
+    const handleUnblockPhone = async (phone) => {
+        const newBlocked = blockedPhones.filter(p => !phonesMatch(p, phone) && p !== phone)
+        dispatch(unblockPhone(phone))
+
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('settings', 'fraud', {
+                ...fraudState,
+                blockedPhones: newBlocked,
+                updatedAt: new Date().toISOString()
+            })
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                phone: normalizePhone(phone) || phone,
+                reason: `নম্বর ${phone} আনব্লক করা হয়েছে`
+            })
+        }
+
+        toast.success(`নম্বর ${phone} আনব্লক করা হয়েছে`)
+    }
+
+    const handleAddBlockedIP = async (e) => {
         e.preventDefault()
         const ip = newIPInput.trim()
         if (!ip) return
@@ -179,32 +312,137 @@ export default function AdminFraudPage() {
             return
         }
 
+        const newBlocked = [...blockedIPs, ip]
         dispatch(blockIP(ip))
+
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('settings', 'fraud', {
+                ...fraudState,
+                blockedIPs: newBlocked,
+                updatedAt: new Date().toISOString()
+            })
+            if (!ok) {
+                toast.error('ডাটাবেজে সংরক্ষণ করা যায়নি')
+                return
+            }
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                ip,
+                reason: `IP ${ip} ব্লক তালিকায় যুক্ত হয়েছে`
+            })
+        }
+
         toast.success(`IP ${ip} ব্লক তালিকায় যুক্ত হয়েছে`)
         setNewIPInput('')
         setShowAddIPModal(false)
     }
 
-    const handleAddWatchlist = (e) => {
+    const handleUnblockIP = async (ip) => {
+        const newBlocked = blockedIPs.filter(i => i !== ip)
+        dispatch(unblockIP(ip))
+
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('settings', 'fraud', {
+                ...fraudState,
+                blockedIPs: newBlocked,
+                updatedAt: new Date().toISOString()
+            })
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                ip,
+                reason: `IP ${ip} আনব্লক করা হয়েছে`
+            })
+        }
+
+        toast.success(`IP ${ip} আনব্লক করা হয়েছে`)
+    }
+
+    const handleAddWatchlist = async (e) => {
         e.preventDefault()
         const raw = watchPhoneInput.trim()
         if (!raw) return
         const validation = validateBDPhone(raw)
         const normalized = validation.normalized || raw
 
-        dispatch(addToWatchlist({
+        const newEntry = {
             phone: normalized,
             reason: watchReasonInput.trim() || 'ম্যানুয়াল ফ্ল্যাগ করা হয়েছে',
             addedAt: new Date().toISOString()
-        }))
+        }
+        const newWatchlist = [...watchlist.filter(w => !phonesMatch(w.phone, normalized) && w.phone !== normalized), newEntry]
+        dispatch(addToWatchlist(newEntry))
+
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('settings', 'fraud', {
+                ...fraudState,
+                watchlist: newWatchlist,
+                updatedAt: new Date().toISOString()
+            })
+            if (!ok) {
+                toast.error('ডাটাবেজে সংরক্ষণ করা যায়নি')
+                return
+            }
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                phone: normalized,
+                reason: `নম্বর ${normalized} নজরদারিতে রাখা হয়েছে`
+            })
+        }
+
         toast.success(`নম্বর ${normalized} নজরদারিতে রাখা হয়েছে`)
         setWatchPhoneInput('')
         setWatchReasonInput('')
         setShowAddWatchlistModal(false)
     }
 
-    const handleSaveSettings = (e) => {
+    const handleRemoveWatchlist = async (phone) => {
+        const newWatchlist = watchlist.filter(w => !phonesMatch(w.phone, phone) && w.phone !== phone)
+        dispatch(removeFromWatchlist(phone))
+
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('settings', 'fraud', {
+                ...fraudState,
+                watchlist: newWatchlist,
+                updatedAt: new Date().toISOString()
+            })
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                phone: normalizePhone(phone) || phone,
+                reason: `নম্বর ${phone} নজরদারি তালিকা থেকে মুছে ফেলা হয়েছে`
+            })
+        }
+
+        toast.success('Removed from watchlist')
+    }
+
+    const handleWatchlistToBlock = async (phone) => {
+        const normalized = normalizePhone(phone) || phone
+        const newBlocked = [...blockedPhones.filter(p => !phonesMatch(p, normalized) && p !== normalized), normalized]
+        const newWatchlist = watchlist.filter(w => !phonesMatch(w.phone, phone) && w.phone !== phone && w.phone !== normalized)
+
+        dispatch(blockPhone(normalized))
+        dispatch(removeFromWatchlist(phone))
+
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('settings', 'fraud', {
+                ...fraudState,
+                blockedPhones: newBlocked,
+                watchlist: newWatchlist,
+                updatedAt: new Date().toISOString()
+            })
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                phone: normalized,
+                reason: `নম্বর ${phone} নজরদারি থেকে ব্লকলিস্টে স্থানান্তর করা হয়েছে`
+            })
+        }
+
+        toast.error(`Phone ${phone} moved to Blocklist`)
+    }
+
+    const handleSaveSettings = async (e) => {
         e.preventDefault()
+        setIsSavingSettings(true)
         const payload = {
             maxOrdersPerPhonePerHour: Number(settingsForm.maxOrdersPerPhonePerHour),
             maxOrdersPerIPPerHour: Number(settingsForm.maxOrdersPerIPPerHour),
@@ -214,6 +452,9 @@ export default function AdminFraudPage() {
             requireVerificationForMediumRisk: Boolean(settingsForm.requireVerificationForMediumRisk),
             autoBlockHighRisk: Boolean(settingsForm.autoBlockHighRisk),
             riskThresholds: {
+                low: Number(settingsForm.riskThresholdMedium),
+                medium: Number(settingsForm.riskThresholdHigh),
+                high: Number(settingsForm.riskThresholdHigh),
                 LOW: 0,
                 MEDIUM: Number(settingsForm.riskThresholdMedium),
                 HIGH: Number(settingsForm.riskThresholdHigh),
@@ -221,6 +462,26 @@ export default function AdminFraudPage() {
         }
 
         dispatch(updateFraudSettings(payload))
+
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('settings', 'fraud', {
+                ...fraudState,
+                settings: payload,
+                updatedAt: new Date().toISOString()
+            })
+            if (!ok) {
+                toast.error('সেটিংস ডাটাবেজে সংরক্ষণ করা যায়নি!')
+                setIsSavingSettings(false)
+                return
+            }
+            await logFraudEvent({
+                type: 'ADMIN_ACTION',
+                reason: 'জালিয়াতি প্রতিরোধ সেটিংস আপডেট করা হয়েছে'
+            })
+        }
+
+        setIsFormDirty(false)
+        setIsSavingSettings(false)
         toast.success('জালিয়াতি প্রতিরোধ সেটিংস সংরক্ষিত হয়েছে!')
     }
 
@@ -403,8 +664,8 @@ export default function AdminFraudPage() {
                     ) : (
                         <div className="space-y-3">
                             {pendingReviewOrders.map(order => {
-                                const phone = order.address?.phone || order.user?.phone || ''
-                                const isBlocked = blockedPhones.includes(phone)
+                                const phone = order.address?.phone || order.address?.normalizedPhone || order.user?.phone || ''
+                                const isBlocked = blockedPhones.some(p => phonesMatch(p, phone) || p === phone || (phone && normalizePhone(p) === normalizePhone(phone)))
 
                                 return (
                                     <div key={order.id} className="bg-white border border-amber-200 rounded-xl p-5 shadow-xs transition hover:shadow-md">
@@ -414,19 +675,19 @@ export default function AdminFraudPage() {
                                                     <span className="font-bold text-slate-800 text-sm">{order.id}</span>
                                                     <span className="px-2 py-0.5 bg-amber-100 text-amber-800 rounded-full text-[11px] font-bold border border-amber-200 flex items-center gap-1">
                                                         <ShieldAlertIcon size={12} />
-                                                        RISK SCORE: {order._fraud?.riskScore || 45}/100 ({order._fraud?.riskLevel || 'MEDIUM'})
+                                                        RISK SCORE: {order._fraud?.riskScore ?? 45}/100 ({order._fraud?.riskLevel || 'MEDIUM'})
                                                     </span>
-                                                    <span className="text-xs text-slate-400">
-                                                        {new Date(order.createdAt).toLocaleString()}
+                                                    <span className="text-xs text-slate-400" suppressHydrationWarning>
+                                                        {order.createdAt ? new Date(order.createdAt).toLocaleString() : '—'}
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-slate-500 mt-1">
-                                                    গ্রাহক: <strong className="text-slate-700">{order.user?.name}</strong> | ফোন: <strong className="text-slate-700">{phone}</strong> | এলাকা: {order.address?.city}
+                                                    গ্রাহক: <strong className="text-slate-700">{order.user?.name || order.address?.name || 'গ্রাহক'}</strong> | ফোন: <strong className="text-slate-700">{phone || '—'}</strong> | এলাকা: {order.address?.city || order.address?.area || '—'}
                                                 </p>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-xs text-slate-400">অর্ডার মূল্য ({order.paymentMethod})</p>
-                                                <p className="text-xl font-bold text-green-600">{currency}{Number(order.total).toLocaleString('en-IN')}</p>
+                                                <p className="text-xs text-slate-400">অর্ডার মূল্য ({order.paymentMethod || 'COD'})</p>
+                                                <p className="text-xl font-bold text-green-600">{currency}{Number(order.total || order.amount || 0).toLocaleString('en-IN')}</p>
                                             </div>
                                         </div>
 
@@ -453,9 +714,9 @@ export default function AdminFraudPage() {
                                         {/* Items preview */}
                                         <div className="mt-3 text-xs text-slate-600">
                                             <span className="font-medium text-slate-700">অর্ডারের পণ্য: </span>
-                                            {(order.orderItems || []).map((item, idx) => (
+                                            {(order.items || order.orderItems || []).map((item, idx) => (
                                                 <span key={idx} className="mr-2">
-                                                    {item.product?.name || item.name} (x{item.quantity})
+                                                    {item.product?.name || item.name || item.title || 'পণ্য'} (x{item.quantity || 1})
                                                 </span>
                                             ))}
                                         </div>
@@ -465,15 +726,7 @@ export default function AdminFraudPage() {
                                             <div className="flex items-center gap-2">
                                                 <button
                                                     type="button"
-                                                    onClick={() => {
-                                                        if (isBlocked) {
-                                                            dispatch(unblockPhone(phone))
-                                                            toast.success(`Phone ${phone} unblocked`)
-                                                        } else {
-                                                            dispatch(blockPhone(phone))
-                                                            toast.error(`Phone ${phone} blocked`)
-                                                        }
-                                                    }}
+                                                    onClick={() => handleToggleBlockPhone(phone)}
                                                     className={`text-xs px-2.5 py-1.5 rounded-lg border font-medium transition cursor-pointer flex items-center gap-1 ${
                                                         isBlocked
                                                             ? 'bg-rose-600 text-white border-rose-700 hover:bg-rose-700'
@@ -488,18 +741,20 @@ export default function AdminFraudPage() {
                                             <div className="flex items-center gap-2">
                                                 <button
                                                     type="button"
+                                                    disabled={actionLoadingId === order.id}
                                                     onClick={() => handleRejectOrder(order.id, phone)}
-                                                    className="px-4 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg text-xs font-semibold transition cursor-pointer"
+                                                    className="px-4 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 rounded-lg text-xs font-semibold transition cursor-pointer disabled:opacity-50"
                                                 >
-                                                    অর্ডার বাতিল ও রিজেক্ট
+                                                    {actionLoadingId === order.id ? 'অপেক্ষা করুন...' : 'অর্ডার বাতিল ও রিজেক্ট'}
                                                 </button>
                                                 <button
                                                     type="button"
+                                                    disabled={actionLoadingId === order.id}
                                                     onClick={() => handleApproveOrder(order.id)}
-                                                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition shadow-xs cursor-pointer flex items-center gap-1"
+                                                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold transition shadow-xs cursor-pointer flex items-center gap-1 disabled:opacity-50"
                                                 >
                                                     <CheckCircle2Icon size={14} />
-                                                    অর্ডারটি অনুমোদন করুন
+                                                    {actionLoadingId === order.id ? 'অপেক্ষা করুন...' : 'অর্ডারটি অনুমোদন করুন'}
                                                 </button>
                                             </div>
                                         </div>
@@ -565,10 +820,7 @@ export default function AdminFraudPage() {
                                                 <td className="px-4 py-3 text-right">
                                                     <button
                                                         type="button"
-                                                        onClick={() => {
-                                                            dispatch(unblockPhone(phone))
-                                                            toast.success(`নম্বর ${phone} আনব্লক করা হয়েছে`)
-                                                        }}
+                                                        onClick={() => handleUnblockPhone(phone)}
                                                         className="px-2.5 py-1 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded border border-slate-200 font-medium transition cursor-pointer"
                                                     >
                                                         আনব্লক
@@ -626,7 +878,7 @@ export default function AdminFraudPage() {
                                     {blockedIPs
                                         .filter(ip => ip.includes(searchTerm))
                                         .map((ip, idx) => (
-                                            <tr key={ip} className="hover:bg-slate-50/60">
+                                            <tr key={`${ip}_${idx}`} className="hover:bg-slate-50/60">
                                                 <td className="px-4 py-3 font-medium text-slate-400">{idx + 1}</td>
                                                 <td className="px-4 py-3 font-mono font-bold text-slate-800">{ip}</td>
                                                 <td className="px-4 py-3">
@@ -637,10 +889,7 @@ export default function AdminFraudPage() {
                                                 <td className="px-4 py-3 text-right">
                                                     <button
                                                         type="button"
-                                                        onClick={() => {
-                                                            dispatch(unblockIP(ip))
-                                                            toast.success(`IP ${ip} আনব্লক করা হয়েছে`)
-                                                        }}
+                                                        onClick={() => handleUnblockIP(ip)}
                                                         className="px-2.5 py-1 text-slate-600 hover:text-emerald-700 hover:bg-emerald-50 rounded border border-slate-200 font-medium transition cursor-pointer"
                                                     >
                                                         আনব্লক
@@ -699,32 +948,25 @@ export default function AdminFraudPage() {
                                     {watchlist
                                         .filter(w => w.phone.includes(searchTerm) || (w.reason || '').includes(searchTerm))
                                         .map((item, idx) => (
-                                            <tr key={item.phone} className="hover:bg-slate-50/60">
+                                            <tr key={`${item.phone}_${idx}`} className="hover:bg-slate-50/60">
                                                 <td className="px-4 py-3 font-medium text-slate-400">{idx + 1}</td>
                                                 <td className="px-4 py-3 font-mono font-bold text-slate-800">{item.phone}</td>
                                                 <td className="px-4 py-3 text-slate-600">{item.reason || '—'}</td>
-                                                <td className="px-4 py-3 text-slate-400">
+                                                <td className="px-4 py-3 text-slate-400" suppressHydrationWarning>
                                                     {item.addedAt ? new Date(item.addedAt).toLocaleDateString() : '—'}
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         <button
                                                             type="button"
-                                                            onClick={() => {
-                                                                dispatch(blockPhone(item.phone))
-                                                                dispatch(removeFromWatchlist(item.phone))
-                                                                toast.error(`Phone ${item.phone} moved to Blocklist`)
-                                                            }}
+                                                            onClick={() => handleWatchlistToBlock(item.phone)}
                                                             className="px-2.5 py-1 text-rose-600 hover:bg-rose-50 rounded border border-rose-200 font-medium transition cursor-pointer"
                                                         >
                                                             ব্লক করুন
                                                         </button>
                                                         <button
                                                             type="button"
-                                                            onClick={() => {
-                                                                dispatch(removeFromWatchlist(item.phone))
-                                                                toast.success('Removed from watchlist')
-                                                            }}
+                                                            onClick={() => handleRemoveWatchlist(item.phone)}
                                                             className="px-2.5 py-1 text-slate-600 hover:bg-slate-100 rounded border border-slate-200 font-medium transition cursor-pointer"
                                                         >
                                                             মুছুন
@@ -774,7 +1016,7 @@ export default function AdminFraudPage() {
                                         min="1"
                                         max="20"
                                         value={settingsForm.maxOrdersPerPhonePerHour}
-                                        onChange={(e) => setSettingsForm({ ...settingsForm, maxOrdersPerPhonePerHour: e.target.value })}
+                                        onChange={(e) => { setIsFormDirty(true); setSettingsForm({ ...settingsForm, maxOrdersPerPhonePerHour: e.target.value }) }}
                                         className="w-full p-2 text-sm border border-slate-300 rounded-lg outline-none focus:border-green-500 bg-white"
                                     />
                                 </div>
@@ -791,7 +1033,7 @@ export default function AdminFraudPage() {
                                         min="1"
                                         max="50"
                                         value={settingsForm.maxOrdersPerIPPerHour}
-                                        onChange={(e) => setSettingsForm({ ...settingsForm, maxOrdersPerIPPerHour: e.target.value })}
+                                        onChange={(e) => { setIsFormDirty(true); setSettingsForm({ ...settingsForm, maxOrdersPerIPPerHour: e.target.value }) }}
                                         className="w-full p-2 text-sm border border-slate-300 rounded-lg outline-none focus:border-green-500 bg-white"
                                     />
                                 </div>
@@ -816,7 +1058,7 @@ export default function AdminFraudPage() {
                                         min="5"
                                         max="180"
                                         value={settingsForm.duplicateOrderWindowMinutes}
-                                        onChange={(e) => setSettingsForm({ ...settingsForm, duplicateOrderWindowMinutes: e.target.value })}
+                                        onChange={(e) => { setIsFormDirty(true); setSettingsForm({ ...settingsForm, duplicateOrderWindowMinutes: e.target.value }) }}
                                         className="w-full p-2 text-sm border border-slate-300 rounded-lg outline-none focus:border-green-500 bg-white"
                                     />
                                 </div>
@@ -833,7 +1075,7 @@ export default function AdminFraudPage() {
                                         min="1"
                                         max="15"
                                         value={settingsForm.minOrderSubmissionTimeMs}
-                                        onChange={(e) => setSettingsForm({ ...settingsForm, minOrderSubmissionTimeMs: e.target.value })}
+                                        onChange={(e) => { setIsFormDirty(true); setSettingsForm({ ...settingsForm, minOrderSubmissionTimeMs: e.target.value }) }}
                                         className="w-full p-2 text-sm border border-slate-300 rounded-lg outline-none focus:border-green-500 bg-white"
                                     />
                                 </div>
@@ -858,7 +1100,7 @@ export default function AdminFraudPage() {
                                         min="10"
                                         max="60"
                                         value={settingsForm.riskThresholdMedium}
-                                        onChange={(e) => setSettingsForm({ ...settingsForm, riskThresholdMedium: e.target.value })}
+                                        onChange={(e) => { setIsFormDirty(true); setSettingsForm({ ...settingsForm, riskThresholdMedium: e.target.value }) }}
                                         className="w-full p-2 text-sm border border-slate-300 rounded-lg outline-none focus:border-green-500 bg-white"
                                     />
                                 </div>
@@ -875,7 +1117,7 @@ export default function AdminFraudPage() {
                                         min="50"
                                         max="90"
                                         value={settingsForm.riskThresholdHigh}
-                                        onChange={(e) => setSettingsForm({ ...settingsForm, riskThresholdHigh: e.target.value })}
+                                        onChange={(e) => { setIsFormDirty(true); setSettingsForm({ ...settingsForm, riskThresholdHigh: e.target.value }) }}
                                         className="w-full p-2 text-sm border border-slate-300 rounded-lg outline-none focus:border-green-500 bg-white"
                                     />
                                 </div>
@@ -886,10 +1128,11 @@ export default function AdminFraudPage() {
                         <div className="pt-4 border-t border-slate-100 flex justify-end">
                             <button
                                 type="submit"
-                                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-md"
+                                disabled={isSavingSettings}
+                                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
                             >
                                 <SaveIcon size={16} />
-                                সেটিংস সংরক্ষণ করুন
+                                {isSavingSettings ? 'সংরক্ষণ হচ্ছে...' : 'সেটিংস সংরক্ষণ করুন'}
                             </button>
                         </div>
                     </form>
@@ -934,7 +1177,7 @@ export default function AdminFraudPage() {
                                 <tbody className="divide-y divide-slate-100">
                                     {auditLogs.map(log => (
                                         <tr key={log.id} className="hover:bg-slate-50/60">
-                                            <td className="px-4 py-3 text-slate-400 whitespace-nowrap">
+                                            <td className="px-4 py-3 text-slate-400 whitespace-nowrap" suppressHydrationWarning>
                                                 {log.timestamp ? new Date(log.timestamp).toLocaleString() : '—'}
                                             </td>
                                             <td className="px-4 py-3">
@@ -949,10 +1192,10 @@ export default function AdminFraudPage() {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-3 font-mono">
-                                                {log.phone || log.ip || '—'}
+                                                {log.phone && log.ip ? `${log.phone} (${log.ip})` : log.phone || log.ip || '—'}
                                             </td>
                                             <td className="px-4 py-3">
-                                                {log.riskScore !== undefined ? (
+                                                {log.riskScore != null ? (
                                                     <span className={`font-bold ${log.riskScore >= 60 ? 'text-rose-600' : log.riskScore >= 30 ? 'text-amber-600' : 'text-emerald-600'}`}>
                                                         {log.riskScore}
                                                     </span>

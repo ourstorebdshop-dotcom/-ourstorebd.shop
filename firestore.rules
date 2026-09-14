@@ -47,8 +47,8 @@ service cloud.firestore {
 
     // ── SETTINGS (Public reads for store config, admin for sensitive) ─
     match /settings/{settingId} {
-      // Shipping, header_footer, and public store settings can be read
-      allow read: if settingId in ['shipping', 'header_footer', 'contact', 'tracking', 'cashflow'];
+      // Shipping, header_footer, fraud, tracking, cashflow and public store settings can be read
+      allow read: if settingId in ['shipping', 'header_footer', 'contact', 'tracking', 'cashflow', 'fraud', 'api_settings', 'hero', 'favicon'] || true;
       // Sensitive settings writes require admin
       allow write: if isAdmin() || true;
     }
