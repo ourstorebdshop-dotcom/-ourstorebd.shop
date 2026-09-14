@@ -45,6 +45,8 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
     // Fraud Guard pending review badge
     const orders = useSelector(state => state.order?.orders) || []
     const pendingFraudCount = orders.filter(o => o.status === 'PENDING_REVIEW').length
+    // Orders new placed orders badge count (ORDER_PLACED)
+    const pendingOrdersCount = orders.filter(o => (o?.status || '').toUpperCase() === 'ORDER_PLACED').length
 
     const sidebarLinks = [
         { name: 'Dashboard', href: '/admin', icon: HomeIcon },
@@ -52,7 +54,7 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         { name: 'Add Product', href: '/admin/add-product', icon: SquarePlusIcon },
         { name: 'Manage Products', href: '/admin/manage-product', icon: SquarePenIcon },
         { name: 'Categories', href: '/admin/categories', icon: Grid3X3Icon },
-        { name: 'Orders', href: '/admin/orders', icon: LayoutListIcon },
+        { name: 'Orders', href: '/admin/orders', icon: LayoutListIcon, badge: pendingOrdersCount },
         { name: 'Fraud Guard', href: '/admin/fraud', icon: ShieldAlertIcon, badge: pendingFraudCount },
         { name: 'Customers', href: '/admin/customers', icon: UsersIcon },
         { name: 'Messages', href: '/admin/contact', icon: MessageSquareIcon, badge: unreadCount },
