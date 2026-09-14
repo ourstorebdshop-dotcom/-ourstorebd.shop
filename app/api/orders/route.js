@@ -120,7 +120,7 @@ export async function POST(request) {
             )
         }
 
-        if (!deliveryInfo?.name || !deliveryInfo?.phone || !deliveryInfo?.address) {
+        if (!deliveryInfo?.name?.trim() || !deliveryInfo?.phone?.trim() || !deliveryInfo?.address?.trim()) {
             return NextResponse.json(
                 { error: 'অনুগ্রহ করে ডেলিভারি তথ্য পূরণ করুন।', code: 'MISSING_DELIVERY_INFO' },
                 { status: 400 }
@@ -231,8 +231,12 @@ export async function POST(request) {
 
             validatedItems.push({
                 productId: serverProduct.id,
+                id: serverProduct.id,
+                name: serverProduct.name,
+                title: serverProduct.name,
                 quantity: qty,
                 price: price,
+                effectivePrice: price,
                 color: item.color || null,
                 size: item.size || null,
                 product: {
@@ -361,6 +365,7 @@ export async function POST(request) {
         const newOrder = {
             id: orderId,
             total: Number(finalTotal.toFixed(2)),
+            amount: Number(finalTotal.toFixed(2)),
             subtotal: serverCalculatedSubtotal,
             shippingCost,
             discountAmount: discountAmount > 0 ? Number(discountAmount.toFixed(2)) : 0,
@@ -376,19 +381,20 @@ export async function POST(request) {
             isCouponUsed: !!coupon,
             coupon: coupon ? { code: coupon.code, discount: coupon.discount, discountType: coupon.discountType } : null,
             orderItems: validatedItems,
+            items: validatedItems,
             address: {
                 id: `addr_${Date.now()}`,
-                name: deliveryInfo.name,
-                phone: deliveryInfo.phone,
+                name: (deliveryInfo.name || '').trim(),
+                phone: (deliveryInfo.phone || '').trim(),
                 normalizedPhone,
-                street: deliveryInfo.address,
-                city: deliveryInfo.location === 'insideDhaka' ? 'Dhaka' : 'Outside Dhaka',
+                street: (deliveryInfo.address || '').trim(),
+                city: deliveryInfo.location === 'outsideDhaka' ? 'Outside Dhaka' : 'Dhaka',
                 country: 'Bangladesh',
             },
             user: {
                 id: userId || 'user_guest',
-                name: deliveryInfo.name,
-                phone: deliveryInfo.phone,
+                name: (deliveryInfo.name || '').trim(),
+                phone: (deliveryInfo.phone || '').trim(),
                 email: body.userEmail || `${normalizedPhone}@customer.ourstorebd.com`,
             },
             // Fraud metadata (admin-only, not shown to customers)
@@ -402,17 +408,20 @@ export async function POST(request) {
             },
         }
 
-        // Save to Firestore
+        // Save to Firestore (MUST succeed before reporting success to prevent misleading success)
         if (isFirebaseConfigured()) {
             try {
                 await setDoc(doc(db, 'orders', orderId), newOrder)
             } catch (error) {
                 console.error('[OrderAPI] Failed to save order to Firestore:', error)
-                // Continue — order will still be in the response for Redux hydration
+                return NextResponse.json(
+                    { error: 'অর্ডারটি ডাটাবেজে সংরক্ষণ করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।', code: 'DATABASE_WRITE_FAILED' },
+                    { status: 500 }
+                )
             }
         }
 
-        // Mark idempotency key as processed
+        // Mark idempotency key as processed only after successful Firestore save
         if (idempotencyKey) {
             processedKeys.set(idempotencyKey, Date.now())
         }

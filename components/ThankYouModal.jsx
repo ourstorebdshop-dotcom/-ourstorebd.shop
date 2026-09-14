@@ -162,42 +162,48 @@ export default function ThankYouModal({ order, onClose }) {
                     <div className="mt-4 border border-slate-100 rounded-2xl p-4 bg-white shadow-xs space-y-3 text-xs">
                         
                         {/* Ordered Items Preview */}
-                        {order.orderItems && order.orderItems.length > 0 && (
+                        {(order.orderItems || order.items) && (order.orderItems || order.items).length > 0 && (
                             <div className="pb-3 border-b border-slate-100">
                                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                                    অর্ডারকৃত পণ্য ({order.orderItems.length}টি)
+                                    অর্ডারকৃত পণ্য ({(order.orderItems || order.items).length}টি)
                                 </p>
                                 <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
-                                    {order.orderItems.map((item, idx) => (
-                                        <div key={idx} className="flex items-center justify-between gap-3">
-                                            <div className="flex items-center gap-2.5 overflow-hidden">
-                                                {item.product?.images?.[0] ? (
-                                                    <Image
-                                                        src={item.product.images[0]}
-                                                        alt={item.product.name}
-                                                        width={36}
-                                                        height={36}
-                                                        className="w-9 h-9 rounded-lg object-cover bg-slate-50 border border-slate-100 shrink-0"
-                                                    />
-                                                ) : (
-                                                    <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                                                        <ShoppingBagIcon size={16} className="text-slate-400" />
+                                    {(order.orderItems || order.items).map((item, idx) => {
+                                        const itemImg = item.product?.images?.[0]?.src || item.product?.images?.[0] || item.images?.[0] || item.image;
+                                        const itemName = item.product?.name || item.name || item.title || 'পণ্য';
+                                        const itemPrice = item.offerPrice || item.effectivePrice || item.price || item.product?.price || 0;
+                                        const itemQty = item.quantity || 1;
+                                        return (
+                                            <div key={idx} className="flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-2.5 overflow-hidden">
+                                                    {itemImg ? (
+                                                        <Image
+                                                            src={typeof itemImg === 'string' ? itemImg : '/placeholder.svg'}
+                                                            alt={itemName}
+                                                            width={36}
+                                                            height={36}
+                                                            className="w-9 h-9 rounded-lg object-cover bg-slate-50 border border-slate-100 shrink-0"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+                                                            <ShoppingBagIcon size={16} className="text-slate-400" />
+                                                        </div>
+                                                    )}
+                                                    <div className="truncate">
+                                                        <p className="font-semibold text-slate-700 text-xs truncate">
+                                                            {itemName}
+                                                        </p>
+                                                        <p className="text-[11px] text-slate-400">
+                                                            পরিমাণ: {itemQty}টি {item.color ? `• ${item.color}` : ''} {item.size ? `• ${item.size}` : ''}
+                                                        </p>
                                                     </div>
-                                                )}
-                                                <div className="truncate">
-                                                    <p className="font-semibold text-slate-700 text-xs truncate">
-                                                        {item.product?.name || 'পণ্য'}
-                                                    </p>
-                                                    <p className="text-[11px] text-slate-400">
-                                                        পরিমাণ: {item.quantity}টি {item.color ? `• ${item.color}` : ''} {item.size ? `• ${item.size}` : ''}
-                                                    </p>
                                                 </div>
+                                                <span className="font-bold text-slate-800 shrink-0">
+                                                    {currency}{(itemPrice * itemQty).toLocaleString()}
+                                                </span>
                                             </div>
-                                            <span className="font-bold text-slate-800 shrink-0">
-                                                {currency}{((item.offerPrice || item.effectivePrice || item.price) * item.quantity).toLocaleString()}
-                                            </span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}

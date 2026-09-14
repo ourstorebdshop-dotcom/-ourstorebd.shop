@@ -16,6 +16,7 @@ import {
     Lock
 } from 'lucide-react'
 import { trackInitiateCheckout, trackRemoveFromCart } from '@/lib/tracking/clientTracker'
+import { productDummyData } from '@/assets/assets'
 
 const getItemImage = (item) => {
     if (!item) return '/placeholder.svg'
@@ -51,13 +52,14 @@ export default function OrderPage() {
 
     const { cartItems } = useSelector(state => state.cart)
     const products = useSelector(state => state.product.list)
+    const isProductHydrated = useSelector(state => state.product?.isHydrated)
     const { currentUser } = useSelector(state => state.user)
 
     const [cartArray, setCartArray] = useState([])
     const [totalPrice, setTotalPrice] = useState(0)
     const [placedOrder, setPlacedOrder] = useState(null)
     const [failedImages, setFailedImages] = useState({})
-    const [idempotencyKey] = useState(() => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'ord_' + Math.random().toString(36).slice(2) + Date.now().toString(36))
+    const [idempotencyKey, setIdempotencyKey] = useState(() => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'ord_' + Math.random().toString(36).slice(2) + Date.now().toString(36))
     const [formLoadedAt] = useState(() => Date.now())
 
     const defaultAddr = currentUser?.addresses?.find(a => a.isDefault) || currentUser?.addresses?.[0]
@@ -90,13 +92,14 @@ export default function OrderPage() {
     useEffect(() => {
         let total = 0
         const items = []
-        for (const [key, value] of Object.entries(cartItems)) {
-            const product = products.find(p => p.id === key)
+        for (const [key, value] of Object.entries(cartItems || {})) {
+            const product = (products || []).find(p => String(p.id) === String(key)) ||
+                            (Array.isArray(productDummyData) && productDummyData.find(p => String(p.id) === String(key)))
             if (product) {
-                const qty = typeof value === 'number' ? value : value.quantity
-                const color = typeof value === 'object' ? value.color : null
-                const size = typeof value === 'object' ? value.size : null
-                const effectivePrice = product.offerPrice || product.price
+                const qty = typeof value === 'number' ? value : (value?.quantity || 1)
+                const color = typeof value === 'object' ? value?.color : null
+                const size = typeof value === 'object' ? value?.size : null
+                const effectivePrice = product.offerPrice || product.price || 0
                 items.push({
                     ...product,
                     quantity: qty,
@@ -122,6 +125,9 @@ export default function OrderPage() {
         }
     }
 
+    const hasCartItems = Object.keys(cartItems || {}).length > 0
+    const isHydrating = hasCartItems && cartArray.length === 0 && !isProductHydrated
+
     return (
         <div className="min-h-screen bg-slate-50/50 pb-20">
             {/* Breadcrumb Navigation */}
@@ -143,7 +149,11 @@ export default function OrderPage() {
             </div>
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
-                {cartArray.length > 0 ? (
+                {isHydrating ? (
+                    <div className="min-h-[60vh] flex items-center justify-center">
+                        <div className="w-10 h-10 rounded-full border-3 border-gray-300 border-t-green-500 animate-spin" />
+                    </div>
+                ) : cartArray.length > 0 ? (
                     <div>
                         {/* Page Header */}
                         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -287,7 +297,10 @@ export default function OrderPage() {
                                         items={cartArray} 
                                         deliveryInfo={deliveryInfo} 
                                         setDeliveryInfo={setDeliveryInfo} 
-                                        onOrderSuccess={(order) => setPlacedOrder(order)}
+                                        onOrderSuccess={(order) => {
+                                            setPlacedOrder(order)
+                                            setIdempotencyKey(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'ord_' + Math.random().toString(36).slice(2) + Date.now().toString(36))
+                                        }}
                                         idempotencyKey={idempotencyKey}
                                         formLoadedAt={formLoadedAt}
                                         className="w-full shadow-md bg-white border border-slate-200"

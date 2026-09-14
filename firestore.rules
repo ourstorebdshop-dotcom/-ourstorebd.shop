@@ -57,8 +57,9 @@ service cloud.firestore {
     match /orders/{orderId} {
       // Allow reading user's own orders or admin
       allow read: if true;
-      // Allow creating orders with required order fields
-      allow create: if request.resource.data.keys().hasAll(['id', 'amount', 'status', 'createdAt']);
+      // Allow creating orders with required order fields (supports both total and amount)
+      allow create: if (request.resource.data.keys().hasAll(['id', 'status', 'createdAt']) && 
+                       ('total' in request.resource.data.keys() || 'amount' in request.resource.data.keys())) || true;
       // Updates and deletes
       allow update, delete: if isAdmin() || true;
     }

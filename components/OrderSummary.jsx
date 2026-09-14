@@ -37,10 +37,14 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
     const fallbackIdempotencyRef = useRef(typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'ord_' + Math.random().toString(36).slice(2) + Date.now().toString(36));
     const fallbackFormLoadedAtRef = useRef(Date.now());
 
+    React.useEffect(() => {
+        hasSubmittedRef.current = false;
+    }, [items]);
+
     const handleDeliveryChange = (e) => {
         setDeliveryInfo(prev => ({ ...prev, [e.target.name]: e.target.value }));
         if (e.target.name === 'location') {
-            const cost = e.target.value === 'outsideDhaka' ? (shippingSettings?.outsideDhaka?.cost || 120) : (shippingSettings?.insideDhaka?.cost || 70);
+            const cost = e.target.value === 'outsideDhaka' ? (shippingSettings?.outsideDhaka?.cost ?? 120) : (shippingSettings?.insideDhaka?.cost ?? 70);
             trackAddShippingInfo(e.target.value === 'outsideDhaka' ? 'Outside Dhaka' : 'Inside Dhaka', cost, totalPrice + cost);
         }
     }
@@ -134,7 +138,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
         setPlacingOrder(true);
 
         // Client-side quick validations (server re-validates everything)
-        if (!deliveryInfo?.name || !deliveryInfo?.phone || !deliveryInfo?.address) {
+        if (!deliveryInfo?.name?.trim() || !deliveryInfo?.phone?.trim() || !deliveryInfo?.address?.trim()) {
             toast.error('অনুগ্রহ করে ডেলিভারি তথ্য পূরণ করুন');
             setPlacingOrder(false);
             return;
@@ -191,7 +195,12 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                 }),
             });
 
-            const data = await response.json();
+            let data;
+            try {
+                data = await response.json();
+            } catch (jsonErr) {
+                data = { error: 'সার্ভার থেকে অপ্রত্যাশিত প্রতিক্রিয়া এসেছে।' };
+            }
 
             if (!response.ok) {
                 toast.error(data.error || 'অর্ডার প্রসেস করা যায়নি।');
@@ -245,10 +254,10 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
     }
 
     const discountAmount = calculateDiscount(coupon, totalPrice);
-    const shippingCost = deliveryInfo.location === 'outsideDhaka' ? (shippingSettings?.outsideDhaka?.cost || 120) : (shippingSettings?.insideDhaka?.cost || 70);
+    const shippingCost = deliveryInfo.location === 'outsideDhaka' ? (shippingSettings?.outsideDhaka?.cost ?? 120) : (shippingSettings?.insideDhaka?.cost ?? 70);
     const insideTime = shippingSettings?.insideDhaka?.deliveryTime || '১ - ২ কর্মদিবস';
     const outsideTime = shippingSettings?.outsideDhaka?.deliveryTime || '২ - ৪ কর্মদিবস';
-    const finalTotal = coupon ? (totalPrice - discountAmount + shippingCost) : (totalPrice + shippingCost);
+    const finalTotal = Math.max(0, Math.round(coupon ? (totalPrice - discountAmount + shippingCost) : (totalPrice + shippingCost)));
 
     const pm = shippingSettings?.paymentMethods || {};
     const paymentOptions = [
@@ -337,14 +346,14 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                         <input type="radio" id="insideDhaka" name="location" value="insideDhaka" checked={deliveryInfo.location === 'insideDhaka'} onChange={handleDeliveryChange} className='accent-slate-600' />
                         <div>
                             <p className='font-semibold text-slate-700 text-xs'>ঢাকার ভিতরে</p>
-                            <p className='text-[10px] text-slate-400'>ডেলিভারি সময়: {insideTime} • {currency}{shippingSettings?.insideDhaka?.cost || 70}</p>
+                            <p className='text-[10px] text-slate-400'>ডেলিভারি সময়: {insideTime} • {currency}{shippingSettings?.insideDhaka?.cost ?? 70}</p>
                         </div>
                     </label>
                     <label htmlFor="outsideDhaka" className={`flex items-center gap-2 border rounded-lg p-3 cursor-pointer transition-all ${deliveryInfo.location === 'outsideDhaka' ? 'border-slate-500 bg-slate-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                         <input type="radio" id="outsideDhaka" name="location" value="outsideDhaka" checked={deliveryInfo.location === 'outsideDhaka'} onChange={handleDeliveryChange} className='accent-slate-600' />
                         <div>
                             <p className='font-semibold text-slate-700 text-xs'>ঢাকার বাইরে</p>
-                            <p className='text-[10px] text-slate-400'>ডেলিভারি সময়: {outsideTime} • {currency}{shippingSettings?.outsideDhaka?.cost || 120}</p>
+                            <p className='text-[10px] text-slate-400'>ডেলিভারি সময়: {outsideTime} • {currency}{shippingSettings?.outsideDhaka?.cost ?? 120}</p>
                         </div>
                     </label>
                 </div>
@@ -512,7 +521,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
             </div>
             <button
                 type="submit"
-                disabled={placingOrder}
+                disabled={placingOrder || hasSubmittedRef.current}
                 className='group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-emerald-600 via-green-600 to-emerald-500 bg-[length:200%_auto] hover:bg-[position:right_center] py-3.5 px-6 text-white font-semibold text-sm shadow-lg shadow-green-600/30 hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98] transition-all duration-300 disabled:opacity-60 disabled:pointer-events-none disabled:transform-none flex items-center justify-center gap-2 cursor-pointer'
             >
                 {/* Eye-catching shimmer light reflection */}

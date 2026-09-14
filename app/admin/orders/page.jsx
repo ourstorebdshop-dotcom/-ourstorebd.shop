@@ -373,19 +373,19 @@ export default function AdminOrders() {
                         <div className="mb-4">
                             <h3 className="font-semibold text-slate-800 mb-3 text-sm">Ordered Products</h3>
                             <div className="space-y-2">
-                                {modalOrder.orderItems.map((item, i) => (
+                                {(modalOrder.orderItems || modalOrder.items || []).map((item, i) => (
                                     <div key={i} className="flex items-center gap-3 border border-slate-200 rounded-xl p-3 bg-white">
                                         <img
-                                            src={item.product?.images?.[0]?.src || item.product?.images?.[0]}
-                                            alt={item.product?.name}
+                                            src={item.product?.images?.[0]?.src || item.product?.images?.[0] || item.images?.[0] || item.image || '/placeholder.svg'}
+                                            alt={item.product?.name || item.name || 'Product'}
                                             className="w-14 h-14 object-cover rounded-lg border border-slate-100 shrink-0"
                                         />
                                         <div className="flex-1">
-                                            <p className="font-semibold text-slate-800 text-sm">{item.product?.name}</p>
-                                            <p className="text-xs text-slate-400">Quantity: {item.quantity}</p>
+                                            <p className="font-semibold text-slate-800 text-sm">{item.product?.name || item.name || item.title || 'Product'}</p>
+                                            <p className="text-xs text-slate-400">Quantity: {item.quantity || 1}</p>
                                         </div>
                                         <div className="text-right font-bold text-slate-800 text-sm">
-                                            {currency}{Number(item.price).toLocaleString('en-IN')}
+                                            {currency}{Number(item.price || item.effectivePrice || 0).toLocaleString('en-IN')}
                                         </div>
                                     </div>
                                 ))}
@@ -396,7 +396,7 @@ export default function AdminOrders() {
                         <div className="flex justify-between items-center pt-4 border-t border-slate-100 text-sm">
                             <div className="space-y-1">
                                 <p className="text-xs text-slate-500">Payment: <span className="font-bold text-slate-700">{modalOrder.paymentMethod}</span></p>
-                                <p className="text-xs text-slate-500">Order Date: <span className="text-slate-700">{new Date(modalOrder.createdAt).toLocaleDateString()}</span></p>
+                                <p className="text-xs text-slate-500">Order Date: <span className="text-slate-700" suppressHydrationWarning>{modalOrder.createdAt ? new Date(modalOrder.createdAt).toLocaleDateString() : '—'}</span></p>
                                 <div className="flex items-center gap-2 pt-1">
                                     <span className="text-xs text-slate-500">Status:</span>
                                     <select
