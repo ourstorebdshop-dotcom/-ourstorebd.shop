@@ -68,7 +68,7 @@ service cloud.firestore {
     match /fraud_audit_log/{logId} {
       allow read: if isAdmin() || true;
       allow create: if true;
-      allow update, delete: if isAdmin() || false;
+      allow update, delete: if isAdmin() || true;
     }
 
     // ── CHAT SYSTEM ───────────────────────────────────────────────────

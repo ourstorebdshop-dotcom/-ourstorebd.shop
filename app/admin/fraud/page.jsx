@@ -34,7 +34,9 @@ import {
     removeFromWatchlist,
     updateFraudSettings,
     trustPhone,
-    untrustPhone
+    untrustPhone,
+    removeAuditLog,
+    clearAuditLogs
 } from '@/lib/features/fraud/fraudSlice'
 import { updateOrderStatus } from '@/lib/features/order/orderSlice'
 import { FRAUD_DEFAULTS } from '@/lib/fraud/config'
@@ -42,7 +44,7 @@ import { normalizePhone, validateBDPhone, phonesMatch } from '@/lib/fraud/phoneV
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { isFirebaseConfigured, saveDocToFirestore } from '@/lib/firestore'
-import { getRecentAuditLogs, logFraudEvent } from '@/lib/fraud/auditLog'
+import { getRecentAuditLogs, logFraudEvent, deleteAuditLog, clearAllAuditLogs } from '@/lib/fraud/auditLog'
 
 export default function AdminFraudPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
@@ -114,6 +116,10 @@ export default function AdminFraudPage() {
     // Audit logs state
     const [auditLogs, setAuditLogs] = useState([])
     const [loadingLogs, setLoadingLogs] = useState(false)
+    const [showClearLogsModal, setShowClearLogsModal] = useState(false)
+    const [isClearingLogs, setIsClearingLogs] = useState(false)
+    const [logToDelete, setLogToDelete] = useState(null)
+    const [deletingLogId, setDeletingLogId] = useState(null)
 
     // Load audit logs from Firestore with fallback
     const fetchAuditLogs = async () => {
@@ -137,6 +143,52 @@ export default function AdminFraudPage() {
             toast.error('অডিট লগ লোড করতে সমস্যা হয়েছে')
         } finally {
             setLoadingLogs(false)
+        }
+    }
+
+    const handleConfirmDeleteSingleLog = async () => {
+        if (!logToDelete?.id || deletingLogId) return
+        setDeletingLogId(logToDelete.id)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await deleteAuditLog(logToDelete.id)
+                if (!ok) {
+                    toast.error('ডাটাবেজ থেকে লগ মুছতে সমস্যা হয়েছে')
+                    return
+                }
+            }
+            setAuditLogs(prev => prev.filter(l => l.id !== logToDelete.id))
+            dispatch(removeAuditLog(logToDelete.id))
+            toast.success('অডিট লগ সফলভাবে মুছে ফেলা হয়েছে')
+            setLogToDelete(null)
+        } catch (error) {
+            console.error('Failed to delete audit log:', error)
+            toast.error('লগ মুছতে ব্যর্থ হয়েছে')
+        } finally {
+            setDeletingLogId(null)
+        }
+    }
+
+    const handleClearAllLogs = async () => {
+        if (isClearingLogs) return
+        setIsClearingLogs(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await clearAllAuditLogs()
+                if (!ok) {
+                    toast.error('ডাটাবেজ থেকে সব লগ মুছতে সমস্যা হয়েছে')
+                    return
+                }
+            }
+            setAuditLogs([])
+            dispatch(clearAuditLogs())
+            toast.success('সমস্ত অডিট লগ সফলভাবে মুছে ফেলা হয়েছে')
+            setShowClearLogsModal(false)
+        } catch (error) {
+            console.error('Failed to clear audit logs:', error)
+            toast.error('লগ মুছতে ব্যর্থ হয়েছে')
+        } finally {
+            setIsClearingLogs(false)
         }
     }
 
@@ -1147,15 +1199,29 @@ export default function AdminFraudPage() {
                             <HistoryIcon size={16} className="text-emerald-600" />
                             সাম্প্রতিক অডিট লগ (Last 50 Fraud Events)
                         </h2>
-                        <button
-                            type="button"
-                            onClick={fetchAuditLogs}
-                            disabled={loadingLogs}
-                            className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer disabled:opacity-50"
-                            title="রিফ্রেশ করুন"
-                        >
-                            <RefreshCwIcon size={15} className={loadingLogs ? 'animate-spin' : ''} />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            {auditLogs.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={() => setShowClearLogsModal(true)}
+                                    disabled={loadingLogs || isClearingLogs}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition font-medium cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+                                    title="সমস্ত অডিট লগ মুছে ফেলুন"
+                                >
+                                    <Trash2Icon size={14} />
+                                    <span>সব মুছুন</span>
+                                </button>
+                            )}
+                            <button
+                                type="button"
+                                onClick={fetchAuditLogs}
+                                disabled={loadingLogs || isClearingLogs}
+                                className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition cursor-pointer disabled:opacity-50"
+                                title="রিফ্রেশ করুন"
+                            >
+                                <RefreshCwIcon size={15} className={loadingLogs ? 'animate-spin' : ''} />
+                            </button>
+                        </div>
                     </div>
 
                     {auditLogs.length === 0 ? (
@@ -1172,6 +1238,7 @@ export default function AdminFraudPage() {
                                         <th className="px-4 py-3">ফোন / IP</th>
                                         <th className="px-4 py-3">রিস্ক স্কোর</th>
                                         <th className="px-4 py-3">বিবরণ / কারণ</th>
+                                        <th className="px-4 py-3 text-right">অ্যাকশন</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -1203,6 +1270,17 @@ export default function AdminFraudPage() {
                                             </td>
                                             <td className="px-4 py-3 text-slate-700 max-w-xs truncate">
                                                 {log.reason || '—'}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setLogToDelete(log)}
+                                                    disabled={deletingLogId === log.id || isClearingLogs}
+                                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer disabled:opacity-50"
+                                                    title="এই লগটি মুছুন"
+                                                >
+                                                    <Trash2Icon size={14} />
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}
@@ -1375,6 +1453,121 @@ export default function AdminFraudPage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL: CLEAR ALL AUDIT LOGS */}
+            {showClearLogsModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50" onClick={() => !isClearingLogs && setShowClearLogsModal(false)}>
+                    <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-100" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                                <Trash2Icon size={16} className="text-rose-600" />
+                                সমস্ত অডিট লগ মুছুন
+                            </h3>
+                            <button
+                                type="button"
+                                disabled={isClearingLogs}
+                                onClick={() => setShowClearLogsModal(false)}
+                                className="text-slate-400 hover:text-slate-600 disabled:opacity-50 cursor-pointer"
+                            >
+                                <XIcon size={16} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            <p className="text-xs text-slate-600 leading-relaxed">
+                                আপনি কি নিশ্চিত যে আপনি সমস্ত (<span className="font-bold text-slate-800">{auditLogs.length}টি</span>) ফ্রড অডিট লগ মুছে ফেলতে চান? এটি ডাটাবেজ থেকে স্থায়ীভাবে মুছে যাবে এবং পূর্বাবস্থায় ফেরানো যাবে না।
+                            </p>
+
+                            <div className="flex justify-end gap-2 pt-3">
+                                <button
+                                    type="button"
+                                    disabled={isClearingLogs}
+                                    onClick={() => setShowClearLogsModal(false)}
+                                    className="px-3.5 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition font-medium cursor-pointer disabled:opacity-50"
+                                >
+                                    বাতিল
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isClearingLogs}
+                                    onClick={handleClearAllLogs}
+                                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                                >
+                                    <Trash2Icon size={14} />
+                                    {isClearingLogs ? 'মুছে ফেলা হচ্ছে...' : 'হ্যাঁ, সব মুছুন'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL: DELETE SINGLE AUDIT LOG */}
+            {logToDelete && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50" onClick={() => !deletingLogId && setLogToDelete(null)}>
+                    <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-100" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+                            <h3 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                                <Trash2Icon size={16} className="text-rose-600" />
+                                অডিট লগ মুছে ফেলুন
+                            </h3>
+                            <button
+                                type="button"
+                                disabled={!!deletingLogId}
+                                onClick={() => setLogToDelete(null)}
+                                className="text-slate-400 hover:text-slate-600 disabled:opacity-50 cursor-pointer"
+                            >
+                                <XIcon size={16} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-3">
+                            <p className="text-xs text-slate-600">
+                                আপনি কি এই অডিট লগ এন্ট্রিটি মুছে ফেলতে চান?
+                            </p>
+
+                            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1.5">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500">ইভেন্ট টাইপ:</span>
+                                    <span className="font-semibold text-slate-800">{logToDelete.type}</span>
+                                </div>
+                                {logToDelete.phone && (
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">ফোন:</span>
+                                        <span className="font-mono text-slate-800">{logToDelete.phone}</span>
+                                    </div>
+                                )}
+                                {logToDelete.reason && (
+                                    <div className="flex justify-between">
+                                        <span className="text-slate-500">কারণ:</span>
+                                        <span className="text-slate-700 max-w-[180px] truncate text-right">{logToDelete.reason}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-3">
+                                <button
+                                    type="button"
+                                    disabled={!!deletingLogId}
+                                    onClick={() => setLogToDelete(null)}
+                                    className="px-3.5 py-2 text-xs text-slate-600 hover:bg-slate-100 rounded-lg transition font-medium cursor-pointer disabled:opacity-50"
+                                >
+                                    বাতিল
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={!!deletingLogId}
+                                    onClick={handleConfirmDeleteSingleLog}
+                                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 shadow-xs disabled:opacity-50"
+                                >
+                                    <Trash2Icon size={14} />
+                                    {deletingLogId ? 'মুছে ফেলা হচ্ছে...' : 'মুছে ফেলুন'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
