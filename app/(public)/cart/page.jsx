@@ -53,8 +53,8 @@ export default function CartPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
 
-    const { cartItems } = useSelector(state => state.cart)
-    const products = useSelector(state => state.product.list)
+    const cartItems = useSelector(state => state.cart?.cartItems || {})
+    const products = useSelector(state => state.product?.list || [])
     const shippingSettings = useSelector(state => state.shipping)
 
     const [cartArray, setCartArray] = useState([])
@@ -68,8 +68,8 @@ export default function CartPage() {
     useEffect(() => {
         let total = 0
         const items = []
-        for (const [key, value] of Object.entries(cartItems)) {
-            const product = products.find(p => p.id === key)
+        for (const [key, value] of Object.entries(cartItems || {})) {
+            const product = (products || []).find(p => p?.id === key)
             if (product) {
                 const qty = typeof value === 'number' ? value : value.quantity
                 const color = typeof value === 'object' ? value.color : null

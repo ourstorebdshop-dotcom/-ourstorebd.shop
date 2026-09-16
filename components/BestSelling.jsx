@@ -24,9 +24,9 @@ const BestSelling = () => {
             !p.sections || !Array.isArray(p.sections) || !p.sections.includes('bestSelling')
         )
 
-        // Sort explicit first, then other products
         const sortedExplicit = explicitBest.slice().sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-        const sortedOther = otherProducts.slice().sort((a, b) => (b.rating?.length || 0) - (a.rating?.length || 0))
+        const getVisibleRatingCount = (p) => (Array.isArray(p.rating) ? p.rating : []).filter(r => r && r.isVisible !== false && r.status !== 'hidden').length
+        const sortedOther = otherProducts.slice().sort((a, b) => getVisibleRatingCount(b) - getVisibleRatingCount(a))
 
         const best = sortedExplicit.length > 0
             ? [...sortedExplicit, ...sortedOther]

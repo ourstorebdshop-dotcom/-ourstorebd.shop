@@ -7,11 +7,12 @@ import { useState } from "react";
 import RatingModal from "./RatingModal";
 
 const OrderItem = ({ order }) => {
+    if (!order) return null;
 
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳';
     const [ratingModal, setRatingModal] = useState(null);
 
-    const { ratings } = useSelector(state => state.rating);
+    const ratings = useSelector(state => state.rating?.ratings || []);
 
     return (
         <>
@@ -51,12 +52,11 @@ const OrderItem = ({ order }) => {
                                         )}
                                         <p className="mb-1">{order.createdAt ? new Date(order.createdAt).toDateString() : ''}</p>
                                         <div>
-                                            {prodId && ratings.find(rating => order.id === rating.orderId && prodId === rating.productId)
+                                            {prodId && ratings?.find(rating => order.id === rating.orderId && prodId === rating.productId)
                                                 ? <Rating value={ratings.find(rating => order.id === rating.orderId && prodId === rating.productId).rating} />
                                                 : <button onClick={() => setRatingModal({ orderId: order.id, productId: prodId })} className={`text-green-500 hover:bg-green-50 transition ${order.status !== "DELIVERED" && 'hidden'}`}>Rate Product</button>
                                             }
                                         </div>
-                                        {ratingModal && <RatingModal ratingModal={ratingModal} setRatingModal={setRatingModal} />}
                                     </div>
                                 </div>
                             );
@@ -107,6 +107,7 @@ const OrderItem = ({ order }) => {
                     <div className="border-b border-slate-300 w-6/7 mx-auto" />
                 </td>
             </tr>
+            {ratingModal && <RatingModal ratingModal={ratingModal} setRatingModal={setRatingModal} />}
         </>
     )
 }

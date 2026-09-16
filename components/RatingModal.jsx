@@ -1,11 +1,17 @@
 'use client'
 
-import { Star } from 'lucide-react';
 import React, { useState } from 'react'
-import { XIcon } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { useDispatch, useSelector } from 'react-redux'
+import { Star, XIcon } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { addProductReview } from '@/lib/features/product/productSlice'
+import { addRating } from '@/lib/features/rating/ratingSlice'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 
 const RatingModal = ({ ratingModal, setRatingModal }) => {
+    const dispatch = useDispatch()
+    const { currentUser } = useSelector(state => state.user || {})
+    const products = useSelector(state => state.product?.list || [])
 
     const [rating, setRating] = useState(0);
     const [review, setReview] = useState('');
@@ -16,6 +22,56 @@ const RatingModal = ({ ratingModal, setRatingModal }) => {
         }
         if (review.length < 5) {
             return toast('write a short review');
+        }
+
+        try {
+            const prodId = ratingModal?.productId
+            const product = products.find(p => p.id === prodId)
+            const currentRatings = Array.isArray(product?.rating) ? [...product.rating] : []
+
+            const newReview = {
+                id: `rat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+                rating: Number(rating),
+                review: review.trim(),
+                orderId: ratingModal?.orderId,
+                productId: prodId,
+                user: {
+                    id: currentUser?.id || `user_${Date.now()}`,
+                    name: currentUser?.name || "Customer",
+                    email: currentUser?.email || "",
+                    image: currentUser?.avatar || currentUser?.image || "",
+                    location: currentUser?.addresses?.[0]?.city || "Bangladesh",
+                },
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                isVisible: true,
+                status: 'approved',
+            }
+
+            dispatch(addProductReview({ productId: prodId, review: newReview }))
+            dispatch(addRating({ orderId: ratingModal?.orderId, productId: prodId, rating: Number(rating) }))
+
+            const updatedRatings = [newReview, ...currentRatings]
+
+            if (isFirebaseConfigured() && prodId) {
+                await saveDocToFirestore('products', prodId, { rating: updatedRatings })
+            }
+
+            try {
+                const stored = localStorage.getItem('gocart_products')
+                if (stored && prodId) {
+                    const list = JSON.parse(stored)
+                    const idx = list.findIndex(p => p.id === prodId)
+                    if (idx !== -1) {
+                        list[idx].rating = updatedRatings
+                        localStorage.setItem('gocart_products', JSON.stringify(list))
+                    }
+                }
+            } catch (err) { /* ignore */ }
+
+            toast.success("রেটিং ও রিভিউ দেওয়ার জন্য ধন্যবাদ! ⭐")
+        } catch (err) {
+            console.error("Error submitting rating modal:", err)
         }
 
         setRatingModal(null);

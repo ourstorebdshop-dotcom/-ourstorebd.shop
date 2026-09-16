@@ -123,7 +123,7 @@ export function ProductJsonLd({ product, siteUrl = "https://ourstorebd.shop" }) 
     if (!product) return null;
 
     const currency = "BDT";
-    const ratings = Array.isArray(product.rating) ? product.rating : [];
+    const ratings = (Array.isArray(product.rating) ? product.rating : []).filter(r => r && r.isVisible !== false && r.status !== 'hidden');
     const ratingCount = ratings.length || 1;
     const avgRating = ratings.length > 0
         ? (ratings.reduce((sum, r) => sum + (typeof r.rating === 'number' ? r.rating : 5), 0) / ratings.length).toFixed(1)

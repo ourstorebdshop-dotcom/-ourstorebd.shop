@@ -46,12 +46,13 @@ const ProductCard = ({ product }) => {
     const dispatch = useDispatch()
     const router = useRouter()
     const [addedToCart, setAddedToCart] = useState(false)
-    const resolvedImg = resolveImage(product.images?.[0])
+    const resolvedImg = resolveImage(product?.images?.[0])
     const [currentImg, setCurrentImg] = React.useState(resolvedImg)
     const [imgStyle, setImgStyle] = React.useState(() => getInitialStyle(resolvedImg))
 
     React.useEffect(() => {
-        const resolved = resolveImage(product.images?.[0])
+        if (!product) return
+        const resolved = resolveImage(product?.images?.[0])
         setCurrentImg(resolved)
 
         if (!resolved || typeof window === 'undefined') return
@@ -64,7 +65,8 @@ const ProductCard = ({ product }) => {
         }
 
         let isCancelled = false
-        const scheduleIdle = typeof window !== 'undefined' && 'requestIdleCallback' in window
+        const hasIdle = typeof window !== 'undefined' && 'requestIdleCallback' in window
+        const scheduleIdle = hasIdle
             ? window.requestIdleCallback
             : (fn) => setTimeout(fn, 300)
 
@@ -152,17 +154,24 @@ const ProductCard = ({ product }) => {
 
         return () => {
             isCancelled = true
-            if (typeof window !== 'undefined' && 'cancelIdleCallback' in window && typeof idleId === 'number') {
-                window.cancelIdleCallback(idleId)
+            if (typeof window !== 'undefined') {
+                if (hasIdle && typeof idleId === 'number') {
+                    window.cancelIdleCallback(idleId)
+                } else {
+                    clearTimeout(idleId)
+                }
             }
         }
-    }, [product.images])
+    }, [product?.images])
 
     const wishlistItems = useSelector(state => state.wishlist?.items || [])
+
+    if (!product) return null
+
     const isWishlisted = wishlistItems.includes(product.id) || (product._id && wishlistItems.includes(product._id))
 
     // calculate the average rating of the product (guard against undefined/empty rating array)
-    const ratingsList = Array.isArray(product.rating) ? product.rating : [];
+    const ratingsList = (Array.isArray(product.rating) ? product.rating : []).filter(r => r && r.isVisible !== false && r.status !== 'hidden');
     const rating = ratingsList.length > 0
         ? Math.round(ratingsList.reduce((acc, curr) => acc + (Number(curr.rating) || 0), 0) / ratingsList.length)
         : 0;

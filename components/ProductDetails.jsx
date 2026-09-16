@@ -205,7 +205,7 @@ const ProductDetails = ({ product }) => {
         router.push('/order');
     }
 
-    const ratings = Array.isArray(product?.rating) ? product.rating : [];
+    const ratings = (Array.isArray(product?.rating) ? product.rating : []).filter(r => r && r.isVisible !== false && r.status !== 'hidden');
     const averageRating = ratings.length > 0
         ? ratings.reduce((acc, item) => acc + (Number(item.rating) || 0), 0) / ratings.length
         : 0;

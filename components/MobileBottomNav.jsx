@@ -127,7 +127,7 @@ export default function MobileBottomNav() {
     // Active state checkers
     const isHomeActive = pathname === '/' && !isMenuOpen && !isSearchOpen
     const isCartActive = (pathname === '/cart' || pathname === '/order') && !isMenuOpen && !isSearchOpen
-    const isAccountActive = (pathname.startsWith('/profile') || pathname === '/login') && !isMenuOpen && !isSearchOpen
+    const isAccountActive = (Boolean(pathname?.startsWith('/profile')) || pathname === '/login') && !isMenuOpen && !isSearchOpen
     const isMenuTabActive = isMenuOpen || (pathname === '/shop' && !isSearchOpen)
     const isSearchTabActive = isSearchOpen
 

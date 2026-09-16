@@ -407,6 +407,17 @@ export async function POST(request) {
         // ── 11. Duplicate & History checks (from preloaded data) ────────
         if (orderChecks.isDuplicate) {
             signals.duplicateOrder = true
+        } else if (finalTotal > 0 && Array.isArray(orderChecks.recentOrders)) {
+            // Re-check SAME_PHONE_SAME_AMOUNT using the verified final server total
+            const dupAmountOrder = orderChecks.recentOrders.find(
+                o => Math.abs((o.total || 0) - finalTotal) < 1
+            )
+            if (dupAmountOrder) {
+                signals.duplicateOrder = true
+                orderChecks.isDuplicate = true
+                orderChecks.matchedOrderId = dupAmountOrder.id
+                orderChecks.reason = 'SAME_PHONE_SAME_AMOUNT'
+            }
         }
 
         const history = orderChecks.history
@@ -579,11 +590,16 @@ export async function POST(request) {
                     }
 
                     const origin = request.nextUrl?.origin || 'http://localhost:3000'
+                    const controller = new AbortController()
+                    const timeoutId = setTimeout(() => controller.abort(), 5000)
                     fetch(`${origin}/api/tracking`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(capiPayload),
-                    }).catch(e => console.warn('[OrderAPI] Meta CAPI non-blocking error:', e))
+                        signal: controller.signal,
+                    })
+                        .catch(e => console.warn('[OrderAPI] Meta CAPI non-blocking notice:', e.message || e))
+                        .finally(() => clearTimeout(timeoutId))
                 }).catch(() => {})
             )
         }

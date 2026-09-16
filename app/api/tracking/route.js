@@ -102,6 +102,9 @@ async function sendToMetaCAPI({ pixelId, accessToken, eventData, testEventCode }
         payload.test_event_code = String(testEventCode).trim()
     }
 
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
+
     try {
         const response = await fetch(url, {
             method: 'POST',
@@ -110,6 +113,7 @@ async function sendToMetaCAPI({ pixelId, accessToken, eventData, testEventCode }
                 'Accept': 'application/json',
             },
             body: JSON.stringify(payload),
+            signal: controller.signal,
         })
 
         const resJson = await response.json()
@@ -130,8 +134,10 @@ async function sendToMetaCAPI({ pixelId, accessToken, eventData, testEventCode }
     } catch (err) {
         return {
             success: false,
-            error: err.message || 'Network error calling Meta CAPI',
+            error: err.name === 'AbortError' ? 'Meta CAPI request timed out (8s limit)' : (err.message || 'Network error calling Meta CAPI'),
         }
+    } finally {
+        clearTimeout(timeoutId)
     }
 }
 

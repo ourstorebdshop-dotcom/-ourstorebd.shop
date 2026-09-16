@@ -49,7 +49,7 @@ function LoginForm() {
     const redirectUrl = searchParams.get('redirect') || '/profile'
     
     const dispatch = useDispatch()
-    const { currentUser, savedUsers, isAuthenticated } = useSelector(state => state.user)
+    const { currentUser, savedUsers, isAuthenticated } = useSelector(state => state.user || {})
     const apiSettings = useSelector(state => state.apiSettings)
     const googleAuth = apiSettings?.googleAuth
 

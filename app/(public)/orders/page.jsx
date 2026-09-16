@@ -7,11 +7,11 @@ import Link from "next/link";
 import { User, LayoutDashboard, ShoppingBag } from "lucide-react";
 
 export default function Orders() {
-    const allOrders = useSelector(state => state.order.orders);
-    const { currentUser, isAuthenticated } = useSelector(state => state.user);
+    const allOrders = useSelector(state => state.order?.orders || []);
+    const { currentUser, isAuthenticated } = useSelector(state => state.user || {});
 
     // If customer logged in, show user orders; otherwise show guest's current session orders only
-    const orders = allOrders.filter(order => {
+    const orders = (allOrders || []).filter(order => {
         if (currentUser) {
             return order.userId === currentUser.id || 
                    order.user?.email === currentUser.email || 

@@ -44,9 +44,9 @@ const Navbar = () => {
         'Cleaner': Sparkles
     };
 
-    const cartItems = useSelector(state => state.cart.cartItems);
+    const cartItems = useSelector(state => state.cart?.cartItems || {});
     const cartCount = useMemo(() => {
-        return Object.values(cartItems).reduce((sum, item) => sum + (typeof item === 'number' ? item : (item?.quantity || 0)), 0);
+        return Object.values(cartItems || {}).reduce((sum, item) => sum + (typeof item === 'number' ? item : (item?.quantity || 0)), 0);
     }, [cartItems]);
 
     const allProducts = useSelector(state => state.product?.list || []);
@@ -158,7 +158,12 @@ const Navbar = () => {
 
     const handleSearch = (e) => {
         e.preventDefault();
-        router.push(`/shop?search=${search}`);
+        const trimmed = (search || '').trim();
+        if (trimmed) {
+            router.push(`/shop?search=${encodeURIComponent(trimmed)}`);
+        } else {
+            router.push('/shop');
+        }
         closeMobileMenu();
     };
 

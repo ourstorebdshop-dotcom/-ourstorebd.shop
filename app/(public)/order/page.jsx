@@ -50,10 +50,10 @@ export default function OrderPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
 
-    const { cartItems } = useSelector(state => state.cart)
-    const products = useSelector(state => state.product.list)
+    const cartItems = useSelector(state => state.cart?.cartItems || {})
+    const products = useSelector(state => state.product?.list || [])
     const isProductHydrated = useSelector(state => state.product?.isHydrated)
-    const { currentUser } = useSelector(state => state.user)
+    const currentUser = useSelector(state => state.user?.currentUser)
 
     const [cartArray, setCartArray] = useState([])
     const [totalPrice, setTotalPrice] = useState(0)

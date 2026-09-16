@@ -19,8 +19,8 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
     const router = useRouter();
     const dispatch = useDispatch();
 
-    const coupons = useSelector(state => state.coupon.coupons);
-    const { currentUser } = useSelector(state => state.user);
+    const coupons = useSelector(state => state.coupon?.coupons || []);
+    const { currentUser } = useSelector(state => state.user || {});
     const shippingSettings = useSelector(state => state.shipping);
 
     const [paymentMethod, setPaymentMethod] = useState('COD');

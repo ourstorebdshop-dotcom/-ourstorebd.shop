@@ -1,11 +1,31 @@
 import { NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
+import { verifyAdminSessionToken, COOKIE_NAME } from '@/lib/security/auth'
 
 export async function POST(request) {
     try {
+        // 1. Authenticate Admin Session
+        const token = request.cookies.get(COOKIE_NAME)?.value ||
+                      request.headers.get('authorization')?.replace('Bearer ', '')
+
+        if (!token) {
+            return NextResponse.json(
+                { success: false, error: 'Unauthorized: Admin session token required' },
+                { status: 401 }
+            )
+        }
+
+        const authResult = verifyAdminSessionToken(token)
+        if (!authResult.valid) {
+            return NextResponse.json(
+                { success: false, error: `Unauthorized: ${authResult.error || 'Invalid admin token'}` },
+                { status: 401 }
+            )
+        }
+
         const body = await request.json()
-        const { faviconDataUrl, appleTouchIconDataUrl } = body
+        const { faviconDataUrl, appleTouchIconDataUrl } = body || {}
 
         let savedFavicon = false
         let savedAppleIcon = false
@@ -22,7 +42,10 @@ export async function POST(request) {
             if (!dataUrl || typeof dataUrl !== 'string') return null
             const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/)
             if (!match) return null
-            return Buffer.from(match[2], 'base64')
+            const buf = Buffer.from(match[2], 'base64')
+            // Limit to 5MB to prevent storage exhaustion
+            if (buf.length > 5 * 1024 * 1024) return null
+            return buf
         }
 
         // 1. Save favicon.ico / favicon.png

@@ -208,25 +208,26 @@ const Footer = () => {
                                     {section.title}
                                 </h3>
                                 <ul className="space-y-2.5">
-                                    {(section.links || []).filter(l => l.isEnabled !== false).map((link) => {
+                                    {(section.links || []).filter(l => l && l.isEnabled !== false).map((link) => {
                                         const IconComponent = link.iconType ? contactIconMap[link.iconType] : null;
-                                        const isExternal = link.path.startsWith('http') || link.path.startsWith('tel:') || link.path.startsWith('mailto:');
+                                        const path = String(link.path || '#').trim();
+                                        const isExternal = path.startsWith('http') || path.startsWith('tel:') || path.startsWith('mailto:');
 
                                         return (
                                             <li key={link.id} className="flex items-center gap-2">
                                                 {IconComponent && <IconComponent />}
                                                 {isExternal ? (
                                                     <a
-                                                        href={link.path}
-                                                        target={link.path.startsWith('http') ? '_blank' : undefined}
-                                                        rel={link.path.startsWith('http') ? 'noopener noreferrer' : undefined}
+                                                        href={path}
+                                                        target={path.startsWith('http') ? '_blank' : undefined}
+                                                        rel={path.startsWith('http') ? 'noopener noreferrer' : undefined}
                                                         className="text-slate-600 hover:text-green-600 hover:underline transition"
                                                     >
                                                         {link.text}
                                                     </a>
                                                 ) : (
                                                     <Link
-                                                        href={link.path}
+                                                        href={path || '/'}
                                                         className="text-slate-600 hover:text-green-600 hover:underline transition"
                                                     >
                                                         {link.text}

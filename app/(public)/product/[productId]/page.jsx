@@ -12,7 +12,7 @@ export default function Product() {
     const { productId } = useParams();
     const [product, setProduct] = useState(null);
     const [hasChecked, setHasChecked] = useState(false);
-    const products = useSelector(state => state.product.list);
+    const products = useSelector(state => state.product?.list || []);
 
     useEffect(() => {
         if (products && products.length > 0) {

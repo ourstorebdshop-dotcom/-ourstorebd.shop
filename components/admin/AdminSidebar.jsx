@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation"
 import { useSelector } from "react-redux"
-import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon, ShieldAlertIcon, LayoutTemplateIcon, RadarIcon, GlobeIcon, ZapIcon } from "lucide-react"
+import { HomeIcon, SquarePlusIcon, SquarePenIcon, LayoutListIcon, TicketPercentIcon, MegaphoneIcon, UsersIcon, MessageSquareIcon, Grid3X3Icon, TruckIcon, CircleDollarSignIcon, KeyRoundIcon, HeadphonesIcon, ShieldAlertIcon, LayoutTemplateIcon, RadarIcon, GlobeIcon, ZapIcon, StarIcon } from "lucide-react"
 import Link from "next/link"
 import { getLocalMonthStr } from "@/lib/features/cashflow/cashflowSlice"
 
@@ -60,6 +60,7 @@ const AdminSidebar = ({ isMobileBottomNav = false }) => {
         { name: 'Cash Flow', href: '/admin/cash-flow', icon: CircleDollarSignIcon, badge: budgetAlertsCount },
         { name: 'Add Product', href: '/admin/add-product', icon: SquarePlusIcon },
         { name: 'Manage Products', href: '/admin/manage-product', icon: SquarePenIcon },
+        { name: 'Reviews', href: '/admin/reviews', icon: StarIcon },
         { name: 'Categories', href: '/admin/categories', icon: Grid3X3Icon },
         { name: 'Orders', href: '/admin/orders', icon: LayoutListIcon, badge: pendingOrdersCount },
         { name: 'Fraud Guard', href: '/admin/fraud', icon: ShieldAlertIcon, badge: pendingFraudCount },

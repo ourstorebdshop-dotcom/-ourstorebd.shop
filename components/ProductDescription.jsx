@@ -43,7 +43,9 @@ const ProductDescription = ({ product }) => {
     const { currentUser } = useSelector(state => state.user || {})
 
     const [selectedTab, setSelectedTab] = useState('Description')
-    const ratings = Array.isArray(product?.rating) ? product.rating : []
+    const allRatings = Array.isArray(product?.rating) ? product.rating : []
+    // Filter only published/visible reviews for customer-facing display and statistics
+    const ratings = allRatings.filter(r => r && r.isVisible !== false && r.status !== 'hidden')
 
     // Calculate rating statistics
     const totalReviews = ratings.length
@@ -53,7 +55,7 @@ const ProductDescription = ({ product }) => {
 
     // Check if current user already submitted a review
     const existingReview = currentUser?.id
-        ? ratings.find(r => r.user?.id === currentUser.id || (currentUser.email && r.user?.email === currentUser.email))
+        ? allRatings.find(r => r.user?.id === currentUser.id || (currentUser.email && r.user?.email === currentUser.email))
         : null
 
     // Form state
@@ -107,13 +109,15 @@ const ProductDescription = ({ product }) => {
                 productId: product.id,
                 createdAt: existingReview?.createdAt || new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
+                isVisible: existingReview ? (existingReview.isVisible !== false && existingReview.status !== 'hidden') : true,
+                status: existingReview ? (existingReview.status || 'approved') : 'approved',
             }
 
             // 1. Update Redux store immediately
             dispatch(addProductReview({ productId: product.id, review: newReview }))
 
             // 2. Persist to Firestore
-            const otherRatings = ratings.filter(r => r.user?.id !== currentUser.id && r.id !== newReview.id)
+            const otherRatings = allRatings.filter(r => r.user?.id !== currentUser.id && r.id !== newReview.id)
             const updatedRatings = [newReview, ...otherRatings]
             await saveDocToFirestore('products', product.id, { rating: updatedRatings })
 

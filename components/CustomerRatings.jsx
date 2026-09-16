@@ -85,7 +85,7 @@ const CustomerRatings = () => {
         products.forEach(p => {
             if (Array.isArray(p.rating)) {
                 p.rating.forEach(r => {
-                    if (r && (r.review || r.rating)) {
+                    if (r && (r.review || r.rating) && r.isVisible !== false && r.status !== 'hidden') {
                         const key = `${r.user?.id || r.user?.email || r.user?.name}_${p.id}`
                         if (!seenUserProduct.has(key)) {
                             seenUserProduct.add(key)

@@ -118,70 +118,105 @@ export default function StoreProvider({ children }) {
         const store = storeRef.current
         const firebaseEnabled = isFirebaseConfigured()
 
-        // ===== ONE-TIME CLEANUP: clear corrupted localStorage & default dummy wishlist =====
-        const MIGRATION_KEY = 'gocart_data_v6'
-        if (!localStorage.getItem(MIGRATION_KEY)) {
-            localStorage.removeItem(CART_STORAGE_KEY)
-            localStorage.setItem(MIGRATION_KEY, '1')
+        // Declare and initialize all state tracking variables at the very top of useEffect
+        // to completely eliminate any Temporal Dead Zone (TDZ) risk across async callbacks/listeners.
+        let prevCoupons = store.getState().coupon?.coupons
+        let prevBanners = store.getState().banner?.banners
+        let prevHero = store.getState().hero
+        let prevUser = store.getState().user?.currentUser
+        let prevSavedUsers = store.getState().user?.savedUsers
+        let prevOrders = store.getState().order?.orders
+        let prevCart = store.getState().cart
+        let prevContact = store.getState().contact
+        let prevWishlist = store.getState().wishlist?.items
+        let prevCategories = store.getState().category?.categories
+        let prevShipping = store.getState().shipping
+        let prevFraud = store.getState().fraud
+        let prevCashflow = store.getState().cashflow
+        let prevApiSettings = store.getState().apiSettings
+        let prevHeaderFooter = store.getState().headerFooter
+        let prevTracking = store.getState().tracking
+        let prevFavicon = store.getState().favicon
+
+        function getDeletedUserIds() {
+            try {
+                const raw = localStorage.getItem('gocart_deleted_user_ids')
+                if (!raw) return []
+                const parsed = JSON.parse(raw)
+                return Array.isArray(parsed) ? parsed : []
+            } catch {
+                return []
+            }
         }
-        const WISHLIST_CLEANUP_KEY = 'gocart_wishlist_clean_v5'
-        if (!localStorage.getItem(WISHLIST_CLEANUP_KEY)) {
-            const savedWl = localStorage.getItem(WISHLIST_STORAGE_KEY)
-            if (savedWl) {
-                try {
-                    const parsed = JSON.parse(savedWl)
-                    if (Array.isArray(parsed)) {
-                        // Strip any demo dummy product IDs (prod_1 to prod_16)
-                        const cleaned = parsed.filter(id => typeof id === 'string' && !DUMMY_IDS.has(id))
-                        if (cleaned.length > 0) {
-                            localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(cleaned))
+
+        // ===== ONE-TIME CLEANUP: clear corrupted localStorage & default dummy wishlist =====
+        try {
+            const MIGRATION_KEY = 'gocart_data_v6'
+            if (!localStorage.getItem(MIGRATION_KEY)) {
+                localStorage.removeItem(CART_STORAGE_KEY)
+                localStorage.setItem(MIGRATION_KEY, '1')
+            }
+            const WISHLIST_CLEANUP_KEY = 'gocart_wishlist_clean_v5'
+            if (!localStorage.getItem(WISHLIST_CLEANUP_KEY)) {
+                const savedWl = localStorage.getItem(WISHLIST_STORAGE_KEY)
+                if (savedWl) {
+                    try {
+                        const parsed = JSON.parse(savedWl)
+                        if (Array.isArray(parsed)) {
+                            // Strip any demo dummy product IDs (prod_1 to prod_16)
+                            const cleaned = parsed.filter(id => typeof id === 'string' && !DUMMY_IDS.has(id))
+                            if (cleaned.length > 0) {
+                                localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(cleaned))
+                            } else {
+                                localStorage.removeItem(WISHLIST_STORAGE_KEY)
+                            }
                         } else {
                             localStorage.removeItem(WISHLIST_STORAGE_KEY)
                         }
-                    } else {
+                    } catch (e) {
                         localStorage.removeItem(WISHLIST_STORAGE_KEY)
                     }
-                } catch (e) {
-                    localStorage.removeItem(WISHLIST_STORAGE_KEY)
                 }
+                localStorage.setItem(WISHLIST_CLEANUP_KEY, '1')
             }
-            localStorage.setItem(WISHLIST_CLEANUP_KEY, '1')
-        }
-        // ===== ONE-TIME CLEANUP: clear legacy demo products from localStorage =====
-        const DEMO_CLEANUP_KEY = 'gocart_demo_clean_v2'
-        if (!localStorage.getItem(DEMO_CLEANUP_KEY)) {
-            try {
-                const saved = localStorage.getItem(PRODUCT_STORAGE_KEY)
-                if (saved) {
-                    const parsed = JSON.parse(saved)
-                    if (Array.isArray(parsed)) {
-                        const cleaned = parsed.filter(p => !isDemoProduct(p))
-                        localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(cleaned))
+            // ===== ONE-TIME CLEANUP: clear legacy demo products from localStorage =====
+            const DEMO_CLEANUP_KEY = 'gocart_demo_clean_v2'
+            if (!localStorage.getItem(DEMO_CLEANUP_KEY)) {
+                try {
+                    const saved = localStorage.getItem(PRODUCT_STORAGE_KEY)
+                    if (saved) {
+                        const parsed = JSON.parse(saved)
+                        if (Array.isArray(parsed)) {
+                            const cleaned = parsed.filter(p => !isDemoProduct(p))
+                            localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(cleaned))
+                        }
                     }
-                }
-            } catch (e) { /* ignore */ }
-            localStorage.setItem(DEMO_CLEANUP_KEY, '1')
-        }
+                } catch (e) { /* ignore */ }
+                localStorage.setItem(DEMO_CLEANUP_KEY, '1')
+            }
 
-        // ===== ONE-TIME CLEANUP: clear legacy demo user from localStorage =====
-        const DEMO_USER_CLEANUP_KEY = 'gocart_demo_user_clean_v1'
-        if (!localStorage.getItem(DEMO_USER_CLEANUP_KEY)) {
-            try {
-                const deleted = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
-                if (!deleted.includes('user_demo_1')) {
-                    deleted.push('user_demo_1')
-                    localStorage.setItem('gocart_deleted_user_ids', JSON.stringify(deleted))
-                }
-                const saved = localStorage.getItem(SAVED_USERS_STORAGE_KEY)
-                if (saved) {
-                    const parsed = JSON.parse(saved)
-                    if (Array.isArray(parsed)) {
-                        const cleaned = parsed.filter(u => u.id !== 'user_demo_1')
-                        localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(cleaned))
+            // ===== ONE-TIME CLEANUP: clear legacy demo user from localStorage =====
+            const DEMO_USER_CLEANUP_KEY = 'gocart_demo_user_clean_v1'
+            if (!localStorage.getItem(DEMO_USER_CLEANUP_KEY)) {
+                try {
+                    const deleted = getDeletedUserIds()
+                    if (!deleted.includes('user_demo_1')) {
+                        deleted.push('user_demo_1')
+                        localStorage.setItem('gocart_deleted_user_ids', JSON.stringify(deleted))
                     }
-                }
-            } catch (e) { /* ignore */ }
-            localStorage.setItem(DEMO_USER_CLEANUP_KEY, '1')
+                    const saved = localStorage.getItem(SAVED_USERS_STORAGE_KEY)
+                    if (saved) {
+                        const parsed = JSON.parse(saved)
+                        if (Array.isArray(parsed)) {
+                            const cleaned = parsed.filter(u => u.id !== 'user_demo_1')
+                            localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(cleaned))
+                        }
+                    }
+                } catch (e) { /* ignore */ }
+                localStorage.setItem(DEMO_USER_CLEANUP_KEY, '1')
+            }
+        } catch (e) {
+            console.warn('One-time storage migration failed:', e)
         }
 
         // ===== localStorage hydration helpers =====
@@ -423,7 +458,7 @@ export default function StoreProvider({ children }) {
         function lsLoadUserSpecific() {
             // Users & Current Session
             try {
-                const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                const deletedIds = getDeletedUserIds()
                 const savedUserList = localStorage.getItem(SAVED_USERS_STORAGE_KEY)
                 if (savedUserList !== null) {
                     let parsedUsers = JSON.parse(savedUserList)
@@ -696,7 +731,7 @@ export default function StoreProvider({ children }) {
                     // --- 9. Customers (Firestore is source of truth) ---
                     if (customersRes.status === 'fulfilled' && Array.isArray(customersRes.value) && customersRes.value.length > 0) {
                         const fsCustomers = customersRes.value
-                        const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                        const deletedIds = getDeletedUserIds()
                         const filtered = fsCustomers.filter(u => u && u.id && !deletedIds.includes(u.id))
                         store.dispatch(hydrateSavedUsers(filtered))
                         try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(filtered)) } catch (e) { /* ignore */ }
@@ -909,7 +944,7 @@ export default function StoreProvider({ children }) {
                 subscribeToCollection('customers', (docs) => {
                     if (docs && Array.isArray(docs)) {
                         isReceivingFromFirestore = true
-                        const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                        const deletedIds = getDeletedUserIds()
                         const filtered = docs.filter(u => u && u.id && !deletedIds.includes(u.id))
                         store.dispatch(hydrateSavedUsers(filtered))
                         try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(filtered)) } catch (e) { /* ignore */ }
@@ -932,24 +967,6 @@ export default function StoreProvider({ children }) {
         }
 
         // ===== SUBSCRIBE: persist state changes to localStorage + Firestore =====
-        let prevCoupons = store.getState().coupon.coupons
-        let prevBanners = store.getState().banner.banners
-        let prevHero = store.getState().hero
-        let prevUser = store.getState().user.currentUser
-        let prevSavedUsers = store.getState().user.savedUsers
-        let prevOrders = store.getState().order.orders
-        let prevCart = store.getState().cart
-        let prevContact = store.getState().contact
-        let prevWishlist = store.getState().wishlist?.items
-        let prevCategories = store.getState().category?.categories
-        let prevShipping = store.getState().shipping
-        let prevFraud = store.getState().fraud
-        let prevCashflow = store.getState().cashflow
-        let prevApiSettings = store.getState().apiSettings
-        let prevHeaderFooter = store.getState().headerFooter
-        let prevTracking = store.getState().tracking
-        let prevFavicon = store.getState().favicon
-
         const unsubscribe = store.subscribe(() => {
             const state = store.getState()
 
@@ -1001,13 +1018,13 @@ export default function StoreProvider({ children }) {
             if (currentSavedUsers !== prevSavedUsers) {
                 prevSavedUsers = currentSavedUsers
                 try {
-                    const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                    const deletedIds = getDeletedUserIds()
                     const sanitized = currentSavedUsers.filter(u => !deletedIds.includes(u.id))
                     localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(sanitized))
                 } catch (e) { /* ignore */ }
                 // Upsert customers to Firestore individually — NEVER use destructive syncCollectionToFirestore!
                 if (firebaseEnabled && !isReceivingFromFirestore) {
-                    const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                    const deletedIds = getDeletedUserIds()
                     const toSync = currentSavedUsers
                         .filter(u => u && u.id && !deletedIds.includes(u.id) && u.role !== 'ADMIN')
                     toSync.forEach(u => {
@@ -1155,7 +1172,7 @@ export default function StoreProvider({ children }) {
                 if (e.key === SAVED_USERS_STORAGE_KEY && e.newValue) {
                     const parsed = JSON.parse(e.newValue)
                     if (Array.isArray(parsed)) {
-                        const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                        const deletedIds = getDeletedUserIds()
                         const filtered = parsed.filter(u => u.name !== 'Google Customer' && !deletedIds.includes(u.id))
                         store.dispatch(hydrateSavedUsers(filtered))
                     }
