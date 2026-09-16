@@ -160,15 +160,11 @@ export default function TrackingManager() {
                             `,
                         }}
                     />
-                    <noscript>
-                        <img
-                            height="1"
-                            width="1"
-                            style={{ display: 'none' }}
-                            src={`https://www.facebook.com/tr?id=${meta.pixelId.trim()}&ev=PageView&noscript=1`}
-                            alt=""
-                        />
-                    </noscript>
+                    <noscript
+                        dangerouslySetInnerHTML={{
+                            __html: `<img height="1" width="1" style="display:none" src="https://www.facebook.com/tr?id=${meta.pixelId.trim()}&ev=PageView&noscript=1" alt="" />`
+                        }}
+                    />
                 </>
             )}
 
@@ -188,14 +184,11 @@ export default function TrackingManager() {
                             `,
                         }}
                     />
-                    <noscript>
-                        <iframe
-                            src={`https://www.googletagmanager.com/ns.html?id=${gtm.containerId.trim()}`}
-                            height="0"
-                            width="0"
-                            style={{ display: 'none', visibility: 'hidden' }}
-                        />
-                    </noscript>
+                    <noscript
+                        dangerouslySetInnerHTML={{
+                            __html: `<iframe src="https://www.googletagmanager.com/ns.html?id=${gtm.containerId.trim()}" height="0" width="0" style="display:none;visibility:hidden"></iframe>`
+                        }}
+                    />
                 </>
             )}
 

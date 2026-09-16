@@ -14,7 +14,7 @@
  * Order history checks (duplicate, rate, history) use a single shared snapshot.
  */
 
-import { NextResponse } from 'next/server'
+import { NextResponse, after } from 'next/server'
 import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { isFirebaseConfigured } from '@/lib/firestore'
@@ -27,6 +27,109 @@ import { getFraudConfig } from '@/lib/fraud/config'
 import { productDummyData } from '@/assets/assets'
 import { syncOrderIntegrations } from '@/lib/integrations/syncEngine'
 
+// ── In-memory caches with TTL (shared across requests in the same node process) ──
+let cachedShipping = null
+let cachedShippingTime = 0
+
+let cachedFraudData = null
+let cachedFraudTime = 0
+
+let cachedCoupons = null
+let cachedCouponsTime = 0
+
+const productCache = new Map() // productId -> { data, time }
+const CACHE_TTL_MS = 60 * 1000 // 60 seconds
+
+async function getCachedShipping(firebaseReady) {
+    const now = Date.now()
+    if (cachedShipping && (now - cachedShippingTime) < CACHE_TTL_MS) {
+        return cachedShipping
+    }
+    if (!firebaseReady) return null
+    try {
+        const snap = await getDoc(doc(db, 'settings', 'shipping'))
+        if (snap.exists()) {
+            cachedShipping = snap.data()
+            cachedShippingTime = Date.now()
+            return cachedShipping
+        }
+    } catch (e) {
+        if (cachedShipping) return cachedShipping
+    }
+    return null
+}
+
+async function getCachedFraudData(firebaseReady) {
+    const now = Date.now()
+    if (cachedFraudData && (now - cachedFraudTime) < CACHE_TTL_MS) {
+        return cachedFraudData
+    }
+    if (!firebaseReady) return null
+    try {
+        const snap = await getDoc(doc(db, 'settings', 'fraud'))
+        if (snap.exists()) {
+            cachedFraudData = snap.data()
+            cachedFraudTime = Date.now()
+            return cachedFraudData
+        }
+    } catch (e) {
+        if (cachedFraudData) return cachedFraudData
+    }
+    return null
+}
+
+async function getCachedCoupons(firebaseReady) {
+    const now = Date.now()
+    if (cachedCoupons && (now - cachedCouponsTime) < CACHE_TTL_MS) {
+        return cachedCoupons
+    }
+    if (!firebaseReady) return []
+    try {
+        const snap = await getDocs(collection(db, 'coupons'))
+        cachedCoupons = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        cachedCouponsTime = Date.now()
+        return cachedCoupons
+    } catch (e) {
+        if (cachedCoupons) return cachedCoupons
+        return []
+    }
+}
+
+async function getOrderProducts(productIds, firebaseReady) {
+    if (!productIds || productIds.length === 0) return []
+    const now = Date.now()
+
+    return Promise.all(
+        productIds.map(async (id) => {
+            const strId = String(id)
+            const cached = productCache.get(strId)
+            if (cached && (now - cached.time) < CACHE_TTL_MS) {
+                return cached.data
+            }
+
+            if (firebaseReady) {
+                try {
+                    const snap = await getDoc(doc(db, 'products', strId))
+                    if (snap.exists()) {
+                        const prod = { id: snap.id, ...snap.data() }
+                        productCache.set(strId, { data: prod, time: Date.now() })
+                        return prod
+                    }
+                } catch (e) {
+                    console.warn(`[OrderAPI] Failed to fetch product ${strId}:`, e)
+                }
+            }
+
+            // Fallback to dummy data
+            const dummy = Array.isArray(productDummyData) && productDummyData.find(p => String(p.id) === strId)
+            if (dummy) {
+                return dummy
+            }
+            return null
+        })
+    ).then(products => products.filter(Boolean))
+}
+
 // In-memory idempotency store (prevents duplicate processing within the same serverless instance)
 const processedKeys = new Map()
 
@@ -37,6 +140,7 @@ setInterval(() => {
         if (timestamp < cutoff) processedKeys.delete(key)
     }
 }, 10 * 60 * 1000).unref?.()
+
 
 /**
  * Extract client IP from request headers (Vercel/Cloudflare compatible).
@@ -164,28 +268,22 @@ export async function POST(request) {
 
         const firebaseReady = isFirebaseConfigured()
 
-        const [fraudDoc, serverProducts, shippingSettings, allCoupons, orderChecks] = await Promise.all([
-            // 1. Fraud settings (single read for both config + blocklist)
-            firebaseReady
-                ? getDoc(doc(db, 'settings', 'fraud')).catch(() => null)
-                : Promise.resolve(null),
+        const [fraudData, serverProducts, shippingSettings, allCoupons, orderChecks] = await Promise.all([
+            // 1. Fraud settings (in-memory cached or single read)
+            getCachedFraudData(firebaseReady),
 
-            // 2. Products collection
-            firebaseReady
-                ? getDocs(collection(db, 'products')).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => [])
-                : Promise.resolve([]),
+            // 2. Products (fetch only ordered items with in-memory caching)
+            getOrderProducts(productIds, firebaseReady),
 
-            // 3. Shipping settings
-            firebaseReady
-                ? getDoc(doc(db, 'settings', 'shipping')).then(snap => snap.exists() ? snap.data() : null).catch(() => null)
-                : Promise.resolve(null),
+            // 3. Shipping settings (in-memory cached or single read)
+            getCachedShipping(firebaseReady),
 
-            // 4. Coupons (only if coupon code provided)
+            // 4. Coupons (only if coupon code provided, with in-memory caching)
             (firebaseReady && couponCode)
-                ? getDocs(collection(db, 'coupons')).then(snap => snap.docs.map(d => ({ id: d.id, ...d.data() }))).catch(() => [])
+                ? getCachedCoupons(firebaseReady)
                 : Promise.resolve([]),
 
-            // 5. All order history checks in ONE pass (duplicate + rate + history)
+            // 5. All order history checks in ONE pass (targeted phone query + in-memory cache)
             runAllOrderChecks({
                 phone: normalizedPhone,
                 productIds,
@@ -196,8 +294,7 @@ export async function POST(request) {
             }),
         ])
 
-        // ── Process fraud config (from single read) ─────────────────────
-        const fraudData = fraudDoc?.exists?.() ? fraudDoc.data() : null
+        // ── Process fraud config (from cache/read) ──────────────────────
         const config = getFraudConfig(fraudData)
 
         // Re-check bot detection with actual config
@@ -410,8 +507,8 @@ export async function POST(request) {
         if (isFirebaseConfigured()) {
             try {
                 await setDoc(doc(db, 'orders', orderId), newOrder)
-                // Invalidate cache so next request sees this order
-                invalidateOrdersCache()
+                // Update in-memory orders cache with new order
+                invalidateOrdersCache(newOrder)
             } catch (error) {
                 console.error('[OrderAPI] Failed to save order to Firestore:', error)
                 return NextResponse.json(
@@ -499,6 +596,15 @@ export async function POST(request) {
         )
 
         // Don't await background tasks — let them run after response is sent
+        if (typeof after === 'function') {
+            try {
+                after(async () => {
+                    await Promise.allSettled(bgTasks)
+                })
+            } catch {
+                // Ignore if after not available in this environment
+            }
+        }
 
         // ── 17. Return the created order ────────────────────────────────
         return NextResponse.json({
