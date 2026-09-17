@@ -268,31 +268,47 @@ export async function POST(request) {
 
         const firebaseReady = isFirebaseConfigured()
 
-        const [fraudData, serverProducts, shippingSettings, allCoupons, orderChecks] = await Promise.all([
-            // 1. Fraud settings (in-memory cached or single read)
-            getCachedFraudData(firebaseReady),
+        const [fraudData, serverProducts, shippingSettings, allCoupons, orderChecks] = await Promise.race([
+            Promise.all([
+                // 1. Fraud settings (in-memory cached or single read)
+                getCachedFraudData(firebaseReady),
 
-            // 2. Products (fetch only ordered items with in-memory caching)
-            getOrderProducts(productIds, firebaseReady),
+                // 2. Products (fetch only ordered items with in-memory caching)
+                getOrderProducts(productIds, firebaseReady),
 
-            // 3. Shipping settings (in-memory cached or single read)
-            getCachedShipping(firebaseReady),
+                // 3. Shipping settings (in-memory cached or single read)
+                getCachedShipping(firebaseReady),
 
-            // 4. Coupons (only if coupon code provided, with in-memory caching)
-            (firebaseReady && couponCode)
-                ? getCachedCoupons(firebaseReady)
-                : Promise.resolve([]),
+                // 4. Coupons (only if coupon code provided, with in-memory caching)
+                (firebaseReady && couponCode)
+                    ? getCachedCoupons(firebaseReady)
+                    : Promise.resolve([]),
 
-            // 5. All order history checks in ONE pass (targeted phone query + in-memory cache)
-            runAllOrderChecks({
-                phone: normalizedPhone,
-                productIds,
-                totalAmount: 0, // will be recalculated after price validation
-                duplicateWindowMinutes: 30,
-                rateWindowHours: 1,
-                codDayWindowHours: 24,
-            }),
-        ])
+                // 5. All order history checks in ONE pass (targeted phone query + in-memory cache)
+                runAllOrderChecks({
+                    phone: normalizedPhone,
+                    productIds,
+                    totalAmount: 0, // will be recalculated after price validation
+                    duplicateWindowMinutes: 30,
+                    rateWindowHours: 1,
+                    codDayWindowHours: 24,
+                }),
+            ]),
+            // 8-second timeout: prevents API hang on Firestore cold start
+            new Promise((_, reject) => setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), 8000))
+        ]).catch(err => {
+            if (err.message === 'FIRESTORE_TIMEOUT') {
+                console.warn('[OrderAPI] Firestore parallel reads timed out after 8s — proceeding with safe defaults')
+                // Products empty → will trigger PRODUCT_NOT_FOUND error (safe)
+                // Other fields get safe defaults so order can still be validated
+                return [null, [], null, [], {
+                    isDuplicate: false, matchedOrderId: null, reason: null,
+                    recentCount: 0, codDayCount: 0, recentOrders: [],
+                    history: { total: 0, delivered: 0, cancelled: 0, pending: 0 },
+                }]
+            }
+            throw err
+        })
 
         // ── Process fraud config (from cache/read) ──────────────────────
         const config = getFraudConfig(fraudData)
@@ -620,6 +636,9 @@ export async function POST(request) {
             } catch {
                 // Ignore if after not available in this environment
             }
+        } else {
+            // Fire and forget — don't block the response
+            Promise.allSettled(bgTasks).catch(() => {})
         }
 
         // ── 17. Return the created order ────────────────────────────────

@@ -166,9 +166,14 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
         }
 
         try {
+            // 30-second timeout to prevent indefinite loading state
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000);
+
             const response = await fetch('/api/orders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                signal: controller.signal,
                 body: JSON.stringify({
                     items: (items || []).map(item => ({
                         productId: item.id,
@@ -194,6 +199,8 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                     userEmail: currentUser?.email || null,
                 }),
             });
+
+            clearTimeout(timeoutId);
 
             let data;
             try {
@@ -248,8 +255,14 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
             }
         } catch (error) {
             console.error('[Order] Failed:', error);
-            toast.error('সার্ভারে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+            if (error.name === 'AbortError') {
+                toast.error('অর্ডার প্রসেস করতে অনেক সময় লাগছে। আপনার ইন্টারনেট সংযোগ চেক করুন এবং আবার চেষ্টা করুন।');
+            } else {
+                toast.error('সার্ভারে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+            }
             setPlacingOrder(false);
+            // Allow retry after timeout/error
+            hasSubmittedRef.current = false;
         }
     }
 
