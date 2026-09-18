@@ -111,6 +111,10 @@ export default function StoreProvider({ children }) {
         const store = storeRef.current
         const firebaseEnabled = isFirebaseConfigured()
 
+        // Guard counter: prevents the subscribe handler from writing stale data
+        // back while Firestore hydration is in progress.
+        let firestoreReceiveDepth = 0
+
         // Declare and initialize all state tracking variables at the very top of useEffect
         // to completely eliminate any Temporal Dead Zone (TDZ) risk across async callbacks/listeners.
         let prevCoupons = store.getState().coupon?.coupons
@@ -1176,11 +1180,6 @@ export default function StoreProvider({ children }) {
             document.removeEventListener('visibilitychange', handleVisibilityChange)
             window.removeEventListener('pageshow', handlePageShow)
             window.removeEventListener('storage', onStorageChange)
-            // Cancel any pending debounced syncs
-            Object.keys(pendingSyncs).forEach(key => {
-                clearTimeout(pendingSyncs[key])
-                delete pendingSyncs[key]
-            })
             // Cleanup Firestore real-time listeners
             unsubscribers.forEach(unsub => unsub())
         }
