@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSelector, useDispatch } from 'react-redux'
+import { useSelector, useDispatch, useStore } from 'react-redux'
 import toast from 'react-hot-toast'
 import {
     Activity,
@@ -56,7 +56,16 @@ import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 export default function AdminTrackingPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
+    const store = useStore()
     const tracking = useSelector(state => state.tracking) || {}
+
+    // Persist tracking state to Firestore after dispatch
+    const persistTracking = async () => {
+        if (isFirebaseConfigured()) {
+            const state = store.getState().tracking
+            await saveDocToFirestore('settings', 'tracking', state)
+        }
+    }
 
     // Active tab: 'dashboard' | 'meta' | 'google_ads' | 'ga4' | 'gtm' | 'events' | 'consent' | 'debug'
     const [activeTab, setActiveTab] = useState('dashboard')
