@@ -4,22 +4,22 @@ import { Provider } from 'react-redux'
 import { makeStore } from '../lib/store'
 import { setProduct } from '@/lib/features/product/productSlice'
 import { hydrateCoupons } from '@/lib/features/coupon/couponSlice'
-import { hydrateBanners, defaultBanners } from '@/lib/features/banner/bannerSlice'
-import { hydrateUser, hydrateSavedUsers, defaultUsers } from '@/lib/features/user/userSlice'
+import { hydrateBanners } from '@/lib/features/banner/bannerSlice'
+import { hydrateUser, hydrateSavedUsers } from '@/lib/features/user/userSlice'
 import { hydrateOrders } from '@/lib/features/order/orderSlice'
 import { hydrateCart } from '@/lib/features/cart/cartSlice'
-import { hydrateContact, defaultMessages, defaultStoreInfo } from '@/lib/features/contact/contactSlice'
+import { hydrateContact } from '@/lib/features/contact/contactSlice'
 import { hydrateWishlist } from '@/lib/features/wishlist/wishlistSlice'
-import { hydrateCategories, defaultCategories } from '@/lib/features/category/categorySlice'
-import { hydrateShipping, defaultShippingSettings } from '@/lib/features/shipping/shippingSlice'
+import { hydrateCategories } from '@/lib/features/category/categorySlice'
+import { hydrateShipping } from '@/lib/features/shipping/shippingSlice'
 import { hydrateFraud } from '@/lib/features/fraud/fraudSlice'
-import { hydrateCashflow, defaultCashflowData } from '@/lib/features/cashflow/cashflowSlice'
-import { hydrateHero, defaultHeroData } from '@/lib/features/hero/heroSlice'
-import { hydrateApiSettings, defaultApiSettings } from '@/lib/features/apiSettings/apiSettingsSlice'
-import { hydrateHeaderFooter, defaultHeaderFooterData } from '@/lib/features/headerFooter/headerFooterSlice'
-import { hydrateTracking, defaultTrackingSettings } from '@/lib/features/tracking/trackingSlice'
-import { hydrateFavicon, defaultFaviconSettings } from '@/lib/features/favicon/faviconSlice'
-import { couponDummyData, orderDummyData } from '@/assets/assets'
+import { hydrateCashflow } from '@/lib/features/cashflow/cashflowSlice'
+import { hydrateHero } from '@/lib/features/hero/heroSlice'
+import { hydrateApiSettings } from '@/lib/features/apiSettings/apiSettingsSlice'
+import { hydrateHeaderFooter } from '@/lib/features/headerFooter/headerFooterSlice'
+import { hydrateTracking } from '@/lib/features/tracking/trackingSlice'
+import { hydrateFavicon } from '@/lib/features/favicon/faviconSlice'
+import { hydrateIntegrations } from '@/lib/features/integrations/integrationsSlice'
 import {
     isFirebaseConfigured,
     saveDocToFirestore,
@@ -112,9 +112,6 @@ export default function StoreProvider({ children }) {
                         parsedUsers = parsedUsers.filter(u => u.name !== 'Google Customer' && !deletedIds.includes(u.id))
                         storeRef.current.dispatch(hydrateSavedUsers(parsedUsers))
                     }
-                } else {
-                    const initialUsers = defaultUsers.filter(u => !deletedIds.includes(u.id))
-                    storeRef.current.dispatch(hydrateSavedUsers(initialUsers))
                 }
                 const savedCurrentUser = localStorage.getItem(USER_STORAGE_KEY)
                 if (savedCurrentUser) {
@@ -150,6 +147,7 @@ export default function StoreProvider({ children }) {
         let prevHeaderFooter = store.getState().headerFooter
         let prevTracking = store.getState().tracking
         let prevFavicon = store.getState().favicon
+        let prevIntegrations = store.getState().integrations
 
         function getDeletedUserIds() {
             try {
@@ -254,15 +252,10 @@ export default function StoreProvider({ children }) {
                     const parsed = JSON.parse(saved)
                     if (Array.isArray(parsed)) {
                         store.dispatch(hydrateCoupons(parsed))
-                    } else {
-                        store.dispatch(hydrateCoupons(couponDummyData.map(c => ({ ...c }))))
                     }
-                } else {
-                    store.dispatch(hydrateCoupons(couponDummyData.map(c => ({ ...c }))))
                 }
             } catch (e) {
                 console.warn('Failed to load coupons from localStorage:', e)
-                store.dispatch(hydrateCoupons(couponDummyData.map(c => ({ ...c }))))
             }
         }
 
@@ -271,7 +264,7 @@ export default function StoreProvider({ children }) {
                 const saved = localStorage.getItem(BANNER_STORAGE_KEY)
                 if (saved) {
                     const parsed = JSON.parse(saved)
-                    if (Array.isArray(parsed) && parsed.length > 0) {
+                    if (Array.isArray(parsed)) {
                         const seen = new Set()
                         const deduped = parsed.filter(b => {
                             if (!b.id || seen.has(b.id)) return false
@@ -279,15 +272,10 @@ export default function StoreProvider({ children }) {
                             return true
                         })
                         store.dispatch(hydrateBanners(deduped))
-                    } else {
-                        store.dispatch(hydrateBanners(defaultBanners))
                     }
-                } else {
-                    store.dispatch(hydrateBanners(defaultBanners))
                 }
             } catch (e) {
                 console.warn('Failed to load banners from localStorage:', e)
-                store.dispatch(hydrateBanners(defaultBanners))
             }
         }
 
@@ -298,15 +286,10 @@ export default function StoreProvider({ children }) {
                     const parsed = JSON.parse(saved)
                     if (parsed && typeof parsed === 'object') {
                         store.dispatch(hydrateHero(parsed))
-                    } else {
-                        store.dispatch(hydrateHero(defaultHeroData))
                     }
-                } else {
-                    store.dispatch(hydrateHero(defaultHeroData))
                 }
             } catch (e) {
                 console.warn('Failed to load hero banner from localStorage:', e)
-                store.dispatch(hydrateHero(defaultHeroData))
             }
         }
 
@@ -315,17 +298,12 @@ export default function StoreProvider({ children }) {
                 const saved = localStorage.getItem(CATEGORY_STORAGE_KEY)
                 if (saved) {
                     const parsed = JSON.parse(saved)
-                    if (Array.isArray(parsed) && parsed.length > 0) {
+                    if (Array.isArray(parsed)) {
                         store.dispatch(hydrateCategories(parsed))
-                    } else {
-                        store.dispatch(hydrateCategories(defaultCategories))
                     }
-                } else {
-                    store.dispatch(hydrateCategories(defaultCategories))
                 }
             } catch (e) {
                 console.warn('Failed to load categories from localStorage:', e)
-                store.dispatch(hydrateCategories(defaultCategories))
             }
         }
 
@@ -361,12 +339,9 @@ export default function StoreProvider({ children }) {
                     if (parsed && typeof parsed === 'object') {
                         store.dispatch(hydrateContact(parsed))
                     }
-                } else {
-                    store.dispatch(hydrateContact({ messages: defaultMessages, storeInfo: defaultStoreInfo }))
                 }
             } catch (e) {
                 console.warn('Failed to load contact state from localStorage:', e)
-                store.dispatch(hydrateContact({ messages: defaultMessages, storeInfo: defaultStoreInfo }))
             }
         }
 
@@ -377,15 +352,10 @@ export default function StoreProvider({ children }) {
                     const parsed = JSON.parse(saved)
                     if (parsed && typeof parsed === 'object') {
                         store.dispatch(hydrateHeaderFooter(parsed))
-                    } else {
-                        store.dispatch(hydrateHeaderFooter(defaultHeaderFooterData))
                     }
-                } else {
-                    store.dispatch(hydrateHeaderFooter(defaultHeaderFooterData))
                 }
             } catch (e) {
                 console.warn('Failed to load header/footer from localStorage:', e)
-                store.dispatch(hydrateHeaderFooter(defaultHeaderFooterData))
             }
         }
 
@@ -396,15 +366,10 @@ export default function StoreProvider({ children }) {
                     const parsed = JSON.parse(saved)
                     if (parsed && typeof parsed === 'object') {
                         store.dispatch(hydrateTracking(parsed))
-                    } else {
-                        store.dispatch(hydrateTracking(defaultTrackingSettings))
                     }
-                } else {
-                    store.dispatch(hydrateTracking(defaultTrackingSettings))
                 }
             } catch (e) {
                 console.warn('Failed to load tracking settings from localStorage:', e)
-                store.dispatch(hydrateTracking(defaultTrackingSettings))
             }
         }
 
@@ -442,15 +407,10 @@ export default function StoreProvider({ children }) {
                         if (parsed.faviconUrl) {
                             applyFaviconToDocument(parsed.faviconUrl, parsed.appleTouchIconUrl, parsed.updatedAt)
                         }
-                    } else {
-                        store.dispatch(hydrateFavicon(defaultFaviconSettings))
                     }
-                } else {
-                    store.dispatch(hydrateFavicon(defaultFaviconSettings))
                 }
             } catch (e) {
                 console.warn('Failed to load favicon settings from localStorage:', e)
-                store.dispatch(hydrateFavicon(defaultFaviconSettings))
             }
         }
 
@@ -481,9 +441,6 @@ export default function StoreProvider({ children }) {
                     } else {
                         store.dispatch(hydrateSavedUsers([]))
                     }
-                } else {
-                    const initialUsers = defaultUsers.filter(u => !deletedIds.includes(u.id))
-                    store.dispatch(hydrateSavedUsers(initialUsers))
                 }
                 const savedCurrentUser = localStorage.getItem(USER_STORAGE_KEY)
                 if (savedCurrentUser) {
@@ -503,15 +460,10 @@ export default function StoreProvider({ children }) {
                     const parsed = JSON.parse(savedOrders)
                     if (Array.isArray(parsed)) {
                         store.dispatch(hydrateOrders(parsed))
-                    } else {
-                        store.dispatch(hydrateOrders(orderDummyData))
                     }
-                } else {
-                    store.dispatch(hydrateOrders(orderDummyData))
                 }
             } catch (e) {
                 console.warn('Failed to load orders from localStorage:', e)
-                store.dispatch(hydrateOrders(orderDummyData))
             }
 
             // Cart
@@ -560,15 +512,10 @@ export default function StoreProvider({ children }) {
                     const parsed = JSON.parse(savedCashflow)
                     if (parsed && typeof parsed === 'object') {
                         store.dispatch(hydrateCashflow(parsed))
-                    } else {
-                        store.dispatch(hydrateCashflow(defaultCashflowData))
                     }
-                } else {
-                    store.dispatch(hydrateCashflow(defaultCashflowData))
                 }
             } catch (e) {
                 console.warn('Failed to load cash flow from localStorage:', e)
-                store.dispatch(hydrateCashflow(defaultCashflowData))
             }
 
             // API & Integration Settings
@@ -578,21 +525,18 @@ export default function StoreProvider({ children }) {
                     const parsed = JSON.parse(savedApiSettings)
                     if (parsed && typeof parsed === 'object') {
                         store.dispatch(hydrateApiSettings(parsed))
-                    } else {
-                        store.dispatch(hydrateApiSettings(defaultApiSettings))
                     }
-                } else {
-                    store.dispatch(hydrateApiSettings(defaultApiSettings))
                 }
             } catch (e) {
                 console.warn('Failed to load api settings from localStorage:', e)
-                store.dispatch(hydrateApiSettings(defaultApiSettings))
             }
         }
 
-        // ===== 0ms INSTANT CACHE-FIRST HYDRATION =====
-        // Immediately load user session, cart, categories, banners, hero, products from localStorage!
-        // This ensures the entire page renders with real data in 0ms with ZERO delay, pop-in, or login flicker!
+        // ===== CACHE-FIRST HYDRATION (localStorage only — no demo data written to Firestore) =====
+        // Guard: prevent the subscribe handler from syncing stale/default localStorage
+        // data back to Firestore during initial hydration. The guard is held until
+        // hydrateData() completes in its finally block, guaranteeing Firestore is the authoritative source.
+        firestoreReceiveDepth++
         lsLoadUserSpecific()
         lsLoadAllAdmin()
 
@@ -616,6 +560,7 @@ export default function StoreProvider({ children }) {
                         cashflowRes,
                         apiSettingsRes,
                         trackingRes,
+                        integrationsRes,
                     ] = await Promise.allSettled([
                         loadCollectionFromFirestore('products'),
                         loadCollectionFromFirestore('categories'),
@@ -632,9 +577,8 @@ export default function StoreProvider({ children }) {
                         loadDocFromFirestore('settings', 'cashflow'),
                         loadDocFromFirestore('settings', 'api_settings'),
                         loadDocFromFirestore('settings', 'tracking'),
+                        loadDocFromFirestore('settings', 'integrations'),
                     ])
-
-                    firestoreReceiveDepth++
 
                     // --- 1. Products ---
                     if (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value)) {
@@ -650,13 +594,13 @@ export default function StoreProvider({ children }) {
                     }
 
                     // --- 2. Categories ---
-                    if (categoriesRes.status === 'fulfilled' && Array.isArray(categoriesRes.value) && categoriesRes.value.length > 0) {
+                    if (categoriesRes.status === 'fulfilled' && Array.isArray(categoriesRes.value)) {
                         store.dispatch(hydrateCategories(categoriesRes.value))
                         try { localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(categoriesRes.value)) } catch (e) { /* ignore */ }
                     }
 
                     // --- 3. Banners ---
-                    if (bannersRes.status === 'fulfilled' && Array.isArray(bannersRes.value) && bannersRes.value.length > 0) {
+                    if (bannersRes.status === 'fulfilled' && Array.isArray(bannersRes.value)) {
                         const seen = new Set()
                         const deduped = bannersRes.value.filter(b => {
                             if (!b.id || seen.has(b.id)) return false
@@ -668,7 +612,7 @@ export default function StoreProvider({ children }) {
                     }
 
                     // --- 4. Coupons ---
-                    if (couponsRes.status === 'fulfilled' && Array.isArray(couponsRes.value) && couponsRes.value.length > 0) {
+                    if (couponsRes.status === 'fulfilled' && Array.isArray(couponsRes.value)) {
                         store.dispatch(hydrateCoupons(couponsRes.value))
                         try { localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(couponsRes.value)) } catch (e) { /* ignore */ }
                     }
@@ -676,11 +620,9 @@ export default function StoreProvider({ children }) {
                     // --- 4b. Orders ---
                     if (ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value)) {
                         const fsOrders = ordersRes.value.filter(o => o && o.id)
-                        if (fsOrders.length > 0) {
-                            store.dispatch(hydrateOrders(fsOrders))
-                            prevOrders = fsOrders
-                            try { localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(fsOrders)) } catch (e) { /* ignore */ }
-                        }
+                        store.dispatch(hydrateOrders(fsOrders))
+                        prevOrders = fsOrders
+                        try { localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(fsOrders)) } catch (e) { /* ignore */ }
                     }
 
                     // --- 5. Hero Banner ---
@@ -699,8 +641,8 @@ export default function StoreProvider({ children }) {
                     if (contactRes.status === 'fulfilled' && contactRes.value) {
                         const fsContact = contactRes.value
                         store.dispatch(hydrateContact({
-                            messages: fsContact.messages || defaultMessages,
-                            storeInfo: fsContact.storeInfo || defaultStoreInfo
+                            messages: Array.isArray(fsContact.messages) ? fsContact.messages : [],
+                            storeInfo: fsContact.storeInfo || {}
                         }))
                         try { localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(fsContact)) } catch (e) { /* ignore */ }
                     }
@@ -742,18 +684,26 @@ export default function StoreProvider({ children }) {
                     }
 
                     // --- 9. Customers (Firestore is source of truth) ---
-                    if (customersRes.status === 'fulfilled' && Array.isArray(customersRes.value) && customersRes.value.length > 0) {
+                    if (customersRes.status === 'fulfilled' && Array.isArray(customersRes.value)) {
                         const fsCustomers = customersRes.value
                         const deletedIds = getDeletedUserIds()
                         const filtered = fsCustomers.filter(u => u && u.id && !deletedIds.includes(u.id))
                         store.dispatch(hydrateSavedUsers(filtered))
                         try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(filtered)) } catch (e) { /* ignore */ }
                     }
+
+                    // --- 10. Integrations ---
+                    if (integrationsRes?.status === 'fulfilled' && integrationsRes.value) {
+                        store.dispatch(hydrateIntegrations(integrationsRes.value))
+                        prevIntegrations = integrationsRes.value
+                    }
                 } catch (e) {
                     console.warn('[Firestore] Background parallel hydration failed:', e)
                 } finally {
                     firestoreReceiveDepth--
                 }
+            } else {
+                firestoreReceiveDepth--
             }
         }
 
@@ -781,7 +731,7 @@ export default function StoreProvider({ children }) {
             // Categories real-time listener
             unsubscribers.push(
                 subscribeToCollection('categories', (docs) => {
-                    if (docs && docs.length > 0) {
+                    if (docs && Array.isArray(docs)) {
                     firestoreReceiveDepth++
                         store.dispatch(hydrateCategories(docs))
                         try { localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(docs)) } catch (e) { /* ignore */ }
@@ -793,7 +743,7 @@ export default function StoreProvider({ children }) {
             // Banners real-time listener
             unsubscribers.push(
                 subscribeToCollection('banners', (docs) => {
-                    if (docs && docs.length > 0) {
+                    if (docs && Array.isArray(docs)) {
                         const seen = new Set()
                         const deduped = docs.filter(b => {
                             if (!b.id || seen.has(b.id)) return false
@@ -811,7 +761,7 @@ export default function StoreProvider({ children }) {
             // Coupons real-time listener
             unsubscribers.push(
                 subscribeToCollection('coupons', (docs) => {
-                    if (docs && docs.length > 0) {
+                    if (docs && Array.isArray(docs)) {
                     firestoreReceiveDepth++
                         store.dispatch(hydrateCoupons(docs))
                         try { localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(docs)) } catch (e) { /* ignore */ }
@@ -863,8 +813,8 @@ export default function StoreProvider({ children }) {
                     if (data) {
                     firestoreReceiveDepth++
                         store.dispatch(hydrateContact({
-                            messages: data.messages || defaultMessages,
-                            storeInfo: data.storeInfo || defaultStoreInfo
+                            messages: Array.isArray(data.messages) ? data.messages : [],
+                            storeInfo: data.storeInfo || {}
                         }))
                         try { localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
                     firestoreReceiveDepth--
@@ -949,6 +899,18 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToAdminUnreadCount((count) => {
                     store.dispatch(setAdminUnreadCount(count))
+                })
+            )
+
+            // Integrations real-time listener
+            unsubscribers.push(
+                subscribeToDoc('settings', 'integrations', (data) => {
+                    if (data) {
+                    firestoreReceiveDepth++
+                        store.dispatch(hydrateIntegrations(data))
+                        prevIntegrations = data
+                    firestoreReceiveDepth--
+                    }
                 })
             )
 
@@ -1058,11 +1020,14 @@ export default function StoreProvider({ children }) {
                 }
             }
 
-            // --- Orders (localStorage only for now) ---
+            // --- Orders (Firestore + localStorage) ---
             const currentOrders = state.order.orders
             if (currentOrders !== prevOrders) {
                 prevOrders = currentOrders
                 try { localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(currentOrders)) } catch (e) { /* ignore */ }
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
+                    debouncedSync('orders', () => syncCollectionToFirestore('orders', currentOrders))
+                }
             }
 
             // --- Cart (localStorage only — user-specific) ---
@@ -1173,6 +1138,15 @@ export default function StoreProvider({ children }) {
                     saveDocToFirestore('settings', 'favicon', currentFavicon)
                 }
                 applyFaviconToDocument(currentFavicon.faviconUrl, currentFavicon.appleTouchIconUrl, currentFavicon.updatedAt)
+            }
+
+            // --- Integrations (Firestore sync) ---
+            const currentIntegrations = state.integrations
+            if (currentIntegrations !== prevIntegrations) {
+                prevIntegrations = currentIntegrations
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
+                    saveDocToFirestore('settings', 'integrations', currentIntegrations)
+                }
             }
 
             // --- Products: BroadcastChannel + localStorage ---
