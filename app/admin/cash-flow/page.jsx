@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useSelector, useDispatch } from 'react-redux'
+import { useSelector, useDispatch, useStore } from 'react-redux'
 import toast from 'react-hot-toast'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import {
     CircleDollarSign,
     TrendingUp,
@@ -74,6 +75,17 @@ import CashFlowReportModal from '@/components/admin/cashflow/CashFlowReportModal
 export default function CashFlowPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
+    const store = useStore()
+
+    // Persist cashflow state to Firestore — called AFTER dispatch
+    // Reads state synchronously (no setTimeout) so it's always fresh
+    const persistCashflow = async () => {
+        if (isFirebaseConfigured()) {
+            const state = store.getState().cashflow
+            const saved = await saveDocToFirestore('settings', 'cashflow', state)
+            if (!saved) { toast.error('Firestore save failed!') }
+        }
+    }
 
     // Redux State
     const transactions = useSelector(state => state.cashflow?.transactions) || []
@@ -369,9 +381,11 @@ export default function CashFlowPage() {
     const handleSaveTransaction = (txData) => {
         if (txData.id) {
             dispatch(updateTransaction(txData))
+            persistCashflow()
             toast.success('ট্রানজেকশন সফলভাবে আপডেট হয়েছে!')
         } else {
             dispatch(addTransaction(txData))
+            persistCashflow()
             toast.success('নতুন ট্রানজেকশন সফলভাবে যোগ করা হয়েছে!')
         }
         setEditingTx(null)
@@ -383,6 +397,7 @@ export default function CashFlowPage() {
             return
         }
         dispatch(deleteTransaction(id))
+        persistCashflow()
         toast.success('ট্রানজেকশন মুছে ফেলা হয়েছে!')
         setDeleteConfirmId(null)
     }
@@ -394,6 +409,7 @@ export default function CashFlowPage() {
             return
         }
         dispatch(syncOrdersToCashflow(completedOrders))
+        persistCashflow()
         toast.success(`${completedOrders.length} টি স্টোর অর্ডারের পেমেন্ট সিঙ্ক সম্পন্ন হয়েছে!`, { icon: '🔄' })
     }
 
@@ -1364,8 +1380,8 @@ export default function CashFlowPage() {
                 onClose={() => setIsBudgetModalOpen(false)}
                 budgets={budgets}
                 categories={categories}
-                onSaveBudget={(b) => dispatch(setBudget(b))}
-                onDeleteBudget={(catName) => dispatch(deleteBudget(catName))}
+                onSaveBudget={(b) => { dispatch(setBudget(b)); persistCashflow() }}
+                onDeleteBudget={(catName) => { dispatch(deleteBudget(catName)); persistCashflow() }}
                 currentRole={currentRole}
                 isDark={isDark}
             />
@@ -1374,9 +1390,9 @@ export default function CashFlowPage() {
                 isOpen={isCategoryModalOpen}
                 onClose={() => setIsCategoryModalOpen(false)}
                 categories={categories}
-                onAddCategory={(c) => dispatch(addCategory(c))}
-                onUpdateCategory={(c) => dispatch(updateCategory(c))}
-                onDeleteCategory={(id) => dispatch(deleteCategory(id))}
+                onAddCategory={(c) => { dispatch(addCategory(c)); persistCashflow() }}
+                onUpdateCategory={(c) => { dispatch(updateCategory(c)); persistCashflow() }}
+                onDeleteCategory={(id) => { dispatch(deleteCategory(id)); persistCashflow() }}
                 currentRole={currentRole}
                 isDark={isDark}
             />

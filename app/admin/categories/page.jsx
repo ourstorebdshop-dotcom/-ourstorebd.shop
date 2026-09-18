@@ -9,7 +9,7 @@ import {
     reorderCategory,
 } from '@/lib/features/category/categorySlice'
 import { updateProduct } from '@/lib/features/product/productSlice'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import {
     Plus,
     PencilIcon,
@@ -52,7 +52,7 @@ export default function AdminCategoriesPage() {
     }
 
     // Add new category
-    const handleAdd = () => {
+    const handleAdd = async () => {
         const name = newCatName.trim()
         if (!name) {
             toast.error('ক্যাটাগরির নাম লিখুন')
@@ -63,7 +63,13 @@ export default function AdminCategoriesPage() {
             toast.error('এই নামে ক্যাটাগরি আগে থেকেই আছে')
             return
         }
-        dispatch(addCategory({ name }))
+        const newId = 'cat_' + Date.now()
+        const newCat = { id: newId, name, order: categories.length, visible: true }
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('categories', newId, newCat)
+            if (!ok) { toast.error('ডাটাবেজে সেভ করতে সমস্যা হয়েছে'); return }
+        }
+        dispatch(addCategory({ name, id: newId }))
         setNewCatName('')
         toast.success(`"${name}" ক্যাটাগরি সফলভাবে যোগ করা হয়েছে!`)
     }
@@ -76,7 +82,7 @@ export default function AdminCategoriesPage() {
     }
 
     // Save edit
-    const saveEdit = () => {
+    const saveEdit = async () => {
         const name = editingName.trim()
         if (!name) {
             toast.error('ক্যাটাগরির নাম ফাঁকা রাখা যাবে না')
@@ -88,6 +94,9 @@ export default function AdminCategoriesPage() {
             return
         }
         const oldName = categories.find(c => c.id === editingId)?.name
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('categories', editingId, { name })
+        }
         dispatch(updateCategory({ id: editingId, name }))
         // Update all products that reference the old category name
         if (oldName && oldName !== name) {
@@ -122,7 +131,10 @@ export default function AdminCategoriesPage() {
     }
 
     // Toggle visibility
-    const toggleVisibility = (cat) => {
+    const toggleVisibility = async (cat) => {
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('categories', cat.id, { visible: !cat.visible })
+        }
         dispatch(updateCategory({ id: cat.id, visible: !cat.visible }))
         toast.success(cat.visible ? `"${cat.name}" লুকানো হয়েছে` : `"${cat.name}" দৃশ্যমান করা হয়েছে`)
     }
@@ -137,8 +149,12 @@ export default function AdminCategoriesPage() {
     }
 
     // Delete
-    const confirmDelete = (id) => {
+    const confirmDelete = async (id) => {
         const cat = categories.find(c => c.id === id)
+        if (isFirebaseConfigured()) {
+            const ok = await deleteDocFromFirestore('categories', id)
+            if (!ok) { toast.error('ডাটাবেজ থেকে মুছতে সমস্যা হয়েছে'); return }
+        }
         dispatch(deleteCategory(id))
         setDeleteConfirmId(null)
         setEditingId(null) // Reset edit state

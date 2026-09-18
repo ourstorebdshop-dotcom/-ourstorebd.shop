@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import {
-    addBanner, updateBanner, deleteBanner, toggleBannerActive, resetBanners
+    addBanner, updateBanner, deleteBanner, toggleBannerActive, resetBanners, defaultBanners
 } from '@/lib/features/banner/bannerSlice'
+import { saveDocToFirestore, deleteDocFromFirestore, syncCollectionToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import toast from 'react-hot-toast'
 import {
     PlusIcon, PencilIcon, Trash2Icon, XIcon, MegaphoneIcon,
@@ -72,8 +73,12 @@ export default function AdminBanners() {
     const [formData, setFormData] = useState({ ...emptyBanner })
     const [showResetConfirm, setShowResetConfirm] = useState(false)
 
-    const handleReset = () => {
+    const handleReset = async () => {
         dispatch(resetBanners())
+        if (isFirebaseConfigured()) {
+            const defaults = defaultBanners.map(b => ({ ...b }))
+            await syncCollectionToFirestore('banners', defaults)
+        }
         toast.success('Banners reset to defaults!')
         setShowResetConfirm(false)
     }
@@ -83,7 +88,7 @@ export default function AdminBanners() {
         setFormData(prev => ({ ...prev, [name]: value }))
     }
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault()
         if (!formData.message.trim()) {
             toast.error('Please enter a banner message')
@@ -101,11 +106,22 @@ export default function AdminBanners() {
         }
 
         if (editingBanner) {
-            dispatch(updateBanner({ ...formData, id: editingBanner.id }))
+            const updatedBanner = { ...formData, id: editingBanner.id }
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('banners', editingBanner.id, updatedBanner)
+                if (!ok) { toast.error('Failed to save banner to database'); return }
+            }
+            dispatch(updateBanner(updatedBanner))
             toast.success('Banner updated successfully!')
             setEditingBanner(null)
         } else {
-            dispatch(addBanner(formData))
+            const newId = `banner_${Date.now()}`
+            const newBanner = { ...formData, id: newId, priority: banners.length + 1, createdAt: new Date().toISOString() }
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('banners', newId, newBanner)
+                if (!ok) { toast.error('Failed to save banner to database'); return }
+            }
+            dispatch(addBanner(newBanner))
             toast.success('Banner created successfully!')
         }
 
@@ -119,15 +135,22 @@ export default function AdminBanners() {
         setShowForm(true)
     }
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
+        if (isFirebaseConfigured()) {
+            const ok = await deleteDocFromFirestore('banners', deletingBannerId)
+            if (!ok) { toast.error('Failed to delete banner from database'); return }
+        }
         dispatch(deleteBanner(deletingBannerId))
         toast.success('Banner deleted!')
         setDeletingBannerId(null)
     }
 
-    const handleToggle = (id) => {
-        dispatch(toggleBannerActive(id))
+    const handleToggle = async (id) => {
         const banner = banners.find(b => b.id === id)
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('banners', id, { isActive: !banner?.isActive })
+        }
+        dispatch(toggleBannerActive(id))
         toast.success(`Banner ${banner?.isActive ? 'deactivated' : 'activated'}!`)
     }
 

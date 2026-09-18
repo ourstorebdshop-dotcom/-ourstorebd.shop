@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useSelector, useDispatch } from 'react-redux'
+import { useSelector, useDispatch, useStore } from 'react-redux'
 import {
     updateHeader,
     addHeaderNavLink,
@@ -28,6 +28,7 @@ import {
     resetHeaderFooter,
 } from '@/lib/features/headerFooter/headerFooterSlice'
 import toast from 'react-hot-toast'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import Link from 'next/link'
 import {
     LayoutTemplate,
@@ -76,7 +77,18 @@ const SOCIAL_PLATFORMS = [
 
 export default function AdminHeaderFooterPage() {
     const dispatch = useDispatch()
+    const store = useStore()
     const headerFooterState = useSelector(state => state.headerFooter)
+
+    // Persist headerFooter state to Firestore — called AFTER dispatch
+    // Uses store.getState() synchronously (no setTimeout) so state is fresh
+    const persistHeaderFooter = async () => {
+        if (isFirebaseConfigured()) {
+            const state = store.getState().headerFooter
+            const saved = await saveDocToFirestore('settings', 'header_footer', state)
+            if (!saved) { toast.error('Firestore save failed!') }
+        }
+    }
 
     const header = headerFooterState?.header || {}
     const footer = headerFooterState?.footer || {}
@@ -136,6 +148,7 @@ export default function AdminHeaderFooterPage() {
             loginLabel: headerForm.loginLabel,
             isSticky: headerForm.isSticky,
         }))
+        persistHeaderFooter()
         toast.success('হেডার সেটিংস সফলভাবে সংরক্ষিত ও লাইভ আপডেট হয়েছে!')
     }
 
@@ -178,6 +191,7 @@ export default function AdminHeaderFooterPage() {
             toast.success('নতুন ন্যাভিগেশন লিংক যুক্ত হয়েছে')
         }
         setShowAddNavModal(false)
+        persistHeaderFooter()
     }
 
     const handleMoveNav = (index, direction) => {
@@ -188,6 +202,7 @@ export default function AdminHeaderFooterPage() {
         links[index] = links[targetIndex]
         links[targetIndex] = temp
         dispatch(reorderHeaderNavLinks(links))
+        persistHeaderFooter()
     }
 
     // =========================================================================
@@ -216,6 +231,7 @@ export default function AdminHeaderFooterPage() {
                 badgesText: footerForm.bottomBar?.badgesText,
             }
         }))
+        persistHeaderFooter()
         toast.success('ফুটার সেটিংস সফলভাবে সংরক্ষিত ও লাইভ আপডেট হয়েছে!')
     }
 
@@ -268,6 +284,7 @@ export default function AdminHeaderFooterPage() {
             toast.success('নতুন সোশ্যাল লিংক যুক্ত হয়েছে')
         }
         setShowAddSocialModal(false)
+        persistHeaderFooter()
     }
 
     // Section Handlers
@@ -283,6 +300,7 @@ export default function AdminHeaderFooterPage() {
         }))
         setSectionTitleInput('')
         setShowAddSectionModal(false)
+        persistHeaderFooter()
         toast.success('নতুন ফুটার কলাম তৈরি হয়েছে')
     }
 
@@ -330,10 +348,12 @@ export default function AdminHeaderFooterPage() {
         }
         setActiveSectionForLink(null)
         setEditingSectionLinkId(null)
+        persistHeaderFooter()
     }
 
     const handleResetAll = () => {
         dispatch(resetHeaderFooter())
+        persistHeaderFooter()
         toast.success('হেডার ও ফুটার ডিফল্ট সেটিংসে রিসেট হয়েছে!')
         setShowResetConfirm(false)
     }

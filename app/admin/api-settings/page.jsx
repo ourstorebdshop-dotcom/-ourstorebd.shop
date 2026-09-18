@@ -8,6 +8,7 @@ import {
     updatePaymentGateway,
     resetApiSettings 
 } from '@/lib/features/apiSettings/apiSettingsSlice'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import { 
     KeyRound, 
     Check, 
@@ -55,6 +56,7 @@ const GoogleIcon = () => (
 
 export default function ApiSettingsPage() {
     const dispatch = useDispatch()
+    const store = useStore()
     const apiSettings = useSelector(state => state.apiSettings)
 
     // Local form state
@@ -125,18 +127,26 @@ export default function ApiSettingsPage() {
         }
     }
 
-    const handleSaveGoogleAuth = (e) => {
+    const handleSaveGoogleAuth = async (e) => {
         if (e) e.preventDefault()
 
         const trimmedId = googleClientId.trim()
         const trimmedSecret = googleClientSecret.trim()
 
-        dispatch(updateGoogleAuth({
+        const googleData = {
             clientId: trimmedId,
             clientSecret: trimmedSecret,
             enabled: googleEnabled,
             autoSignup: googleAutoSignup,
-        }))
+        }
+
+        // Persist to Firestore with exact data (merge preserves other settings)
+        if (isFirebaseConfigured()) {
+            const saved = await saveDocToFirestore('settings', 'api_settings', { google: googleData })
+            if (!saved) { toast.error('Firestore save failed!'); return }
+        }
+
+        dispatch(updateGoogleAuth(googleData))
 
         if (trimmedId) {
             toast.success('Google API সেটিংস সফলভাবে সংরক্ষিত হয়েছে!', { icon: '✅' })
@@ -148,24 +158,34 @@ export default function ApiSettingsPage() {
         }
     }
 
-    const handleSaveSms = (e) => {
+    const handleSaveSms = async (e) => {
         if (e) e.preventDefault()
-        dispatch(updateSmsGateway({
+        const smsData = {
             provider: smsProvider,
             apiKey: smsApiKey.trim(),
             senderId: smsSenderId.trim(),
             enabled: smsEnabled
-        }))
+        }
+        if (isFirebaseConfigured()) {
+            const saved = await saveDocToFirestore('settings', 'api_settings', { sms: smsData })
+            if (!saved) { toast.error('Firestore save failed!'); return }
+        }
+        dispatch(updateSmsGateway(smsData))
         toast.success('SMS Gateway সেটিংস সংরক্ষিত হয়েছে!')
     }
 
-    const handleSavePayment = (e) => {
+    const handleSavePayment = async (e) => {
         if (e) e.preventDefault()
-        dispatch(updatePaymentGateway({
+        const paymentData = {
             bkashApiKey: bkashApiKey.trim(),
             bkashSecretKey: bkashSecretKey.trim(),
             nagadMerchantId: nagadMerchantId.trim(),
-        }))
+        }
+        if (isFirebaseConfigured()) {
+            const saved = await saveDocToFirestore('settings', 'api_settings', { payment: paymentData })
+            if (!saved) { toast.error('Firestore save failed!'); return }
+        }
+        dispatch(updatePaymentGateway(paymentData))
         toast.success('পেমেন্ট গেটওয়ে API সংরক্ষিত হয়েছে!')
     }
 

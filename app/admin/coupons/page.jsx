@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { addCoupon, updateCoupon, deleteCoupon, toggleCouponActive, resetCoupons } from "@/lib/features/coupon/couponSlice"
+import { saveDocToFirestore, deleteDocFromFirestore, syncCollectionToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { couponDummyData } from '@/assets/assets'
 import { format } from "date-fns"
 import toast from "react-hot-toast"
 import {
@@ -93,7 +95,7 @@ export default function AdminCoupons() {
     }, [])
 
     // ─── ADD ───────────────────────────────────────────
-    const handleAddCoupon = (e) => {
+    const handleAddCoupon = async (e) => {
         e.preventDefault()
         if (!newCoupon.code.trim()) { toast.error('Please enter a coupon code'); return }
         if (!newCoupon.discount) { toast.error('Please enter a discount value'); return }
@@ -102,7 +104,7 @@ export default function AdminCoupons() {
         const formattedCode = newCoupon.code.toUpperCase().trim()
         if (coupons.some(c => c.code === formattedCode)) { toast.error('This coupon code already exists!'); return }
 
-        dispatch(addCoupon({
+        const couponData = {
             code: formattedCode,
             description: newCoupon.description || `${newCoupon.discount}${newCoupon.discountType === 'percentage' ? '%' : currency} discount`,
             discount: parseFloat(newCoupon.discount) || 10,
@@ -119,45 +121,66 @@ export default function AdminCoupons() {
             totalSavings: 0,
             expiresAt: new Date(newCoupon.expiresAt).toISOString(),
             createdAt: new Date().toISOString()
-        }))
+        }
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('coupons', formattedCode, couponData)
+            if (!ok) { toast.error('Failed to save coupon to database'); return }
+        }
+        dispatch(addCoupon(couponData))
         toast.success(`Coupon "${formattedCode}" created!`)
         setNewCoupon(getDefaultCoupon())
         setShowForm(false)
     }
 
     // ─── EDIT SAVE ─────────────────────────────────────
-    const handleEditSave = (e) => {
+    const handleEditSave = async (e) => {
         e.preventDefault()
-        dispatch(updateCoupon({
+        const updatedData = {
             ...editingCoupon,
             discount: parseFloat(editingCoupon.discount) || 0,
             maxUses: parseInt(editingCoupon.maxUses) || 0,
             maxUsesPerUser: parseInt(editingCoupon.maxUsesPerUser) || 1,
             minOrderAmount: parseFloat(editingCoupon.minOrderAmount) || 0,
             maxDiscountAmount: parseFloat(editingCoupon.maxDiscountAmount) || 0,
-        }))
+        }
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('coupons', editingCoupon.code, updatedData)
+            if (!ok) { toast.error('Failed to update coupon in database'); return }
+        }
+        dispatch(updateCoupon(updatedData))
         toast.success(`Coupon "${editingCoupon.code}" updated!`)
         setEditingCoupon(null)
     }
 
     // ─── DELETE ────────────────────────────────────────
-    const confirmDelete = () => {
+    const confirmDelete = async () => {
+        if (isFirebaseConfigured()) {
+            const ok = await deleteDocFromFirestore('coupons', deletingCode)
+            if (!ok) { toast.error('Failed to delete coupon from database'); return }
+        }
         dispatch(deleteCoupon(deletingCode))
         toast.success(`Coupon "${deletingCode}" deleted!`)
         setDeletingCode(null)
     }
 
     // ─── TOGGLE ────────────────────────────────────────
-    const handleToggle = (code) => {
-        dispatch(toggleCouponActive(code))
+    const handleToggle = async (code) => {
         const c = coupons.find(x => x.code === code)
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('coupons', code, { isActive: !c?.isActive })
+        }
+        dispatch(toggleCouponActive(code))
         toast.success(`Coupon "${code}" ${c?.isActive ? 'deactivated' : 'activated'}!`)
     }
 
     // ─── COPY ──────────────────────────────────────────
     // ─── RESET TO DEFAULTS ─────────────────────────────
-    const handleReset = () => {
+    const handleReset = async () => {
         dispatch(resetCoupons())
+        if (isFirebaseConfigured()) {
+            const defaults = couponDummyData.map(c => ({ ...c }))
+            await syncCollectionToFirestore('coupons', defaults)
+        }
         toast.success('Coupons reset to defaults!')
         setShowResetConfirm(false)
     }

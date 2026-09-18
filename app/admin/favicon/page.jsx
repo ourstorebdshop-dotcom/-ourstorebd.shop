@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { updateFavicon, resetFavicon, defaultFaviconSettings } from '@/lib/features/favicon/faviconSlice'
 import { processImageToFavicon, generateAppleTouchIcon, FAVICON_PRESETS, svgToDataUrl } from '@/lib/faviconHelper'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 import {
@@ -231,9 +232,16 @@ export default function FaviconManagementPage() {
                 fileType: fileMeta.type,
             }
 
-            // 1. Dispatch to Redux (which automatically updates localStorage & Firestore via StoreProvider)
-            // This is the PRIMARY save path — works on all environments including Vercel
+            // 1. Dispatch to Redux (updates localStorage via subscribe handler)
             dispatch(updateFavicon(updatePayload))
+
+            // 1b. Persist directly to Firestore
+            if (isFirebaseConfigured()) {
+                await saveDocToFirestore('settings', 'favicon', {
+                    ...updatePayload,
+                    updatedAt: new Date().toISOString()
+                })
+            }
 
             // 2. Call server API to write physical files (secondary — only works on writable filesystems)
             // API failure does NOT affect the primary save path above
@@ -282,9 +290,13 @@ export default function FaviconManagementPage() {
     }
 
     // Reset to default
-    const handleReset = () => {
+    const handleReset = async () => {
         if (confirm('আপনি কি ডিফল্ট ফেভিকনে ফিরে যেতে চান?')) {
             dispatch(resetFavicon())
+            // Persist reset to Firestore
+            if (isFirebaseConfigured()) {
+                await saveDocToFirestore('settings', 'favicon', defaultFaviconSettings)
+            }
             setPreviewUrl('/favicon.ico')
             setApplePreviewUrl('/apple-icon.png')
             setFileMeta({

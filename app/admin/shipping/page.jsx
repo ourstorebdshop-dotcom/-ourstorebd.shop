@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 import { useState, useRef } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { 
@@ -6,6 +6,7 @@ import {
     updateQuickContact, toggleQuickContact 
 } from '@/lib/features/shipping/shippingSlice'
 import { updateStoreInfo } from '@/lib/features/contact/contactSlice'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import toast from 'react-hot-toast'
 import {
     TruckIcon, CreditCardIcon, SaveIcon, ToggleLeftIcon, ToggleRightIcon,
@@ -17,6 +18,15 @@ export default function AdminShippingSettings() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
     const shipping = useSelector(state => state.shipping)
+
+    // Helper: persist shipping state to Firestore with exact data
+    const persistShipping = async (nextShipping) => {
+        if (isFirebaseConfigured()) {
+            const saved = await saveDocToFirestore('settings', 'shipping', nextShipping)
+            if (!saved) { toast.error('Firestore save failed!'); return false }
+        }
+        return true
+    }
 
     // Local edit state
     const [editingSection, setEditingSection] = useState(null)
@@ -47,54 +57,71 @@ export default function AdminShippingSettings() {
     const [waMessage, setWaMessage] = useState(quickContact.whatsapp?.message || 'আমি এই প্রোডাক্টটা অর্ডার করতে চাই - {product_name}')
     const [callNumber, setCallNumber] = useState(quickContact.call?.number || '01577272145')
 
-    const saveShippingCosts = () => {
+    const saveShippingCosts = async () => {
         const inside = Number(insideCost)
         const outside = Number(outsideCost)
         if (isNaN(inside) || inside < 0) { toast.error('ঢাকার ভিতরের চার্জ সঠিক হতে হবে'); return }
         if (isNaN(outside) || outside < 0) { toast.error('ঢাকার বাইরের চার্জ সঠিক হতে হবে'); return }
         if (!insideTime.trim()) { toast.error('ঢাকার ভিতরের ডেলিভারি সময় দিন'); return }
         if (!outsideTime.trim()) { toast.error('ঢাকার বাইরের ডেলিভারি সময় দিন'); return }
+        const nextShipping = {
+            ...shipping,
+            insideDhaka: { ...shipping.insideDhaka, cost: inside, deliveryTime: insideTime },
+            outsideDhaka: { ...shipping.outsideDhaka, cost: outside, deliveryTime: outsideTime }
+        }
+        const ok = await persistShipping(nextShipping)
+        if (!ok) return
         dispatch(updateInsideDhaka({ cost: inside, deliveryTime: insideTime }))
         dispatch(updateOutsideDhaka({ cost: outside, deliveryTime: outsideTime }))
         toast.success('শিপিং চার্জ আপডেট হয়েছে!')
         setEditingSection(null)
     }
 
-    const saveBkash = () => {
-        dispatch(updatePaymentMethod({ method: 'BKASH', data: { accountNumber: bkashNumber, accountType: bkashType } }))
+    const saveBkash = async () => {
+        const bkashData = { accountNumber: bkashNumber, accountType: bkashType }
+        const nextShipping = { ...shipping, paymentMethods: { ...shipping.paymentMethods, BKASH: { ...shipping.paymentMethods.BKASH, ...bkashData } } }
+        const ok = await persistShipping(nextShipping)
+        if (!ok) return
+        dispatch(updatePaymentMethod({ method: 'BKASH', data: bkashData }))
         toast.success('বিকাশ তথ্য আপডেট হয়েছে!')
         setEditingSection(null)
     }
 
-    const saveNagad = () => {
-        dispatch(updatePaymentMethod({ method: 'NAGAD', data: { accountNumber: nagadNumber, accountType: nagadType } }))
+    const saveNagad = async () => {
+        const nagadData = { accountNumber: nagadNumber, accountType: nagadType }
+        const nextShipping = { ...shipping, paymentMethods: { ...shipping.paymentMethods, NAGAD: { ...shipping.paymentMethods.NAGAD, ...nagadData } } }
+        const ok = await persistShipping(nextShipping)
+        if (!ok) return
+        dispatch(updatePaymentMethod({ method: 'NAGAD', data: nagadData }))
         toast.success('নগদ তথ্য আপডেট হয়েছে!')
         setEditingSection(null)
     }
 
-    const saveBank = () => {
-        dispatch(updatePaymentMethod({ method: 'BANK', data: { bankName: bankNameVal, accountName: bankAccName, accountNumber: bankAccNumber, branch: bankBranch, routingNumber: bankRouting } }))
+    const saveBank = async () => {
+        const bankData = { bankName: bankNameVal, accountName: bankAccName, accountNumber: bankAccNumber, branch: bankBranch, routingNumber: bankRouting }
+        const nextShipping = { ...shipping, paymentMethods: { ...shipping.paymentMethods, BANK: { ...shipping.paymentMethods.BANK, ...bankData } } }
+        const ok = await persistShipping(nextShipping)
+        if (!ok) return
+        dispatch(updatePaymentMethod({ method: 'BANK', data: bankData }))
         toast.success('ব্যাংক তথ্য আপডেট হয়েছে!')
         setEditingSection(null)
     }
 
-    const saveQuickContact = () => {
-        dispatch(updateQuickContact({
-            whatsapp: {
-                ...quickContact.whatsapp,
-                number: waNumber,
-                message: waMessage
-            },
-            call: {
-                ...quickContact.call,
-                number: callNumber
-            }
-        }))
+    const saveQuickContact = async () => {
+        const nextQuickContact = {
+            whatsapp: { ...quickContact.whatsapp, number: waNumber, message: waMessage },
+            call: { ...quickContact.call, number: callNumber }
+        }
+        const nextShipping = { ...shipping, quickContact: nextQuickContact }
+        const ok = await persistShipping(nextShipping)
+        if (!ok) return
+        dispatch(updateQuickContact(nextQuickContact))
         // Sync to storeInfo so footer & contact page stay updated
-        dispatch(updateStoreInfo({
-            whatsapp: waNumber,
-            phone: callNumber
-        }))
+        dispatch(updateStoreInfo({ whatsapp: waNumber, phone: callNumber }))
+        // Also persist contact storeInfo
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('settings', 'contact', { storeInfo: { whatsapp: waNumber, phone: callNumber } })
+        }
         toast.success('হোয়াটসঅ্যাপ ও কল বাটন তথ্য আপডেট হয়েছে!')
         setEditingSection(null)
     }
@@ -106,16 +133,25 @@ export default function AdminShippingSettings() {
         toast.success(`${label} বাটন ${!isCurrentlyEnabled ? 'চালু' : 'বন্ধ'} করা হয়েছে`)
     }
 
-    const handleToggle = (method) => {
+    const handleToggle = async (method) => {
         const enabledCount = Object.values(shipping.paymentMethods).filter(m => m.enabled).length
         if (shipping.paymentMethods[method].enabled && enabledCount <= 1) {
             toast.error('অন্তত একটি পেমেন্ট মেথড চালু রাখতে হবে!')
             return
         }
+        const newEnabled = !shipping.paymentMethods[method].enabled
+        const nextShipping = {
+            ...shipping,
+            paymentMethods: {
+                ...shipping.paymentMethods,
+                [method]: { ...shipping.paymentMethods[method], enabled: newEnabled }
+            }
+        }
+        const ok = await persistShipping(nextShipping)
+        if (!ok) return
         dispatch(togglePaymentMethod(method))
         const label = shipping.paymentMethods[method].label
-        const newState = !shipping.paymentMethods[method].enabled
-        toast.success(`${label} ${newState ? 'চালু' : 'বন্ধ'} করা হয়েছে`)
+        toast.success(`${label} ${newEnabled ? 'চালু' : 'বন্ধ'} করা হয়েছে`)
     }
 
     // Image upload refs

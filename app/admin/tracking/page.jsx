@@ -51,6 +51,7 @@ import {
     logTrackingEvent,
 } from '@/lib/features/tracking/trackingSlice'
 import { trackEvent, trackPurchase, trackAddToCart, trackPageView } from '@/lib/tracking/clientTracker'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 
 export default function AdminTrackingPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
@@ -168,18 +169,21 @@ export default function AdminTrackingPage() {
     const handleSaveMeta = (e) => {
         e?.preventDefault()
         dispatch(updateMetaTracking(metaForm))
+        persistTracking()
         toast.success('Meta Pixel & CAPI সেটিংস সংরক্ষিত হয়েছে!')
     }
 
     const handleSaveGoogleAds = (e) => {
         e?.preventDefault()
         dispatch(updateGoogleAdsTracking(googleAdsForm))
+        persistTracking()
         toast.success('Google Ads Conversion সেটিংস সংরক্ষিত হয়েছে!')
     }
 
     const handleSaveGa4 = (e) => {
         e?.preventDefault()
         dispatch(updateGa4Tracking(ga4Form))
+        persistTracking()
         toast.success('Google Analytics 4 (GA4) সেটিংস সংরক্ষিত হয়েছে!')
     }
 
@@ -187,24 +191,28 @@ export default function AdminTrackingPage() {
         e?.preventDefault()
         dispatch(updateGtmTracking(gtmForm))
         dispatch(updateCustomScripts(customScriptsForm))
+        persistTracking()
         toast.success('Google Tag Manager ও কাস্টম স্ক্রিপ্ট সেটিংস সংরক্ষিত হয়েছে!')
     }
 
     const handleSaveEvents = (e) => {
         e?.preventDefault()
         dispatch(updateEventToggles(eventsConfigForm))
+        persistTracking()
         toast.success('ইভেন্ট ট্র্যাকিং কনফিগারেশন আপডেট হয়েছে!')
     }
 
     const handleSaveConsent = (e) => {
         e?.preventDefault()
         dispatch(updateConsentSettings(consentForm))
+        persistTracking()
         toast.success('কুকি ও প্রাইভেসি কনসেন্ট সেটিংস সংরক্ষিত হয়েছে!')
     }
 
     const handleSaveDebug = (e) => {
         e?.preventDefault()
         dispatch(updateDebugSettings(debugForm))
+        persistTracking()
         toast.success('ডিবাগ ও টেস্ট মোড সেটিংস আপডেট হয়েছে!')
     }
 

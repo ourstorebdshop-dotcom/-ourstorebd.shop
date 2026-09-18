@@ -11,6 +11,7 @@ import {
     updateStoreInfo,
     resetMessages
 } from '@/lib/features/contact/contactSlice'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import {
@@ -42,6 +43,7 @@ import {
 
 export default function AdminContactMessages() {
     const dispatch = useDispatch()
+    const store = useStore()
     const messages = useSelector(state => state.contact?.messages) || []
     const storeInfo = useSelector(state => state.contact?.storeInfo) || {}
 
@@ -147,7 +149,7 @@ export default function AdminContactMessages() {
         : null
 
     // Handler: Save Reply
-    const handleSendReply = () => {
+    const handleSendReply = async () => {
         if (!viewingMessage) return
         if (!replyText.trim()) {
             toast.error("Please enter a reply text")
@@ -159,27 +161,73 @@ export default function AdminContactMessages() {
             replyText: replyText.trim()
         }))
 
+        // Persist contact state to Firestore with exact updated data
+        if (isFirebaseConfigured()) {
+            const updatedMessages = [...messages].map(m =>
+                m.id === viewingMessage.id
+                    ? { ...m, status: 'REPLIED', reply: replyText.trim(), repliedAt: new Date().toISOString() }
+                    : m
+            )
+            const saved = await saveDocToFirestore('settings', 'contact', {
+                messages: updatedMessages,
+                storeInfo: contact.storeInfo || {}
+            })
+            if (!saved) {
+                toast.error('Firestore save failed!')
+                return
+            }
+        }
+
         toast.success("Reply recorded & status updated to REPLIED!")
     }
 
     // Handler: Save Admin Note
-    const handleSaveNote = () => {
+    const handleSaveNote = async () => {
         if (!viewingMessage) return
         dispatch(updateAdminNote({
             id: viewingMessage.id,
             note: adminNoteText.trim()
         }))
+        if (isFirebaseConfigured()) {
+            const updatedMessages = [...messages].map(m =>
+                m.id === viewingMessage.id ? { ...m, adminNote: adminNoteText.trim() } : m
+            )
+            const saved = await saveDocToFirestore('settings', 'contact', {
+                messages: updatedMessages,
+                storeInfo: contact.storeInfo || {}
+            })
+            if (!saved) { toast.error('Firestore save failed!'); return }
+        }
         toast.success("Internal note saved!")
     }
 
     // Handler: Status change
-    const handleStatusChange = (id, newStatus) => {
+    const handleStatusChange = async (id, newStatus) => {
         dispatch(updateMessageStatus({ id, status: newStatus }))
+        if (isFirebaseConfigured()) {
+            const updatedMessages = [...messages].map(m =>
+                m.id === id ? { ...m, status: newStatus } : m
+            )
+            const saved = await saveDocToFirestore('settings', 'contact', {
+                messages: updatedMessages,
+                storeInfo: contact.storeInfo || {}
+            })
+            if (!saved) { toast.error('Firestore save failed!'); return }
+        }
         toast.success(`Status changed to ${newStatus}`)
     }
 
     // Handler: Delete single
-    const handleDeleteMessage = (id) => {
+    const handleDeleteMessage = async (id) => {
+        const remainingMessages = messages.filter(m => m.id !== id)
+        // Database-first: persist to Firestore before updating local state
+        if (isFirebaseConfigured()) {
+            const saved = await saveDocToFirestore('settings', 'contact', {
+                messages: remainingMessages,
+                storeInfo: contact.storeInfo || {}
+            })
+            if (!saved) { toast.error('Firestore delete failed!'); return }
+        }
         dispatch(deleteMessage(id))
         setSelectedIds(prev => prev.filter(item => item !== id))
         if (viewingMessage === id) {
@@ -190,8 +238,17 @@ export default function AdminContactMessages() {
     }
 
     // Handler: Bulk Delete
-    const handleBulkDelete = () => {
+    const handleBulkDelete = async () => {
         if (selectedIds.length === 0) return
+        const remainingMessages = messages.filter(m => !selectedIds.includes(m.id))
+        // Database-first: persist to Firestore before updating local state
+        if (isFirebaseConfigured()) {
+            const saved = await saveDocToFirestore('settings', 'contact', {
+                messages: remainingMessages,
+                storeInfo: contact.storeInfo || {}
+            })
+            if (!saved) { toast.error('Firestore delete failed!'); return }
+        }
         dispatch(deleteMultipleMessages(selectedIds))
         setSelectedIds([])
         toast.success("Selected messages deleted")
@@ -217,9 +274,18 @@ export default function AdminContactMessages() {
     }
 
     // Handler: Save Store Settings
-    const handleSaveSettings = (e) => {
+    const handleSaveSettings = async (e) => {
         e.preventDefault()
-        dispatch(updateStoreInfo(settingsForm))
+        const nextSettings = { ...settingsForm }
+        // Persist to Firestore first with exact data
+        if (isFirebaseConfigured()) {
+            const saved = await saveDocToFirestore('settings', 'contact', {
+                messages: messages,
+                storeInfo: nextSettings
+            })
+            if (!saved) { toast.error('Firestore save failed!'); return }
+        }
+        dispatch(updateStoreInfo(nextSettings))
         toast.success("Store contact settings updated and published live!")
     }
 
