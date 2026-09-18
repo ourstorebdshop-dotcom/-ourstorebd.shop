@@ -76,8 +76,21 @@ export function isDemoProduct(product) {
     return false
 }
 
-// Flag to track whether we're receiving data from Firestore (to avoid write loops)
-let isReceivingFromFirestore = false
+// Counter to track active Firestore receives (avoids write loops; counter > 0 means receiving)
+// Using a counter instead of a boolean flag prevents race conditions when multiple
+// async Firestore callbacks fire concurrently — each callback increments on entry
+// and decrements on exit, so the guard is only lifted when ALL callbacks complete.
+let firestoreReceiveDepth = 0
+
+// Debounced Firestore sync helpers — prevents network flooding from rapid state changes
+const pendingSyncs = {}
+function debouncedSync(key, syncFn, delay = 500) {
+    if (pendingSyncs[key]) clearTimeout(pendingSyncs[key])
+    pendingSyncs[key] = setTimeout(() => {
+        syncFn()
+        delete pendingSyncs[key]
+    }, delay)
+}
 
 export default function StoreProvider({ children }) {
     const storeRef = useRef(undefined)
@@ -621,7 +634,7 @@ export default function StoreProvider({ children }) {
                         loadDocFromFirestore('settings', 'tracking'),
                     ])
 
-                    isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
 
                     // --- 1. Products ---
                     if (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value)) {
@@ -739,7 +752,7 @@ export default function StoreProvider({ children }) {
                 } catch (e) {
                     console.warn('[Firestore] Background parallel hydration failed:', e)
                 } finally {
-                    isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                 }
             }
         }
@@ -756,11 +769,11 @@ export default function StoreProvider({ children }) {
                 subscribeToCollection('products', (docs) => {
                     if (docs && Array.isArray(docs)) {
                         const cleaned = docs.filter(p => !isDemoProduct(p))
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(setProduct(cleaned))
                         prevProductsRef.current = cleaned
                         try { localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(cleaned)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -769,10 +782,10 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToCollection('categories', (docs) => {
                     if (docs && docs.length > 0) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateCategories(docs))
                         try { localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(docs)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -787,10 +800,10 @@ export default function StoreProvider({ children }) {
                             seen.add(b.id)
                             return true
                         })
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateBanners(deduped))
                         try { localStorage.setItem(BANNER_STORAGE_KEY, JSON.stringify(deduped)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -799,10 +812,10 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToCollection('coupons', (docs) => {
                     if (docs && docs.length > 0) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateCoupons(docs))
                         try { localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(docs)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -811,11 +824,11 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToCollection('orders', (docs) => {
                     if (docs && Array.isArray(docs)) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateOrders(docs))
                         prevOrders = docs
                         try { localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(docs)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -824,10 +837,10 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToDoc('settings', 'hero', (data) => {
                     if (data) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateHero(data))
                         try { localStorage.setItem(HERO_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -836,10 +849,10 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToDoc('settings', 'shipping', (data) => {
                     if (data) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateShipping(data))
                         try { localStorage.setItem(SHIPPING_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -848,13 +861,13 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToDoc('settings', 'contact', (data) => {
                     if (data) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateContact({
                             messages: data.messages || defaultMessages,
                             storeInfo: data.storeInfo || defaultStoreInfo
                         }))
                         try { localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -863,10 +876,10 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToDoc('settings', 'header_footer', (data) => {
                     if (data) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateHeaderFooter(data))
                         try { localStorage.setItem(HEADER_FOOTER_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -875,10 +888,10 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToDoc('settings', 'tracking', (data) => {
                     if (data) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateTracking(data))
                         try { localStorage.setItem(TRACKING_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -887,11 +900,11 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToDoc('settings', 'favicon', (data) => {
                     if (data) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateFavicon(data))
                         try { localStorage.setItem(FAVICON_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
                         applyFaviconToDocument(data.faviconUrl, data.appleTouchIconUrl, data.updatedAt)
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -900,10 +913,10 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToDoc('settings', 'fraud', (data) => {
                     if (data) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateFraud(data))
                         try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -912,10 +925,10 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToDoc('settings', 'cashflow', (data) => {
                     if (data) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateCashflow(data))
                         try { localStorage.setItem(CASHFLOW_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -924,10 +937,10 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToDoc('settings', 'api_settings', (data) => {
                     if (data) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         store.dispatch(hydrateApiSettings(data))
                         try { localStorage.setItem(API_SETTINGS_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
@@ -943,26 +956,37 @@ export default function StoreProvider({ children }) {
             unsubscribers.push(
                 subscribeToCollection('customers', (docs) => {
                     if (docs && Array.isArray(docs)) {
-                        isReceivingFromFirestore = true
+                    firestoreReceiveDepth++
                         const deletedIds = getDeletedUserIds()
                         const filtered = docs.filter(u => u && u.id && !deletedIds.includes(u.id))
                         store.dispatch(hydrateSavedUsers(filtered))
                         try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(filtered)) } catch (e) { /* ignore */ }
-                        isReceivingFromFirestore = false
+                    firestoreReceiveDepth--
                     }
                 })
             )
         }
 
         // ===== BroadcastChannel for product sync across tabs =====
-        const channel = new BroadcastChannel(CHANNEL_NAME)
+        // Wrapped in try-catch: BroadcastChannel is NOT supported in all mobile browsers
+        // (e.g. older Samsung Internet, some WebView browsers). Without this guard,
+        // an uncaught error here kills the entire useEffect — disabling ALL Firestore
+        // listeners, localStorage persistence, and data sync on mobile.
+        let channel = null
+        try {
+            channel = new BroadcastChannel(CHANNEL_NAME)
+        } catch (e) {
+            // BroadcastChannel unsupported — cross-tab product sync disabled, everything else works
+        }
 
-        channel.onmessage = (event) => {
-            if (event.data?.type === 'PRODUCT_UPDATE' && storeRef.current) {
-                isReceivingRef.current = true
-                store.dispatch(setProduct(event.data.products))
-                prevProductsRef.current = event.data.products
-                isReceivingRef.current = false
+        if (channel) {
+            channel.onmessage = (event) => {
+                if (event.data?.type === 'PRODUCT_UPDATE' && storeRef.current) {
+                    isReceivingRef.current = true
+                    store.dispatch(setProduct(event.data.products))
+                    prevProductsRef.current = event.data.products
+                    isReceivingRef.current = false
+                }
             }
         }
 
@@ -975,8 +999,8 @@ export default function StoreProvider({ children }) {
             if (currentCoupons !== prevCoupons) {
                 prevCoupons = currentCoupons
                 try { localStorage.setItem(COUPON_STORAGE_KEY, JSON.stringify(currentCoupons)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
-                    syncCollectionToFirestore('coupons', currentCoupons)
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
+                    debouncedSync('coupons', () => syncCollectionToFirestore('coupons', currentCoupons))
                 }
             }
 
@@ -985,8 +1009,8 @@ export default function StoreProvider({ children }) {
             if (currentBanners !== prevBanners) {
                 prevBanners = currentBanners
                 try { localStorage.setItem(BANNER_STORAGE_KEY, JSON.stringify(currentBanners)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
-                    syncCollectionToFirestore('banners', currentBanners)
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
+                    debouncedSync('banners', () => syncCollectionToFirestore('banners', currentBanners))
                 }
             }
 
@@ -995,7 +1019,7 @@ export default function StoreProvider({ children }) {
             if (currentHero !== prevHero) {
                 prevHero = currentHero
                 try { localStorage.setItem(HERO_STORAGE_KEY, JSON.stringify(currentHero)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     saveDocToFirestore('settings', 'hero', currentHero)
                 }
             }
@@ -1023,7 +1047,7 @@ export default function StoreProvider({ children }) {
                     localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(sanitized))
                 } catch (e) { /* ignore */ }
                 // Upsert customers to Firestore individually — NEVER use destructive syncCollectionToFirestore!
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     const deletedIds = getDeletedUserIds()
                     const toSync = currentSavedUsers
                         .filter(u => u && u.id && !deletedIds.includes(u.id) && u.role !== 'ADMIN')
@@ -1058,7 +1082,7 @@ export default function StoreProvider({ children }) {
             if (currentContact !== prevContact) {
                 prevContact = currentContact
                 try { localStorage.setItem(CONTACT_STORAGE_KEY, JSON.stringify(currentContact)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     saveDocToFirestore('settings', 'contact', currentContact)
                 }
             }
@@ -1075,8 +1099,8 @@ export default function StoreProvider({ children }) {
             if (currentCategories !== prevCategories) {
                 prevCategories = currentCategories
                 try { localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(currentCategories)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
-                    syncCollectionToFirestore('categories', currentCategories)
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
+                    debouncedSync('categories', () => syncCollectionToFirestore('categories', currentCategories))
                 }
             }
 
@@ -1085,7 +1109,7 @@ export default function StoreProvider({ children }) {
             if (currentShipping !== prevShipping) {
                 prevShipping = currentShipping
                 try { localStorage.setItem(SHIPPING_STORAGE_KEY, JSON.stringify(currentShipping)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     saveDocToFirestore('settings', 'shipping', currentShipping)
                 }
             }
@@ -1095,7 +1119,7 @@ export default function StoreProvider({ children }) {
             if (currentFraud !== prevFraud) {
                 prevFraud = currentFraud
                 try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(currentFraud)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     saveDocToFirestore('settings', 'fraud', currentFraud)
                 }
             }
@@ -1105,7 +1129,7 @@ export default function StoreProvider({ children }) {
             if (currentCashflow !== prevCashflow) {
                 prevCashflow = currentCashflow
                 try { localStorage.setItem(CASHFLOW_STORAGE_KEY, JSON.stringify(currentCashflow)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     saveDocToFirestore('settings', 'cashflow', currentCashflow)
                 }
             }
@@ -1115,7 +1139,7 @@ export default function StoreProvider({ children }) {
             if (currentApiSettings !== prevApiSettings) {
                 prevApiSettings = currentApiSettings
                 try { localStorage.setItem(API_SETTINGS_STORAGE_KEY, JSON.stringify(currentApiSettings)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     saveDocToFirestore('settings', 'api_settings', currentApiSettings)
                 }
             }
@@ -1125,7 +1149,7 @@ export default function StoreProvider({ children }) {
             if (currentHeaderFooter !== prevHeaderFooter) {
                 prevHeaderFooter = currentHeaderFooter
                 try { localStorage.setItem(HEADER_FOOTER_STORAGE_KEY, JSON.stringify(currentHeaderFooter)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     saveDocToFirestore('settings', 'header_footer', currentHeaderFooter)
                 }
             }
@@ -1135,7 +1159,7 @@ export default function StoreProvider({ children }) {
             if (currentTracking !== prevTracking) {
                 prevTracking = currentTracking
                 try { localStorage.setItem(TRACKING_STORAGE_KEY, JSON.stringify(currentTracking)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     saveDocToFirestore('settings', 'tracking', currentTracking)
                 }
             }
@@ -1145,18 +1169,20 @@ export default function StoreProvider({ children }) {
             if (currentFavicon !== prevFavicon) {
                 prevFavicon = currentFavicon
                 try { localStorage.setItem(FAVICON_STORAGE_KEY, JSON.stringify(currentFavicon)) } catch (e) { /* ignore */ }
-                if (firebaseEnabled && !isReceivingFromFirestore) {
+                if (firebaseEnabled && firestoreReceiveDepth === 0) {
                     saveDocToFirestore('settings', 'favicon', currentFavicon)
                 }
                 applyFaviconToDocument(currentFavicon.faviconUrl, currentFavicon.appleTouchIconUrl, currentFavicon.updatedAt)
             }
 
             // --- Products: BroadcastChannel + localStorage ---
-            if (!isReceivingRef.current && !isReceivingFromFirestore) {
+            if (!isReceivingRef.current && firestoreReceiveDepth === 0) {
                 const currentProducts = state.product.list
                 if (currentProducts !== prevProductsRef.current) {
                     prevProductsRef.current = currentProducts
-                    channel.postMessage({ type: 'PRODUCT_UPDATE', products: currentProducts })
+                    if (channel) {
+                        try { channel.postMessage({ type: 'PRODUCT_UPDATE', products: currentProducts }) } catch (e) { /* ignore */ }
+                    }
                     try { localStorage.setItem(PRODUCT_STORAGE_KEY, JSON.stringify(currentProducts)) } catch (e) { /* ignore */ }
                     // Note: Atomic single-document operations in add-product/manage-product already update Firestore directly.
                     // syncCollectionToFirestore is deliberately omitted to prevent re-uploading the entire collection.
@@ -1199,10 +1225,41 @@ export default function StoreProvider({ children }) {
         }
         window.addEventListener('storage', onStorageChange)
 
+        // ===== Mobile browser resume: re-fetch fresh data when page becomes visible =====
+        // Mobile browsers aggressively suspend tabs/WebSocket connections when backgrounded.
+        // When the user switches back, Firestore listeners may be stale or disconnected.
+        // This ensures fresh data is always fetched on tab resume — critical for mobile.
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && firebaseEnabled) {
+                hydrateData()
+            }
+        }
+        document.addEventListener('visibilitychange', handleVisibilityChange)
+
+        // ===== bfcache (back-forward cache) recovery =====
+        // Mobile browsers use bfcache to instantly restore pages on back/forward navigation.
+        // When a page is restored from bfcache (event.persisted === true), JavaScript state
+        // is frozen from the previous visit — Firestore listeners are dead, data is stale.
+        const handlePageShow = (event) => {
+            if (event.persisted && firebaseEnabled) {
+                hydrateData()
+            }
+        }
+        window.addEventListener('pageshow', handlePageShow)
+
         return () => {
             unsubscribe()
-            channel.close()
+            if (channel) {
+                try { channel.close() } catch (e) { /* ignore */ }
+            }
+            document.removeEventListener('visibilitychange', handleVisibilityChange)
+            window.removeEventListener('pageshow', handlePageShow)
             window.removeEventListener('storage', onStorageChange)
+            // Cancel any pending debounced syncs
+            Object.keys(pendingSyncs).forEach(key => {
+                clearTimeout(pendingSyncs[key])
+                delete pendingSyncs[key]
+            })
             // Cleanup Firestore real-time listeners
             unsubscribers.forEach(unsub => unsub())
         }
