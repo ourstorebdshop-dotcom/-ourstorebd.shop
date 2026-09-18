@@ -78,10 +78,14 @@ export async function POST(request) {
             }
         }
 
+        const anySaved = savedFavicon || savedAppleIcon
+
         return NextResponse.json({
-            success: true,
-            savedToFile: savedFavicon || savedAppleIcon,
-            message: 'Favicon saved successfully',
+            success: anySaved,
+            savedToFile: anySaved,
+            message: anySaved
+                ? 'Favicon saved successfully'
+                : 'Favicon data received but filesystem write was not possible (read-only environment). Data is persisted via database.',
         })
     } catch (error) {
         console.error('[FaviconAPI] Error handling favicon save:', error)

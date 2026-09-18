@@ -217,6 +217,9 @@ export default function FaviconManagementPage() {
             return
         }
 
+        // Prevent duplicate saves
+        if (isSaving) return
+
         setIsSaving(true)
         try {
             const updatePayload = {
@@ -229,20 +232,37 @@ export default function FaviconManagementPage() {
             }
 
             // 1. Dispatch to Redux (which automatically updates localStorage & Firestore via StoreProvider)
+            // This is the PRIMARY save path — works on all environments including Vercel
             dispatch(updateFavicon(updatePayload))
 
-            // 2. Call server API to write to public/favicon.ico on the server filesystem
-            await fetch('/api/admin/favicon', {
-                method: 'POST',
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    faviconDataUrl: previewUrl,
-                    appleTouchIconDataUrl: applePreviewUrl,
-                }),
-            }).catch(e => console.warn('Filesystem sync notice:', e.message))
+            // 2. Call server API to write physical files (secondary — only works on writable filesystems)
+            // API failure does NOT affect the primary save path above
+            let apiNotice = ''
+            try {
+                const res = await fetch('/api/admin/favicon', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        faviconDataUrl: previewUrl,
+                        appleTouchIconDataUrl: applePreviewUrl,
+                    }),
+                })
 
-            // 3. Immediately update active document head
+                if (!res.ok) {
+                    const errorData = await res.json().catch(() => ({}))
+                    if (res.status === 401) {
+                        apiNotice = ' (সতর্কতা: Admin session expired — পুনরায় লগইন করুন)'
+                    } else {
+                        apiNotice = ` (ফাইল সিস্টেম: ${errorData.error || res.statusText})`
+                    }
+                }
+            } catch (fetchErr) {
+                // Network error — API unreachable, but primary save already succeeded
+                console.warn('[Favicon] Filesystem sync skipped:', fetchErr.message)
+            }
+
+            // 3. Immediately update active document head (redundant safety — StoreProvider also does this)
             if (typeof document !== 'undefined') {
                 const iconLink = document.querySelector("link[rel*='icon']")
                 if (iconLink) iconLink.href = previewUrl
@@ -250,7 +270,7 @@ export default function FaviconManagementPage() {
                 if (appleLink && applePreviewUrl) appleLink.href = applePreviewUrl
             }
 
-            toast.success('ফেভিকন সফলভাবে আপডেট ও পুরো ওয়েবসাইটে প্রয়োগ করা হয়েছে! 🎉', {
+            toast.success(`ফেভিকন সফলভাবে আপডেট ও পুরো ওয়েবসাইটে প্রয়োগ করা হয়েছে! 🎉${apiNotice}`, {
                 duration: 4000,
             })
         } catch (err) {
