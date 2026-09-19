@@ -133,13 +133,13 @@ async function getOrderProducts(productIds, firebaseReady) {
 // In-memory idempotency store (prevents duplicate processing within the same serverless instance)
 const processedKeys = new Map()
 
-// Cleanup old idempotency keys every 10 minutes
-setInterval(() => {
+// On-demand cleanup of old idempotency keys (runs at start of each request, no setInterval)
+function pruneProcessedKeys() {
     const cutoff = Date.now() - 30 * 60 * 1000
     for (const [key, timestamp] of processedKeys) {
         if (timestamp < cutoff) processedKeys.delete(key)
     }
-}, 10 * 60 * 1000).unref?.()
+}
 
 
 /**
@@ -155,6 +155,9 @@ function getClientIP(request) {
 }
 
 export async function POST(request) {
+    // On-demand cleanup of expired idempotency keys (replaces setInterval)
+    pruneProcessedKeys()
+
     const ip = getClientIP(request)
 
     // Check request payload size (max 100KB) to prevent DoS
@@ -294,18 +297,14 @@ export async function POST(request) {
                     codDayWindowHours: 24,
                 }),
             ]),
-            // 8-second timeout: prevents API hang on Firestore cold start
-            new Promise((_, reject) => setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), 8000))
+            // 15-second timeout: prevents API hang on Firestore cold start (increased from 8s for BD network latency)
+            new Promise((_, reject) => setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), 15000))
         ]).catch(err => {
             if (err.message === 'FIRESTORE_TIMEOUT') {
-                console.warn('[OrderAPI] Firestore parallel reads timed out after 8s — proceeding with safe defaults')
-                // Products empty → will trigger PRODUCT_NOT_FOUND error (safe)
-                // Other fields get safe defaults so order can still be validated
-                return [null, [], null, [], {
-                    isDuplicate: false, matchedOrderId: null, reason: null,
-                    recentCount: 0, codDayCount: 0, recentOrders: [],
-                    history: { total: 0, delivered: 0, cancelled: 0, pending: 0 },
-                }]
+                console.error('[OrderAPI] Firestore parallel reads timed out after 15s')
+                // Instead of silently returning empty arrays (which causes false PRODUCT_NOT_FOUND),
+                // throw an error that tells the customer to retry
+                throw new Error('FIRESTORE_TIMEOUT')
             }
             throw err
         })
@@ -658,6 +657,14 @@ export async function POST(request) {
             ip,
             reason: `Server error: ${error.message}`,
         }).catch(() => {})
+
+        // Return a retryable error for Firestore timeouts (Issue 6.1)
+        if (error.message === 'FIRESTORE_TIMEOUT') {
+            return NextResponse.json(
+                { error: 'সার্ভার সাময়িকভাবে ব্যস্ত। অনুগ্রহ করে ১০-১৫ সেকেন্ড পর আবার চেষ্টা করুন।', code: 'TIMEOUT_RETRY' },
+                { status: 503 }
+            )
+        }
 
         return NextResponse.json(
             { error: 'সার্ভারে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।', code: 'SERVER_ERROR' },

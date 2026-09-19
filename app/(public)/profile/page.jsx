@@ -251,8 +251,7 @@ function ProfileDashboard() {
 
             return matchesUserId || 
                    matchesEmail || 
-                   matchesPhone ||
-                   currentUser.email === 'customer@ourstorebd.com'
+                   matchesPhone
         })
     }, [allOrders, currentUser])
 

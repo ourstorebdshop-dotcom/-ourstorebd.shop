@@ -39,7 +39,7 @@ const getBrowserFingerprint = () => {
         const ua = navigator.userAgent || ''
         const lang = navigator.language || ''
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
-        const screen = `${window.screen.width}x${window.screen.height}`
+        const screen = `${Math.min(window.screen.width, window.screen.height)}x${Math.max(window.screen.width, window.screen.height)}`
         return computeHMAC(`${ua}|${lang}|${tz}|${screen}`, 'fp_salt_2026')
     } catch {
         return 'unknown'
@@ -213,19 +213,19 @@ const AdminLayout = ({ children }) => {
     }
 
     return (
-        <div className="flex flex-col h-screen">
+        <div className="flex flex-col min-h-[100dvh] h-screen">
             <AdminNavbar onLogout={handleLogout} />
-            <div className="flex flex-1 items-start h-full overflow-y-scroll no-scrollbar pb-16 sm:pb-0">
+            <div className="flex flex-1 overflow-hidden">
                 {/* Desktop Sidebar - hidden on mobile */}
-                <div className="hidden sm:block">
+                <div className="hidden sm:block h-full overflow-y-auto no-scrollbar">
                     <AdminSidebar />
                 </div>
-                <div className="flex-1 h-full p-4 sm:p-5 lg:pl-12 lg:pt-12 overflow-y-scroll">
+                <div className="flex-1 h-full overflow-x-hidden overflow-y-auto p-4 sm:p-5 lg:pl-12 lg:pt-12 pb-20 sm:pb-5">
                     {children}
                 </div>
             </div>
             {/* Mobile Bottom Navigation */}
-            <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-40">
+            <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-40 safe-area-bottom">
                 <AdminSidebar isMobileBottomNav={true} />
             </div>
         </div>

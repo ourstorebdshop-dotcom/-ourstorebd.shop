@@ -4,31 +4,35 @@ import PageTitle from "@/components/PageTitle"
 import OrderItem from "@/components/OrderItem";
 import { useSelector } from "react-redux";
 import Link from "next/link";
+import { useState, useEffect, useMemo } from "react";
 import { User, LayoutDashboard, ShoppingBag } from "lucide-react";
 
 export default function Orders() {
     const allOrders = useSelector(state => state.order?.orders || []);
     const { currentUser, isAuthenticated } = useSelector(state => state.user || {});
 
+    // Load guest tracked purchases client-side only (Issue 5.2 — hydration fix)
+    const [guestTracked, setGuestTracked] = useState([]);
+    useEffect(() => {
+        try {
+            const raw = localStorage.getItem('gocart_tracked_purchases') || '[]'
+            setGuestTracked(JSON.parse(raw))
+        } catch { /* ignore */ }
+    }, []);
+
     // If customer logged in, show user orders; otherwise show guest's current session orders only
-    const orders = (allOrders || []).filter(order => {
+    const orders = useMemo(() => (allOrders || []).filter(order => {
         if (currentUser) {
             return order.userId === currentUser.id || 
                    order.user?.email === currentUser.email || 
-                   order.user?.phone === currentUser.phone ||
-                   currentUser.email === 'customer@ourstorebd.com';
+                   order.user?.phone === currentUser.phone;
         }
         // Guest user: only show orders placed by this guest in their current browser session
-        if (typeof window !== 'undefined') {
-            try {
-                const guestTracked = JSON.parse(localStorage.getItem('gocart_tracked_purchases') || '[]')
-                if (guestTracked.includes(order.id) || guestTracked.includes(`order_${order.id}`)) {
-                    return true
-                }
-            } catch { /* ignore */ }
+        if (guestTracked.includes(order.id) || guestTracked.includes(`order_${order.id}`)) {
+            return true
         }
         return false
-    });
+    }), [allOrders, currentUser, guestTracked]);
 
     return (
         <div className="min-h-[70vh] mx-6">

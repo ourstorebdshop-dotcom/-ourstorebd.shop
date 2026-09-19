@@ -24,11 +24,8 @@ export default function ThankYouModal({ order, onClose }) {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳';
     const [copied, setCopied] = useState(false);
 
-    React.useEffect(() => {
-        if (order?.id) {
-            trackPurchase(order);
-        }
-    }, [order?.id]);
+    // NOTE: trackPurchase is called ONLY in OrderSummary.jsx (Issue 15.1)
+    // Removed duplicate call here that was causing 2x conversion events
 
     if (!order) return null;
 

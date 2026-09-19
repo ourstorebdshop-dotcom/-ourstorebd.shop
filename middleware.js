@@ -42,10 +42,15 @@ function isAllowedOrigin(request) {
     // If no origin/referer (e.g. direct server-to-server or mobile app), allow
     if (!origin && !referer) return true
 
+    // Facebook/Instagram in-app browsers often send "null" as origin string
+    if (origin === 'null') return true
+
     if (origin) {
         try {
             const originUrl = new URL(origin)
             if (originUrl.host === host) return true
+            // Allow Vercel preview/deployment URLs
+            if (host && originUrl.hostname.endsWith('.vercel.app') && host.endsWith('.vercel.app')) return true
             // Allow localhost/127.0.0.1 in development
             if (host?.includes('localhost') || host?.includes('127.0.0.1')) {
                 if (originUrl.hostname === 'localhost' || originUrl.hostname === '127.0.0.1') return true
@@ -59,6 +64,8 @@ function isAllowedOrigin(request) {
         try {
             const refererUrl = new URL(referer)
             if (refererUrl.host === host) return true
+            // Allow Vercel preview/deployment URLs
+            if (host && refererUrl.hostname.endsWith('.vercel.app') && host.endsWith('.vercel.app')) return true
             if (host?.includes('localhost') || host?.includes('127.0.0.1')) {
                 if (refererUrl.hostname === 'localhost' || refererUrl.hostname === '127.0.0.1') return true
             }

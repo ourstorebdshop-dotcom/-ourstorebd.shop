@@ -221,7 +221,7 @@ export default function TrackingManager() {
 
             {/* ── 8. Cookie & Tracking Consent Banner ───────────────────────── */}
             {consent.enabled && isClient && consentStatus === null && (
-                <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 bg-white/95 backdrop-blur-md p-5 rounded-2xl shadow-2xl border border-slate-200/90 animate-in slide-in-from-bottom-5 duration-300">
+                <div className="fixed bottom-20 sm:bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 bg-white/95 backdrop-blur-md p-5 rounded-2xl shadow-2xl border border-slate-200/90 animate-in slide-in-from-bottom-5 duration-300">
                     <div className="flex items-start gap-3">
                         <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100">
                             <ShieldCheck size={20} />

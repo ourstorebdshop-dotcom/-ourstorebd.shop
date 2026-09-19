@@ -190,7 +190,7 @@ const CustomerRatings = () => {
             {/* Smooth Infinite Marquee */}
             <div className='overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_5%,black_95%,transparent)]'>
                 <div
-                    className='flex gap-6 w-max animate-marquee hover:[animation-play-state:paused]'
+                    className='flex gap-6 w-max animate-marquee hover:[animation-play-state:paused] will-change-transform'
                 >
                     {duplicated.map((review, idx) => (
                         <div

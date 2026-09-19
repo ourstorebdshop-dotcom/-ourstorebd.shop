@@ -8,6 +8,7 @@ import { assets } from '@/assets/assets'
 import Image from 'next/image'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import {
     SaveIcon, RotateCcwIcon, UploadIcon, EyeIcon, SmartphoneIcon,
     MonitorIcon, CheckCircle2Icon, AlertCircleIcon, ExternalLinkIcon,
@@ -124,10 +125,18 @@ export default function HeroBannerEditor() {
         }
     }
 
-    // Save changes to Redux & LocalStorage
-    const handleSave = () => {
+    // Save changes to Redux, LocalStorage & Firestore
+    const handleSave = async () => {
         setIsSaving(true)
         try {
+            // Persist to Firestore first so data survives refresh
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('settings', 'hero', draft)
+                if (!ok) {
+                    toast.error('ডাটাবেসে সেভ করতে ব্যর্থ হয়েছে')
+                    return
+                }
+            }
             dispatch(updateHero(draft))
             toast.success('হিরো ব্যানারের সমস্ত পরিবর্তন সফলভাবে সেভ হয়েছে! 🎉')
         } catch (e) {
@@ -138,10 +147,14 @@ export default function HeroBannerEditor() {
     }
 
     // Reset to initial default look
-    const handleConfirmReset = () => {
+    const handleConfirmReset = async () => {
         dispatch(resetHero())
         setDraft(JSON.parse(JSON.stringify(defaultHeroData)))
         setShowResetModal(false)
+        // Persist reset to Firestore
+        if (isFirebaseConfigured()) {
+            await saveDocToFirestore('settings', 'hero', defaultHeroData)
+        }
         toast.success('হিরো ব্যানার মূল ডিফল্ট অবস্থায় ফিরিয়ে আনা হয়েছে!')
     }
 

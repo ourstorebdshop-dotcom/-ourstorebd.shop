@@ -4,6 +4,7 @@ import { DotIcon } from "lucide-react";
 import { useSelector } from "react-redux";
 import Rating from "./Rating";
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import RatingModal from "./RatingModal";
 
 const OrderItem = ({ order }) => {
@@ -107,7 +108,10 @@ const OrderItem = ({ order }) => {
                     <div className="border-b border-slate-300 w-6/7 mx-auto" />
                 </td>
             </tr>
-            {ratingModal && <RatingModal ratingModal={ratingModal} setRatingModal={setRatingModal} />}
+            {ratingModal && typeof document !== 'undefined' && createPortal(
+                <RatingModal ratingModal={ratingModal} setRatingModal={setRatingModal} />,
+                document.body
+            )}
         </>
     )
 }

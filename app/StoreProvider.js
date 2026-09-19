@@ -111,9 +111,23 @@ export default function StoreProvider({ children }) {
         const store = storeRef.current
         const firebaseEnabled = isFirebaseConfigured()
 
+        // Detect if user is on admin path — admin-only data should only load for admin pages
+        const isAdminPath = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+
         // Guard counter: prevents the subscribe handler from writing stale data
         // back while Firestore hydration is in progress.
         let firestoreReceiveDepth = 0
+
+        // Debounce localStorage writes to avoid main-thread blocking (Issue 7.2)
+        let lsPending = false
+        function scheduleLsFlush(fn) {
+            if (lsPending) return
+            lsPending = true
+            requestAnimationFrame(() => {
+                lsPending = false
+                fn()
+            })
+        }
 
         // Declare and initialize all state tracking variables at the very top of useEffect
         // to completely eliminate any Temporal Dead Zone (TDZ) risk across async callbacks/listeners.
@@ -492,30 +506,32 @@ export default function StoreProvider({ children }) {
                 store.dispatch(hydrateWishlist([]))
             }
 
-            // Cash Flow Management
-            try {
-                const savedCashflow = localStorage.getItem(CASHFLOW_STORAGE_KEY)
-                if (savedCashflow) {
-                    const parsed = JSON.parse(savedCashflow)
-                    if (parsed && typeof parsed === 'object') {
-                        store.dispatch(hydrateCashflow(parsed))
+            // Cash Flow Management (admin-only)
+            if (isAdminPath) {
+                try {
+                    const savedCashflow = localStorage.getItem(CASHFLOW_STORAGE_KEY)
+                    if (savedCashflow) {
+                        const parsed = JSON.parse(savedCashflow)
+                        if (parsed && typeof parsed === 'object') {
+                            store.dispatch(hydrateCashflow(parsed))
+                        }
                     }
+                } catch (e) {
+                    console.warn('Failed to load cash flow from localStorage:', e)
                 }
-            } catch (e) {
-                console.warn('Failed to load cash flow from localStorage:', e)
-            }
 
-            // API & Integration Settings
-            try {
-                const savedApiSettings = localStorage.getItem(API_SETTINGS_STORAGE_KEY)
-                if (savedApiSettings) {
-                    const parsed = JSON.parse(savedApiSettings)
-                    if (parsed && typeof parsed === 'object') {
-                        store.dispatch(hydrateApiSettings(parsed))
+                // API & Integration Settings (admin-only)
+                try {
+                    const savedApiSettings = localStorage.getItem(API_SETTINGS_STORAGE_KEY)
+                    if (savedApiSettings) {
+                        const parsed = JSON.parse(savedApiSettings)
+                        if (parsed && typeof parsed === 'object') {
+                            store.dispatch(hydrateApiSettings(parsed))
+                        }
                     }
+                } catch (e) {
+                    console.warn('Failed to load api settings from localStorage:', e)
                 }
-            } catch (e) {
-                console.warn('Failed to load api settings from localStorage:', e)
             }
         }
 
@@ -531,41 +547,53 @@ export default function StoreProvider({ children }) {
         async function hydrateData() {
             if (firebaseEnabled) {
                 try {
+                    // Public collections — always loaded
+                    const publicFetches = [
+                        loadCollectionFromFirestore('products'),
+                        loadCollectionFromFirestore('categories'),
+                        loadCollectionFromFirestore('banners'),
+                        loadCollectionFromFirestore('coupons'),
+                        loadDocFromFirestore('settings', 'hero'),
+                        loadDocFromFirestore('settings', 'shipping'),
+                        loadDocFromFirestore('settings', 'contact'),
+                        loadDocFromFirestore('settings', 'header_footer'),
+                        loadDocFromFirestore('settings', 'favicon'),
+                        loadDocFromFirestore('settings', 'tracking'),
+                    ]
+
+                    // Admin-only collections — only fetched on admin pages
+                    const adminFetches = isAdminPath ? [
+                        loadCollectionFromFirestore('orders'),
+                        loadCollectionFromFirestore('customers'),
+                        loadDocFromFirestore('settings', 'fraud'),
+                        loadDocFromFirestore('settings', 'cashflow'),
+                        loadDocFromFirestore('settings', 'api_settings'),
+                        loadDocFromFirestore('settings', 'integrations'),
+                    ] : []
+
+                    const allResults = await Promise.allSettled([...publicFetches, ...adminFetches])
+
+                    // Map results — public (indices 0-9)
                     const [
                         productsRes,
                         categoriesRes,
                         bannersRes,
                         couponsRes,
-                        ordersRes,
                         heroRes,
                         shippingRes,
                         contactRes,
                         headerFooterRes,
-                        customersRes,
                         faviconRes,
-                        fraudRes,
-                        cashflowRes,
-                        apiSettingsRes,
                         trackingRes,
-                        integrationsRes,
-                    ] = await Promise.allSettled([
-                        loadCollectionFromFirestore('products'),
-                        loadCollectionFromFirestore('categories'),
-                        loadCollectionFromFirestore('banners'),
-                        loadCollectionFromFirestore('coupons'),
-                        loadCollectionFromFirestore('orders'),
-                        loadDocFromFirestore('settings', 'hero'),
-                        loadDocFromFirestore('settings', 'shipping'),
-                        loadDocFromFirestore('settings', 'contact'),
-                        loadDocFromFirestore('settings', 'header_footer'),
-                        loadCollectionFromFirestore('customers'),
-                        loadDocFromFirestore('settings', 'favicon'),
-                        loadDocFromFirestore('settings', 'fraud'),
-                        loadDocFromFirestore('settings', 'cashflow'),
-                        loadDocFromFirestore('settings', 'api_settings'),
-                        loadDocFromFirestore('settings', 'tracking'),
-                        loadDocFromFirestore('settings', 'integrations'),
-                    ])
+                    ] = allResults.slice(0, 10)
+
+                    // Map results — admin-only (indices 10+, only present on admin pages)
+                    const ordersRes = isAdminPath ? allResults[10] : { status: 'skipped' }
+                    const customersRes = isAdminPath ? allResults[11] : { status: 'skipped' }
+                    const fraudRes = isAdminPath ? allResults[12] : { status: 'skipped' }
+                    const cashflowRes = isAdminPath ? allResults[13] : { status: 'skipped' }
+                    const apiSettingsRes = isAdminPath ? allResults[14] : { status: 'skipped' }
+                    const integrationsRes = isAdminPath ? allResults[15] : { status: 'skipped' }
 
                     // --- 1. Products ---
                     if (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value)) {
@@ -761,7 +789,8 @@ export default function StoreProvider({ children }) {
                 })
             )
 
-            // Orders real-time listener (syncs order changes across all devices/tabs immediately)
+            // Orders real-time listener — admin only (Issue 7.1, 16.1)
+            if (isAdminPath) {
             unsubscribers.push(
                 subscribeToCollection('orders', (docs) => {
                     if (docs && Array.isArray(docs)) {
@@ -774,6 +803,7 @@ export default function StoreProvider({ children }) {
                     }
                 })
             )
+            }
 
             // Hero Banner real-time listener
             unsubscribers.push(
@@ -857,7 +887,9 @@ export default function StoreProvider({ children }) {
                 })
             )
 
-            // Fraud settings real-time listener (always active so navigation to /admin gets immediate updates)
+            // ── Admin-only real-time listeners (Issue 7.1, 16.1, 16.2) ──
+            if (isAdminPath) {
+            // Fraud settings real-time listener
             unsubscribers.push(
                 subscribeToDoc('settings', 'fraud', (data) => {
                     if (data) {
@@ -930,6 +962,7 @@ export default function StoreProvider({ children }) {
                     }
                 })
             )
+            } // end isAdminPath
         }
 
         // ===== BroadcastChannel for product sync across tabs =====
@@ -1151,12 +1184,16 @@ export default function StoreProvider({ children }) {
         window.addEventListener('storage', onStorageChange)
 
         // ===== Mobile browser resume: re-fetch fresh data when page becomes visible =====
-        // Mobile browsers aggressively suspend tabs/WebSocket connections when backgrounded.
-        // When the user switches back, Firestore listeners may be stale or disconnected.
-        // This ensures fresh data is always fetched on tab resume — critical for mobile.
+        // Throttled to prevent excessive refetches (Issue 8.2) — minimum 60s between refetches
+        let lastVisibilityRefetch = 0
+        const VISIBILITY_COOLDOWN_MS = 60 * 1000
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible' && firebaseEnabled) {
-                hydrateData()
+                const now = Date.now()
+                if (now - lastVisibilityRefetch > VISIBILITY_COOLDOWN_MS) {
+                    lastVisibilityRefetch = now
+                    hydrateData()
+                }
             }
         }
         document.addEventListener('visibilitychange', handleVisibilityChange)

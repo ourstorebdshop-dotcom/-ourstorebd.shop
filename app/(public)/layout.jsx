@@ -4,9 +4,6 @@ import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import MobileBottomNav from "@/components/MobileBottomNav";
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
-
 const ChatButton = nextDynamic(() => import("@/components/chat/ChatButton"));
 
 export default function PublicLayout({ children }) {

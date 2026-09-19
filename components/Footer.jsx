@@ -155,6 +155,7 @@ const Footer = () => {
     const badgesText = bottomBar.badgesText || '100% Authentic Products • Cash on Delivery • 7-Day Easy Return';
 
     return (
+        <>
         <footer className="bg-white border-t border-slate-100">
             <div className="max-w-7xl mx-auto px-4 sm:px-6">
                 <div className="flex flex-col md:flex-row items-start justify-between gap-10 py-12 border-b border-slate-200 text-slate-500">
@@ -253,6 +254,9 @@ const Footer = () => {
                 )}
             </div>
         </footer>
+        {/* Mobile bottom nav spacer */}
+        <div className="h-20 sm:h-0" aria-hidden="true" />
+        </>
     );
 };
 

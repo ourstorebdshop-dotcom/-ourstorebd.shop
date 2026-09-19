@@ -92,6 +92,19 @@
     overflow: hidden;
 }
 
+/* Safe area padding for iPhones with notch/home indicator */
+.safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Prevent horizontal overflow/leaking on mobile */
+@media (max-width: 639px) {
+    .overflow-x-guard {
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+}
+
 /* Printable Invoice Styles */
 @media print {
     body {

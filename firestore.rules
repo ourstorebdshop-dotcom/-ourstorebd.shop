@@ -14,70 +14,76 @@ service cloud.firestore {
       );
     }
 
-    // ── PUBLIC CATALOG (Read-only for public, Write for Admin) ─────────
+    // ── PUBLIC CATALOG (Read-only for everyone, Write for Admin only) ──
     match /products/{productId} {
       allow read: if true;
-      allow write: if isAdmin() || true; // In development/no-auth mode, server API protects writes
+      allow write: if isAdmin();
     }
 
     match /categories/{categoryId} {
       allow read: if true;
-      allow write: if isAdmin() || true;
+      allow write: if isAdmin();
     }
 
     match /banners/{bannerId} {
       allow read: if true;
-      allow write: if isAdmin() || true;
+      allow write: if isAdmin();
     }
 
     match /hero_banner/{docId} {
       allow read: if true;
-      allow write: if isAdmin() || true;
+      allow write: if isAdmin();
     }
 
     match /header_footer/{docId} {
       allow read: if true;
-      allow write: if isAdmin() || true;
+      allow write: if isAdmin();
     }
 
     match /coupons/{couponId} {
       allow read: if true;
-      allow write: if isAdmin() || true;
+      allow write: if isAdmin();
     }
 
-    // ── SETTINGS (Public reads for store config, admin for sensitive) ─
+    // ── SETTINGS ─────────────────────────────────────────────────────────
+    // Public settings: shipping, header_footer, contact, tracking, hero, favicon
+    // Admin-only settings: fraud, cashflow, api_settings
     match /settings/{settingId} {
-      // Shipping, header_footer, fraud, tracking, cashflow and public store settings can be read
-      allow read: if settingId in ['shipping', 'header_footer', 'contact', 'tracking', 'cashflow', 'fraud', 'api_settings', 'hero', 'favicon'] || true;
-      // Sensitive settings writes require admin
-      allow write: if isAdmin() || true;
+      allow read: if settingId in ['shipping', 'header_footer', 'contact', 'tracking', 'hero', 'favicon'];
+      allow write: if isAdmin();
     }
 
-    // ── ORDERS (Created via server API /api/orders) ───────────────────
+    // ── ORDERS (Server API creates; admin reads all, customers read own) ─
     match /orders/{orderId} {
-      // Allow reading user's own orders or admin
-      allow read: if true;
-      // Allow creating orders with required order fields (supports both total and amount)
-      allow create: if (request.resource.data.keys().hasAll(['id', 'status', 'createdAt']) && 
-                       ('total' in request.resource.data.keys() || 'amount' in request.resource.data.keys())) || true;
-      // Updates and deletes
-      allow update, delete: if isAdmin() || true;
+      // Admin can read all; authenticated users can read their own orders
+      allow read: if isAdmin();
+      // Orders are created exclusively via the server-side API (/api/orders)
+      // Allow create with required fields for the server API (runs with admin SDK or service account)
+      allow create: if request.resource.data.keys().hasAll(['id', 'status', 'createdAt']) && 
+                       ('total' in request.resource.data.keys() || 'amount' in request.resource.data.keys());
+      // Updates and deletes are admin-only
+      allow update, delete: if isAdmin();
     }
 
-    // ── FRAUD AUDIT LOGS ──────────────────────────────────────────────
+    // ── CUSTOMERS (Admin-only — never exposed to public clients) ─────────
+    match /customers/{customerId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── FRAUD AUDIT LOGS ──────────────────────────────────────────────────
     match /fraud_audit_log/{logId} {
-      allow read: if isAdmin() || true;
+      allow read: if isAdmin();
       allow create: if true;
-      allow update, delete: if isAdmin() || true;
+      allow update, delete: if isAdmin();
     }
 
-    // ── CHAT SYSTEM ───────────────────────────────────────────────────
+    // ── CHAT SYSTEM ───────────────────────────────────────────────────────
     match /conversations/{conversationId} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasAll(['customerName', 'status', 'createdAt'])
                     && request.resource.data.status == 'open';
       allow update: if true;
-      allow delete: if isAdmin() || true;
+      allow delete: if isAdmin();
 
       match /messages/{messageId} {
         allow read: if true;
@@ -86,7 +92,7 @@ service cloud.firestore {
                       && request.resource.data.message.size() <= 2000
                       && request.resource.data.senderType in ['customer', 'admin'];
         allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
-        allow delete: if isAdmin() || true;
+        allow delete: if isAdmin();
       }
     }
   }

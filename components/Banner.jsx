@@ -22,11 +22,16 @@ export default function Banner() {
     const dispatch = useDispatch();
     const router = useRouter();
     const { banners, dismissedBanners } = useSelector(state => state.banner);
+    const [mounted, setMounted] = React.useState(false);
+
+    React.useEffect(() => { setMounted(true) }, []);
 
     // Get the highest priority active banner that hasn't been dismissed
+    // Date filtering only runs client-side to avoid SSR hydration mismatch (Issue 14.1)
     const activeBanner = banners
         .filter(b => b.isActive && !dismissedBanners.includes(b.id))
         .filter(b => {
+            if (!mounted) return true; // During SSR, include all active banners
             // Check date range if set
             const now = new Date();
             if (b.startDate && new Date(b.startDate) > now) return false;

@@ -6,6 +6,7 @@ import { updateBanner, toggleBannerActive } from "@/lib/features/banner/bannerSl
 import { useState } from "react"
 import toast from "react-hot-toast"
 import Link from "next/link"
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
 import {
     CircleDollarSignIcon, ShoppingBasketIcon, TagsIcon,
     MegaphoneIcon, PencilIcon, XIcon, CheckIcon,
@@ -66,10 +67,18 @@ export default function AdminDashboard() {
         setIsEditing(false)
     }
 
-    const saveEdit = () => {
+    const saveEdit = async () => {
         if (!editData.message.trim()) {
             toast.error('Banner message is required')
             return
+        }
+        // Persist to Firestore first so data survives refresh
+        if (isFirebaseConfigured()) {
+            const ok = await saveDocToFirestore('banners', editData.id, editData)
+            if (!ok) {
+                toast.error('Failed to save banner to database')
+                return
+            }
         }
         dispatch(updateBanner(editData))
         toast.success('Promo banner updated!')
@@ -77,8 +86,12 @@ export default function AdminDashboard() {
         setEditData(null)
     }
 
-    const handleToggle = () => {
+    const handleToggle = async () => {
         if (promoBanner) {
+            // Persist toggle to Firestore so it survives refresh
+            if (isFirebaseConfigured()) {
+                await saveDocToFirestore('banners', promoBanner.id, { isActive: !promoBanner.isActive })
+            }
             dispatch(toggleBannerActive(promoBanner.id))
             toast.success(`Banner ${promoBanner.isActive ? 'deactivated' : 'activated'}!`)
         }

@@ -1,5 +1,5 @@
 'use client'
-import { Suspense, useEffect } from "react"
+import { Suspense, useEffect, useMemo } from "react"
 import ProductCard from "@/components/ProductCard"
 import { MoveLeftIcon, HomeIcon, ChevronRight } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -16,9 +16,9 @@ function ShopContent() {
 
     const rawProducts = useSelector(state => state.product?.list) || []
     const isHydrated = useSelector(state => state.product?.isHydrated)
-    const products = rawProducts.filter(p => !isDemoProduct(p))
+    const products = useMemo(() => rawProducts.filter(p => !isDemoProduct(p)), [rawProducts])
 
-    const filteredProducts = search
+    const filteredProducts = useMemo(() => search
         ? products.filter(product => {
             const query = search.toLowerCase()
             const nameMatch = (product?.name || '').toLowerCase().includes(query)
@@ -28,7 +28,7 @@ function ShopContent() {
                 : (product?.category || '').toLowerCase().includes(query)
             return nameMatch || descMatch || catMatch
         })
-        : products;
+        : products, [products, search]);
 
     useEffect(() => {
         if (search && search.trim()) {

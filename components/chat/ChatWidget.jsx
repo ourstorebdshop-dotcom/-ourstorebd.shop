@@ -289,6 +289,19 @@ const ChatWidget = () => {
         }
     }
 
+    // Adjust chat widget position when mobile keyboard opens (Issue 4.3)
+    const [keyboardOffset, setKeyboardOffset] = useState(0)
+    useEffect(() => {
+        if (!isOpen || typeof window === 'undefined' || !window.visualViewport) return
+        const vv = window.visualViewport
+        const handleResize = () => {
+            const offset = window.innerHeight - vv.height
+            setKeyboardOffset(offset > 50 ? offset : 0)
+        }
+        vv.addEventListener('resize', handleResize)
+        return () => vv.removeEventListener('resize', handleResize)
+    }, [isOpen])
+
     if (!isOpen) return null
 
     return (
@@ -303,6 +316,7 @@ const ChatWidget = () => {
                 shadow-2xl shadow-black/15
                 border border-slate-200
                 overflow-hidden"
+            style={keyboardOffset > 0 ? { bottom: `${keyboardOffset + 12}px`, top: 'auto', maxHeight: `${window.visualViewport?.height - 24}px` } : undefined}
             role="dialog"
             aria-label="Customer support chat"
         >
