@@ -74,7 +74,9 @@ export async function POST(request) {
                 firebaseEnvKeys: Object.keys(process.env).filter(k => 
                     k.includes('FIREBASE') || k.includes('SERVICE_ACCOUNT') || k.includes('GOOGLE')
                 ),
-                projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+                projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+                vercelCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || 'local',
+                vercelEnv: process.env.VERCEL_ENV || 'unknown'
             })
         }
 
