@@ -16,7 +16,6 @@
 
 import { NextResponse, after } from 'next/server'
 import { adminDb } from '@/lib/firebaseAdmin'
-import { isFirebaseConfigured } from '@/lib/firestore'
 import { validateBDPhone, normalizePhone } from '@/lib/fraud/phoneValidator'
 import { checkRateLimit } from '@/lib/fraud/rateLimiter'
 import { runAllOrderChecks, invalidateOrdersCache } from '@/lib/fraud/duplicateDetector'
@@ -267,8 +266,7 @@ export async function POST(request) {
         // ══════════════════════════════════════════════════════════════════
 
         const productIds = items.map(i => i.productId)
-
-        const firebaseReady = isFirebaseConfigured()
+        const firebaseReady = !!adminDb
 
         const [fraudData, serverProducts, shippingSettings, allCoupons, orderChecks] = await Promise.race([
             Promise.all([
