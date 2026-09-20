@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import { updateFavicon, resetFavicon, defaultFaviconSettings } from '@/lib/features/favicon/faviconSlice'
 import { processImageToFavicon, generateAppleTouchIcon, FAVICON_PRESETS, svgToDataUrl } from '@/lib/faviconHelper'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 import {

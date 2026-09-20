@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useSelector, useDispatch, useStore } from 'react-redux'
 import toast from 'react-hot-toast'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import {
     CircleDollarSign,
     TrendingUp,

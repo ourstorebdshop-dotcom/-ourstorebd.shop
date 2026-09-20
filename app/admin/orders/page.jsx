@@ -23,7 +23,7 @@ import {
 } from "lucide-react"
 import { blockPhone, unblockPhone } from "@/lib/features/fraud/fraudSlice"
 import { trackRefund } from "@/lib/tracking/clientTracker"
-import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from "@/lib/firestore"
+import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from "@/lib/firestoreAdminApi"
 
 export default function AdminOrders() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'

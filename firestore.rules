@@ -2,97 +2,71 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
+    // ═══════════════════════════════════════════════════════════════════
+    // PRODUCTION-SAFE RULES
+    // All privileged writes go through Next.js API routes using
+    // Firebase Admin SDK, which bypasses these rules entirely.
+    // These rules only govern direct client SDK access.
+    // ═══════════════════════════════════════════════════════════════════
 
-    function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.admin == true ||
-        request.auth.token.email in ['idrisrashel@gmail.com']
-      );
-    }
-
-    // ── PUBLIC CATALOG (Read-only for everyone, Write for Admin only) ──
+    // ── PUBLIC CATALOG (Read-only for clients) ───────────────────────
     match /products/{productId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;  // Admin SDK only (via /api/admin/firestore)
     }
 
     match /categories/{categoryId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     match /banners/{bannerId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     match /hero_banner/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     match /header_footer/{docId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
     match /coupons/{couponId} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
-    // ── SETTINGS ─────────────────────────────────────────────────────────
-    // Public settings: shipping, header_footer, contact, tracking, hero, favicon
-    // Admin-only settings: fraud, cashflow, api_settings
+    // ── SETTINGS (Selective public read, no client write) ────────────
     match /settings/{settingId} {
       allow read: if settingId in ['shipping', 'header_footer', 'contact', 'tracking', 'hero', 'favicon'];
-      allow write: if isAdmin();
+      allow write: if false;
     }
 
-    // ── ORDERS (Server API creates; admin reads all, customers read own) ─
+    // ── ORDERS (Admin SDK only) ─────────────────────────────────────
     match /orders/{orderId} {
-      // Admin can read all; authenticated users can read their own orders
-      allow read: if isAdmin();
-      // Orders are created exclusively via the server-side API (/api/orders)
-      // Allow create with required fields for the server API (runs with admin SDK or service account)
-      allow create: if request.resource.data.keys().hasAll(['id', 'status', 'createdAt']) && 
-                       ('total' in request.resource.data.keys() || 'amount' in request.resource.data.keys());
-      // Updates and deletes are admin-only
-      allow update, delete: if isAdmin();
+      allow read, write: if false;
     }
 
-    // ── CUSTOMERS (Admin-only — never exposed to public clients) ─────────
+    // ── CUSTOMERS (Admin SDK only via /api/public/customers) ────────
     match /customers/{customerId} {
-      allow read, write: if isAdmin();
+      allow read, write: if false;
     }
 
-    // ── FRAUD AUDIT LOGS ──────────────────────────────────────────────────
+    // ── FRAUD AUDIT LOGS (Admin SDK only) ───────────────────────────
     match /fraud_audit_log/{logId} {
-      allow read: if isAdmin();
-      allow create: if true;
-      allow update, delete: if isAdmin();
+      allow read, write: if false;
     }
 
-    // ── CHAT SYSTEM ───────────────────────────────────────────────────────
+    // ── CHAT SYSTEM (Admin SDK only) ────────────────────────────────
     match /conversations/{conversationId} {
-      allow read: if true;
-      allow create: if request.resource.data.keys().hasAll(['customerName', 'status', 'createdAt'])
-                    && request.resource.data.status == 'open';
-      allow update: if true;
-      allow delete: if isAdmin();
+      allow read, write: if false;
 
       match /messages/{messageId} {
-        allow read: if true;
-        allow create: if request.resource.data.keys().hasAll(['message', 'senderType', 'createdAt'])
-                      && request.resource.data.message is string
-                      && request.resource.data.message.size() <= 2000
-                      && request.resource.data.senderType in ['customer', 'admin'];
-        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
-        allow delete: if isAdmin();
+        allow read, write: if false;
       }
     }
   }

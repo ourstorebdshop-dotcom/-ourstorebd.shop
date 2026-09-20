@@ -6,7 +6,7 @@ import {
     updateQuickContact, toggleQuickContact 
 } from '@/lib/features/shipping/shippingSlice'
 import { updateStoreInfo } from '@/lib/features/contact/contactSlice'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import toast from 'react-hot-toast'
 import {
     TruckIcon, CreditCardIcon, SaveIcon, ToggleLeftIcon, ToggleRightIcon,

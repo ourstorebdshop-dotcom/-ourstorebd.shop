@@ -20,7 +20,15 @@ import toast from 'react-hot-toast'
 import { login, register } from '@/lib/features/user/userSlice'
 import { validateBDPhone, normalizePhone, phonesMatch } from '@/lib/fraud/phoneValidator'
 import { trackLogin, trackSignUp } from '@/lib/tracking/clientTracker'
-import { saveDocToFirestore } from '@/lib/firestore'
+
+// Save customer data via secure server API (instead of direct Firestore writes)
+const saveCustomerToServer = (id, data) => {
+    fetch('/api/public/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...data }),
+    }).catch(e => console.warn('Customer save err:', e))
+}
 
 const GoogleIcon = () => (
     <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
@@ -103,7 +111,7 @@ function LoginForm() {
                 } catch (e) { /* ignore */ }
             }
             const { password: _lp, ...safeMatched } = matchedUser
-            saveDocToFirestore('customers', matchedUser.id, safeMatched).catch(e => console.warn('Firestore customer save:', e))
+            saveCustomerToServer(matchedUser.id, safeMatched)
             trackLogin({ email: matchedUser.email, phone: matchedUser.phone, method: 'credentials' })
             toast.success(`স্বাগতম, ${matchedUser.name}!`)
             router.push(redirectUrl)
@@ -216,7 +224,7 @@ function LoginForm() {
 
         // Direct async upsert to Firestore (password stripped)
         const { password: _regPass, ...safeNewUser } = newUser
-        saveDocToFirestore('customers', newUser.id, safeNewUser).catch(e => console.warn('Firestore customer save err:', e))
+        saveCustomerToServer(newUser.id, safeNewUser)
 
         trackSignUp({ email: newUser.email, phone: newUser.phone, name: newUser.name, method: 'credentials' })
         toast.success(`একাউন্ট সফলভাবে তৈরি হয়েছে! স্বাগতম ${newUser.name}`)
@@ -238,7 +246,7 @@ function LoginForm() {
                     localStorage.setItem('gocart_current_user', JSON.stringify(existing))
                 } catch (e) { /* ignore */ }
             }
-            saveDocToFirestore('customers', existing.id, existing).catch(e => console.warn('Firestore customer save err:', e))
+            saveCustomerToServer(existing.id, existing)
             trackLogin({ email: existing.email, name: existing.name, method: 'google' })
             toast.success(`Google দিয়ে সফলভাবে সাইন ইন হয়েছে! স্বাগতম ${existing.name}`, { icon: '👋' })
         } else {
@@ -264,7 +272,7 @@ function LoginForm() {
                     localStorage.setItem('gocart_users', JSON.stringify(withoutDupe))
                 } catch (e) { /* ignore */ }
             }
-            saveDocToFirestore('customers', newGoogleUser.id, newGoogleUser).catch(e => console.warn('Firestore customer save err:', e))
+            saveCustomerToServer(newGoogleUser.id, newGoogleUser)
             trackSignUp({ email: newGoogleUser.email, name: newGoogleUser.name, method: 'google' })
             toast.success(`Google দিয়ে একাউন্ট তৈরি ও সাইন ইন সফল হয়েছে! স্বাগতম ${newGoogleUser.name}`, { icon: '🎉' })
         }

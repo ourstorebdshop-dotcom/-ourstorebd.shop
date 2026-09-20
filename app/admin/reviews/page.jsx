@@ -32,7 +32,7 @@ import {
     deleteProductReview,
     toggleReviewVisibility
 } from "@/lib/features/product/productSlice"
-import { saveDocToFirestore, isFirebaseConfigured } from "@/lib/firestore"
+import { saveDocToFirestore, isFirebaseConfigured } from "@/lib/firestoreAdminApi"
 
 const AVATAR_COLORS = [
     "#10B981", "#8B5CF6", "#F59E0B", "#EF4444", "#3B82F6", 

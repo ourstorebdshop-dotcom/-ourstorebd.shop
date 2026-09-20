@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { addCoupon, updateCoupon, deleteCoupon, toggleCouponActive, resetCoupons } from "@/lib/features/coupon/couponSlice"
-import { saveDocToFirestore, deleteDocFromFirestore, syncCollectionToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, deleteDocFromFirestore, syncCollectionToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import { couponDummyData } from '@/assets/assets'
 import { format } from "date-fns"
 import toast from "react-hot-toast"

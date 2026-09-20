@@ -8,7 +8,7 @@ import {
     updatePaymentGateway,
     resetApiSettings 
 } from '@/lib/features/apiSettings/apiSettingsSlice'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import { 
     KeyRound, 
     Check, 

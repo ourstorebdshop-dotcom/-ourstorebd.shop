@@ -8,7 +8,7 @@ import { useDispatch, useSelector } from "react-redux"
 import { addProduct } from "@/lib/features/product/productSlice"
 import { useRouter } from "next/navigation"
 import { compressImage } from "@/lib/imageCompressor"
-import { saveDocToFirestore, isFirebaseConfigured } from "@/lib/firestore"
+import { saveDocToFirestore, isFirebaseConfigured } from "@/lib/firestoreAdminApi"
 
 export default function AdminAddProduct() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'

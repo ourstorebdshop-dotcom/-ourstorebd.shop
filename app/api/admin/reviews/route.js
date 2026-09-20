@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { verifyAdminSessionToken, COOKIE_NAME } from '@/lib/security/auth'
-import { saveDocToFirestore, loadDocFromFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { serverSaveDoc as saveDocToFirestore, serverLoadDoc as loadDocFromFirestore } from '@/lib/firestoreServer'
+
+function isFirebaseConfigured() { return true }
 
 /**
  * Server-side Admin Reviews API Guard

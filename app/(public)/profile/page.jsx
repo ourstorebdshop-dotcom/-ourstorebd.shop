@@ -59,7 +59,16 @@ import {
     saveAddressFromOrder,
     hydrateUser
 } from '@/lib/features/user/userSlice'
-import { isFirebaseConfigured, saveDocToFirestore } from '@/lib/firestore'
+import { isFirebaseConfigured } from '@/lib/firestore'
+
+// Save customer data via secure server API
+const saveCustomerToServer = (id, data) => {
+    fetch('/api/public/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...data }),
+    }).catch(e => console.warn('Customer save err:', e))
+}
 import { cancelOrder } from '@/lib/features/order/orderSlice'
 import { addToCart } from '@/lib/features/cart/cartSlice'
 import { removeFromWishlist, clearWishlist, toggleWishlist } from '@/lib/features/wishlist/wishlistSlice'
@@ -365,7 +374,7 @@ function ProfileDashboard() {
 
         if (isFirebaseConfigured() && currentUser?.id) {
             const { password, ...safeUser } = { ...currentUser, ...updated }
-            saveDocToFirestore('customers', currentUser.id, safeUser).catch(e => console.warn('Firestore customer update err:', e))
+            saveCustomerToServer(currentUser.id, safeUser)
         }
 
         toast.success('প্রোফাইল তথ্য সফলভাবে আপডেট করা হয়েছে!')

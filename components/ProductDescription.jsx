@@ -16,7 +16,7 @@ import {
 } from "lucide-react"
 import toast from "react-hot-toast"
 import { addProductReview } from "@/lib/features/product/productSlice"
-import { saveDocToFirestore } from "@/lib/firestore"
+
 
 // Curated avatar palette for reviewers without a custom image
 const AVATAR_COLORS = ["#10B981", "#8B5CF6", "#F59E0B", "#EF4444", "#3B82F6", "#EC4899", "#06B6D4"]
@@ -117,9 +117,11 @@ const ProductDescription = ({ product }) => {
             dispatch(addProductReview({ productId: product.id, review: newReview }))
 
             // 2. Persist to Firestore
-            const otherRatings = allRatings.filter(r => r.user?.id !== currentUser.id && r.id !== newReview.id)
-            const updatedRatings = [newReview, ...otherRatings]
-            await saveDocToFirestore('products', product.id, { rating: updatedRatings })
+            await fetch('/api/public/ratings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ productId: product.id, review: newReview }),
+            })
 
             // 3. Update localStorage cache
             try {

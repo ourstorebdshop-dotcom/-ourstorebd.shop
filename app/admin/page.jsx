@@ -6,7 +6,7 @@ import { updateBanner, toggleBannerActive } from "@/lib/features/banner/bannerSl
 import { useState } from "react"
 import toast from "react-hot-toast"
 import Link from "next/link"
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import {
     CircleDollarSignIcon, ShoppingBasketIcon, TagsIcon,
     MegaphoneIcon, PencilIcon, XIcon, CheckIcon,

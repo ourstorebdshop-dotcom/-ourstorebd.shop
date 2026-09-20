@@ -51,7 +51,7 @@ import {
     logTrackingEvent,
 } from '@/lib/features/tracking/trackingSlice'
 import { trackEvent, trackPurchase, trackAddToCart, trackPageView } from '@/lib/tracking/clientTracker'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 
 export default function AdminTrackingPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'

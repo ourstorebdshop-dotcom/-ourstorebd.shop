@@ -28,7 +28,7 @@ import {
     resetHeaderFooter,
 } from '@/lib/features/headerFooter/headerFooterSlice'
 import toast from 'react-hot-toast'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import Link from 'next/link'
 import {
     LayoutTemplate,

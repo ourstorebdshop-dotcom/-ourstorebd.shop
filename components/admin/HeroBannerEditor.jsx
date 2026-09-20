@@ -8,7 +8,7 @@ import { assets } from '@/assets/assets'
 import Image from 'next/image'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import {
     SaveIcon, RotateCcwIcon, UploadIcon, EyeIcon, SmartphoneIcon,
     MonitorIcon, CheckCircle2Icon, AlertCircleIcon, ExternalLinkIcon,

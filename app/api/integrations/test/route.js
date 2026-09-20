@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { testTelegramConnection } from '@/lib/integrations/telegram'
 import { testGoogleSheetsConnection } from '@/lib/integrations/googleSheets'
 import { getStoredIntegrationsSettings } from '@/lib/integrations/syncEngine'
-import { saveDocToFirestore } from '@/lib/firestore'
+import { serverSaveDoc as saveDocToFirestore } from '@/lib/firestoreServer'
 import { verifyAdminAccess } from '@/lib/integrations/adminAuthGuard'
 
 /**

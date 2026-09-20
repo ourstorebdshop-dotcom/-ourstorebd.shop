@@ -5,7 +5,7 @@ import { useSelector, useDispatch } from 'react-redux'
 import {
     addBanner, updateBanner, deleteBanner, toggleBannerActive, resetBanners, defaultBanners
 } from '@/lib/features/banner/bannerSlice'
-import { saveDocToFirestore, deleteDocFromFirestore, syncCollectionToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, deleteDocFromFirestore, syncCollectionToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import toast from 'react-hot-toast'
 import {
     PlusIcon, PencilIcon, Trash2Icon, XIcon, MegaphoneIcon,

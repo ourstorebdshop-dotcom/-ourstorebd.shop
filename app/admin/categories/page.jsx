@@ -9,7 +9,7 @@ import {
     reorderCategory,
 } from '@/lib/features/category/categorySlice'
 import { updateProduct } from '@/lib/features/product/productSlice'
-import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import {
     Plus,
     PencilIcon,

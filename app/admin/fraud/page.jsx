@@ -43,7 +43,7 @@ import { FRAUD_DEFAULTS } from '@/lib/fraud/config'
 import { normalizePhone, validateBDPhone, phonesMatch } from '@/lib/fraud/phoneValidator'
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import { isFirebaseConfigured, saveDocToFirestore } from '@/lib/firestore'
+import { isFirebaseConfigured, saveDocToFirestore } from '@/lib/firestoreAdminApi'
 import { getRecentAuditLogs, logFraudEvent, deleteAuditLog, clearAllAuditLogs } from '@/lib/fraud/auditLog'
 
 export default function AdminFraudPage() {

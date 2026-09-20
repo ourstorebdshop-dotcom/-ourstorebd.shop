@@ -4,7 +4,7 @@ import { toast } from "react-hot-toast"
 import Image from "next/image"
 import { useDispatch, useSelector } from "react-redux"
 import { updateProduct, deleteProduct as deleteProductAction, toggleProductStock } from "@/lib/features/product/productSlice"
-import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from "@/lib/firestore"
+import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from "@/lib/firestoreAdminApi"
 import { isDemoProduct } from "@/app/StoreProvider"
 import { 
     SearchIcon, 

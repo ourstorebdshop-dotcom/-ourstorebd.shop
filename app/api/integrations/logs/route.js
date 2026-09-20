@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getStoredIntegrationsSettings } from '@/lib/integrations/syncEngine'
-import { saveDocToFirestore } from '@/lib/firestore'
+import { serverSaveDoc as saveDocToFirestore } from '@/lib/firestoreServer'
 import { verifyAdminAccess } from '@/lib/integrations/adminAuthGuard'
 
 /**

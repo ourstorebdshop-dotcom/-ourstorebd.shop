@@ -11,7 +11,7 @@ import {
     updateStoreInfo,
     resetMessages
 } from '@/lib/features/contact/contactSlice'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 import {

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { getStoredIntegrationsSettings } from '@/lib/integrations/syncEngine'
 import { maskBotToken } from '@/lib/integrations/telegram'
-import { saveDocToFirestore } from '@/lib/firestore'
+import { serverSaveDoc as saveDocToFirestore } from '@/lib/firestoreServer'
 import { defaultIntegrationsSettings } from '@/lib/features/integrations/integrationsSlice'
 import { verifyAdminAccess } from '@/lib/integrations/adminAuthGuard'
 

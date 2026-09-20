@@ -6,7 +6,7 @@ import { Star, XIcon } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { addProductReview } from '@/lib/features/product/productSlice'
 import { addRating } from '@/lib/features/rating/ratingSlice'
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestore'
+import { isFirebaseConfigured } from '@/lib/firestore'
 
 const RatingModal = ({ ratingModal, setRatingModal }) => {
     const dispatch = useDispatch()
@@ -54,7 +54,11 @@ const RatingModal = ({ ratingModal, setRatingModal }) => {
             const updatedRatings = [newReview, ...currentRatings]
 
             if (isFirebaseConfigured() && prodId) {
-                await saveDocToFirestore('products', prodId, { rating: updatedRatings })
+                await fetch('/api/public/ratings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ productId: prodId, review: newReview }),
+                })
             }
 
             try {
