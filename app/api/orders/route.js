@@ -701,7 +701,7 @@ export async function POST(request) {
         }
 
         return NextResponse.json(
-            { error: 'সার্ভারে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।', code: 'SERVER_ERROR' },
+            { error: 'সার্ভারে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।', code: 'SERVER_ERROR', detail: error.message },
             { status: 500 }
         )
     }
