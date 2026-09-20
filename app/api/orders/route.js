@@ -15,8 +15,7 @@
  */
 
 import { NextResponse, after } from 'next/server'
-import { collection, doc, getDoc, getDocs, setDoc } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { adminDb } from '@/lib/firebaseAdmin'
 import { isFirebaseConfigured } from '@/lib/firestore'
 import { validateBDPhone, normalizePhone } from '@/lib/fraud/phoneValidator'
 import { checkRateLimit } from '@/lib/fraud/rateLimiter'
@@ -45,10 +44,10 @@ async function getCachedShipping(firebaseReady) {
     if (cachedShipping && (now - cachedShippingTime) < CACHE_TTL_MS) {
         return cachedShipping
     }
-    if (!firebaseReady) return null
+    if (!firebaseReady || !adminDb) return null
     try {
-        const snap = await getDoc(doc(db, 'settings', 'shipping'))
-        if (snap.exists()) {
+        const snap = await adminDb.collection('settings').doc('shipping').get()
+        if (snap.exists) {
             cachedShipping = snap.data()
             cachedShippingTime = Date.now()
             return cachedShipping
@@ -64,10 +63,10 @@ async function getCachedFraudData(firebaseReady) {
     if (cachedFraudData && (now - cachedFraudTime) < CACHE_TTL_MS) {
         return cachedFraudData
     }
-    if (!firebaseReady) return null
+    if (!firebaseReady || !adminDb) return null
     try {
-        const snap = await getDoc(doc(db, 'settings', 'fraud'))
-        if (snap.exists()) {
+        const snap = await adminDb.collection('settings').doc('fraud').get()
+        if (snap.exists) {
             cachedFraudData = snap.data()
             cachedFraudTime = Date.now()
             return cachedFraudData
@@ -83,9 +82,9 @@ async function getCachedCoupons(firebaseReady) {
     if (cachedCoupons && (now - cachedCouponsTime) < CACHE_TTL_MS) {
         return cachedCoupons
     }
-    if (!firebaseReady) return []
+    if (!firebaseReady || !adminDb) return []
     try {
-        const snap = await getDocs(collection(db, 'coupons'))
+        const snap = await adminDb.collection('coupons').get()
         cachedCoupons = snap.docs.map(d => ({ id: d.id, ...d.data() }))
         cachedCouponsTime = Date.now()
         return cachedCoupons
@@ -107,16 +106,16 @@ async function getOrderProducts(productIds, firebaseReady) {
                 return cached.data
             }
 
-            if (firebaseReady) {
+            if (firebaseReady && adminDb) {
                 try {
-                    const snap = await getDoc(doc(db, 'products', strId))
-                    if (snap.exists()) {
+                    const snap = await adminDb.collection('products').doc(strId).get()
+                    if (snap.exists) {
                         const prod = { id: snap.id, ...snap.data() }
                         productCache.set(strId, { data: prod, time: Date.now() })
                         return prod
                     }
                 } catch (e) {
-                    console.warn(`[OrderAPI] Failed to fetch product ${strId}:`, e)
+                    console.warn(`[OrderAPI] Failed to fetch product ${strId} via Admin SDK:`, e)
                 }
             }
 
@@ -530,13 +529,48 @@ export async function POST(request) {
         }
 
         // Save to Firestore (MUST succeed before reporting success)
-        if (isFirebaseConfigured()) {
+        if (adminDb) {
             try {
-                await setDoc(doc(db, 'orders', orderId), newOrder)
+                await adminDb.collection('orders').doc(String(orderId)).set(newOrder)
                 // Update in-memory orders cache with new order
                 invalidateOrdersCache(newOrder)
+
+                // Update / Upsert customer document in background
+                const customerId = (userId && userId !== 'user_guest') ? String(userId) : `cust_${normalizedPhone}`
+                const customerRef = adminDb.collection('customers').doc(customerId)
+                customerRef.get().then(custSnap => {
+                    const existing = custSnap.exists ? custSnap.data() : {}
+                    const prevCount = typeof existing.orderCount === 'number' ? existing.orderCount : 0
+                    const prevSpent = typeof existing.totalSpent === 'number' ? existing.totalSpent : 0
+                    const addresses = Array.isArray(existing.addresses) ? [...existing.addresses] : []
+                    
+                    const newAddress = {
+                        id: `addr_${Date.now()}`,
+                        name: (deliveryInfo.name || '').trim(),
+                        phone: (deliveryInfo.phone || '').trim(),
+                        street: (deliveryInfo.address || '').trim(),
+                        city: deliveryInfo.location === 'outsideDhaka' ? 'Outside Dhaka' : 'Dhaka',
+                        country: 'Bangladesh',
+                        isDefault: addresses.length === 0,
+                    }
+                    if (!addresses.some(a => (a.street || '').toLowerCase() === newAddress.street.toLowerCase())) {
+                        addresses.push(newAddress)
+                    }
+
+                    return customerRef.set({
+                        id: customerId,
+                        name: (deliveryInfo.name || existing.name || 'Customer').trim(),
+                        phone: (deliveryInfo.phone || existing.phone || normalizedPhone).trim(),
+                        email: (body.userEmail || existing.email || `${normalizedPhone}@customer.ourstorebd.com`).trim(),
+                        orderCount: prevCount + 1,
+                        totalSpent: prevSpent + finalTotal,
+                        lastOrderAt: new Date().toISOString(),
+                        addresses,
+                        updatedAt: new Date().toISOString(),
+                    }, { merge: true })
+                }).catch(err => console.warn('[OrderAPI] Customer record update non-blocking notice:', err))
             } catch (error) {
-                console.error('[OrderAPI] Failed to save order to Firestore:', error)
+                console.error('[OrderAPI] Failed to save order to Firestore via Admin SDK:', error)
                 return NextResponse.json(
                     { error: 'অর্ডারটি ডাটাবেজে সংরক্ষণ করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।', code: 'DATABASE_WRITE_FAILED' },
                     { status: 500 }
@@ -567,10 +601,10 @@ export async function POST(request) {
         )
 
         // Fire Server-Side Meta CAPI Purchase event (non-blocking)
-        if (isFirebaseConfigured()) {
+        if (adminDb) {
             bgTasks.push(
-                getDoc(doc(db, 'settings', 'tracking')).then(async (snap) => {
-                    if (!snap.exists()) return
+                adminDb.collection('settings').doc('tracking').get().then(async (snap) => {
+                    if (!snap.exists) return
                     const tracking = snap.data()
                     if (!tracking?.meta?.capiEnabled || !tracking?.meta?.accessToken || !tracking?.meta?.pixelId) return
 

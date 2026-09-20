@@ -41,10 +41,13 @@ import {
 import { updateOrderStatus } from '@/lib/features/order/orderSlice'
 import { FRAUD_DEFAULTS } from '@/lib/fraud/config'
 import { normalizePhone, validateBDPhone, phonesMatch } from '@/lib/fraud/phoneValidator'
-import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
-import { isFirebaseConfigured, saveDocToFirestore } from '@/lib/firestoreAdminApi'
-import { getRecentAuditLogs, logFraudEvent, deleteAuditLog, clearAllAuditLogs } from '@/lib/fraud/auditLog'
+import {
+    isFirebaseConfigured,
+    saveDocToFirestore,
+    deleteDocFromFirestore,
+    loadCollectionFromFirestore,
+    clearCollectionInFirestore
+} from '@/lib/firestoreAdminApi'
 
 export default function AdminFraudPage() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
@@ -126,18 +129,11 @@ export default function AdminFraudPage() {
         if (!isFirebaseConfigured()) return
         setLoadingLogs(true)
         try {
-            let logs = []
-            try {
-                const q = query(collection(db, 'fraud_audit_log'), orderBy('timestamp', 'desc'), limit(50))
-                const snapshot = await getDocs(q)
-                snapshot.forEach(doc => {
-                    logs.push({ id: doc.id, ...doc.data() })
-                })
-            } catch (queryErr) {
-                console.warn('Ordered query failed, falling back to getRecentAuditLogs:', queryErr)
-                logs = await getRecentAuditLogs(50)
-            }
-            setAuditLogs(logs)
+            const rawLogs = await loadCollectionFromFirestore('fraud_audit_log')
+            const sorted = Array.isArray(rawLogs)
+                ? [...rawLogs].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || '')).slice(0, 50)
+                : []
+            setAuditLogs(sorted)
         } catch (error) {
             console.error('Failed to fetch fraud logs:', error)
             toast.error('অডিট লগ লোড করতে সমস্যা হয়েছে')
@@ -151,7 +147,7 @@ export default function AdminFraudPage() {
         setDeletingLogId(logToDelete.id)
         try {
             if (isFirebaseConfigured()) {
-                const ok = await deleteAuditLog(logToDelete.id)
+                const ok = await deleteDocFromFirestore('fraud_audit_log', logToDelete.id)
                 if (!ok) {
                     toast.error('ডাটাবেজ থেকে লগ মুছতে সমস্যা হয়েছে')
                     return
@@ -174,7 +170,7 @@ export default function AdminFraudPage() {
         setIsClearingLogs(true)
         try {
             if (isFirebaseConfigured()) {
-                const ok = await clearAllAuditLogs()
+                const ok = await clearCollectionInFirestore('fraud_audit_log')
                 if (!ok) {
                     toast.error('ডাটাবেজ থেকে সব লগ মুছতে সমস্যা হয়েছে')
                     return

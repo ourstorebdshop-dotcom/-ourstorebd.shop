@@ -28,6 +28,10 @@ import {
     subscribeToDoc,
     subscribeToCollection,
 } from '@/lib/firestore'
+import {
+    loadCollectionFromFirestore as loadAdminCollection,
+    loadDocFromFirestore as loadAdminDoc,
+} from '@/lib/firestoreAdminApi'
 import { setAdminUnreadCount } from '@/lib/features/chat/chatSlice'
 import { subscribeToAdminUnreadCount } from '@/lib/chatFirestore'
 
@@ -561,14 +565,14 @@ export default function StoreProvider({ children }) {
                         loadDocFromFirestore('settings', 'tracking'),
                     ]
 
-                    // Admin-only collections — only fetched on admin pages
+                    // Admin-only collections — only fetched on admin pages (via secure Admin API)
                     const adminFetches = isAdminPath ? [
-                        loadCollectionFromFirestore('orders'),
-                        loadCollectionFromFirestore('customers'),
-                        loadDocFromFirestore('settings', 'fraud'),
-                        loadDocFromFirestore('settings', 'cashflow'),
-                        loadDocFromFirestore('settings', 'api_settings'),
-                        loadDocFromFirestore('settings', 'integrations'),
+                        loadAdminCollection('orders'),
+                        loadAdminCollection('customers'),
+                        loadAdminDoc('settings', 'fraud'),
+                        loadAdminDoc('settings', 'cashflow'),
+                        loadAdminDoc('settings', 'api_settings'),
+                        loadAdminDoc('settings', 'integrations'),
                     ] : []
 
                     const allResults = await Promise.allSettled([...publicFetches, ...adminFetches])
@@ -887,82 +891,9 @@ export default function StoreProvider({ children }) {
                 })
             )
 
-            // ── Admin-only real-time listeners (Issue 7.1, 16.1, 16.2) ──
-            if (isAdminPath) {
-            // Fraud settings real-time listener
-            unsubscribers.push(
-                subscribeToDoc('settings', 'fraud', (data) => {
-                    if (data) {
-                    firestoreReceiveDepth++
-                    try {
-                        store.dispatch(hydrateFraud(data))
-                        try { localStorage.setItem(FRAUD_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                    } finally { firestoreReceiveDepth-- }
-                    }
-                })
-            )
-
-            // Cash Flow real-time listener
-            unsubscribers.push(
-                subscribeToDoc('settings', 'cashflow', (data) => {
-                    if (data) {
-                    firestoreReceiveDepth++
-                    try {
-                        store.dispatch(hydrateCashflow(data))
-                        try { localStorage.setItem(CASHFLOW_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                    } finally { firestoreReceiveDepth-- }
-                    }
-                })
-            )
-
-            // API Settings real-time listener
-            unsubscribers.push(
-                subscribeToDoc('settings', 'api_settings', (data) => {
-                    if (data) {
-                    firestoreReceiveDepth++
-                    try {
-                        store.dispatch(hydrateApiSettings(data))
-                        try { localStorage.setItem(API_SETTINGS_STORAGE_KEY, JSON.stringify(data)) } catch (e) { /* ignore */ }
-                    } finally { firestoreReceiveDepth-- }
-                    }
-                })
-            )
-
-            // Chat admin unread count real-time listener (lightweight — counts only)
-            unsubscribers.push(
-                subscribeToAdminUnreadCount((count) => {
-                    store.dispatch(setAdminUnreadCount(count))
-                })
-            )
-
-            // Integrations real-time listener
-            unsubscribers.push(
-                subscribeToDoc('settings', 'integrations', (data) => {
-                    if (data) {
-                    firestoreReceiveDepth++
-                    try {
-                        store.dispatch(hydrateIntegrations(data))
-                        prevIntegrations = data
-                    } finally { firestoreReceiveDepth-- }
-                    }
-                })
-            )
-
-            // Customers real-time listener
-            unsubscribers.push(
-                subscribeToCollection('customers', (docs) => {
-                    if (docs && Array.isArray(docs)) {
-                    firestoreReceiveDepth++
-                    try {
-                        const deletedIds = getDeletedUserIds()
-                        const filtered = docs.filter(u => u && u.id && !deletedIds.includes(u.id))
-                        store.dispatch(hydrateSavedUsers(filtered))
-                        try { localStorage.setItem(SAVED_USERS_STORAGE_KEY, JSON.stringify(filtered)) } catch (e) { /* ignore */ }
-                    } finally { firestoreReceiveDepth-- }
-                    }
-                })
-            )
-            } // end isAdminPath
+            // Note: Sensitive collections (fraud, cashflow, api_settings, integrations, customers)
+            // are locked in firestore.rules and loaded securely via /api/admin/firestore on admin mount.
+            // Client-side direct real-time listeners are avoided to prevent permission errors.
         }
 
         // ===== BroadcastChannel for product sync across tabs =====

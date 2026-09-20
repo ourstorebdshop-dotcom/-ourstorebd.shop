@@ -4,8 +4,7 @@ import { useState, useMemo, useEffect } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import toast from "react-hot-toast"
 import { deleteUser, hydrateSavedUsers } from "@/lib/features/user/userSlice"
-import { isFirebaseConfigured, loadCollectionFromFirestore } from "@/lib/firestore"
-import { deleteDocFromFirestore } from "@/lib/firestoreAdminApi"
+import { isFirebaseConfigured, loadCollectionFromFirestore, deleteDocFromFirestore } from "@/lib/firestoreAdminApi"
 import {
     SearchIcon,
     DownloadIcon,

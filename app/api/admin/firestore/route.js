@@ -1,14 +1,21 @@
 import { NextResponse } from 'next/server'
 import { verifyAdminSessionToken } from '@/lib/security/auth'
-import { serverSaveDoc, serverDeleteDoc, serverSyncCollection } from '@/lib/firestoreServer'
+import {
+    serverSaveDoc,
+    serverDeleteDoc,
+    serverSyncCollection,
+    serverLoadDoc,
+    serverLoadCollection,
+    serverClearCollection
+} from '@/lib/firestoreServer'
 
 /**
  * Secure Admin Firestore Proxy
  * 
- * All admin Firestore writes go through this route.
+ * All admin Firestore operations go through this route.
  * 1. Verifies admin session cookie
  * 2. Validates the request
- * 3. Uses Firebase Admin SDK to write (bypasses Firestore rules)
+ * 3. Uses Firebase Admin SDK to execute (bypasses Firestore rules)
  * 
  * Already protected by middleware.js (line 97-105) which checks
  * for the gocart_admin_session cookie on all /api/admin/* routes.
@@ -47,6 +54,27 @@ export async function POST(request) {
         let opResult = { success: false, error: 'No operation performed' }
 
         switch (action) {
+            case 'getCollection': {
+                const docs = await serverLoadCollection(collection)
+                return NextResponse.json({ success: true, data: docs || [] })
+            }
+
+            case 'getDoc': {
+                if (!docId) {
+                    return NextResponse.json(
+                        { success: false, error: 'docId required for getDoc action' },
+                        { status: 400 }
+                    )
+                }
+                const doc = await serverLoadDoc(collection, docId)
+                return NextResponse.json({ success: true, data: doc })
+            }
+
+            case 'clearCollection': {
+                opResult = await serverClearCollection(collection)
+                break
+            }
+
             case 'save':
                 if (!docId) {
                     return NextResponse.json(

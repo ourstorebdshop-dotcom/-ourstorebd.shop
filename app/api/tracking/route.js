@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { collection, doc, getDoc, setDoc } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
+import { adminDb } from '@/lib/firebaseAdmin'
 import { isFirebaseConfigured } from '@/lib/firestore'
 import { verifyAdminSessionToken, COOKIE_NAME } from '@/lib/security/auth'
 import { checkRateLimit } from '@/lib/fraud/rateLimiter'
@@ -72,14 +71,14 @@ function getFbpFbc(request, body) {
  * Load server-side tracking settings from Firestore if not provided in body
  */
 async function getTrackingSettings() {
-    if (isFirebaseConfigured()) {
+    if (adminDb) {
         try {
-            const snap = await getDoc(doc(db, 'settings', 'tracking'))
-            if (snap.exists()) {
+            const snap = await adminDb.collection('settings').doc('tracking').get()
+            if (snap.exists) {
                 return snap.data()
             }
         } catch (e) {
-            console.warn('[TrackingAPI] Failed to load tracking settings from Firestore:', e)
+            console.warn('[TrackingAPI] Failed to load tracking settings via Admin SDK:', e)
         }
     }
     return null
@@ -306,7 +305,7 @@ export async function POST(request) {
         }
 
         // Log event to Firestore tracking_logs for admin dashboard
-        if (isFirebaseConfigured()) {
+        if (adminDb) {
             try {
                 const logDoc = {
                     id: finalEventId,
@@ -322,7 +321,7 @@ export async function POST(request) {
                     error: primaryRes.error || null,
                     metaResult: primaryRes.data || null,
                 }
-                await setDoc(doc(db, 'tracking_logs', finalEventId), logDoc)
+                await adminDb.collection('tracking_logs').doc(finalEventId).set(logDoc)
             } catch (e) {
                 // Non-blocking log write failure
             }

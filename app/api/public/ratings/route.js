@@ -65,10 +65,10 @@ export async function POST(request) {
             updatedRatings = [safeReview, ...existingRatings]
         }
 
-        const success = await serverSaveDoc('products', productId, { rating: updatedRatings })
-        if (!success) {
+        const result = await serverSaveDoc('products', productId, { rating: updatedRatings })
+        if (!result?.success) {
             return NextResponse.json(
-                { success: false, error: 'Failed to save rating' },
+                { success: false, error: result?.error || 'Failed to save rating' },
                 { status: 500 }
             )
         }

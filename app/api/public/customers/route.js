@@ -36,10 +36,10 @@ export async function POST(request) {
             )
         }
 
-        const success = await serverSaveDoc('customers', sanitized.id, sanitized)
-        if (!success) {
+        const result = await serverSaveDoc('customers', sanitized.id, sanitized)
+        if (!result?.success) {
             return NextResponse.json(
-                { success: false, error: 'Failed to save customer data' },
+                { success: false, error: result?.error || 'Failed to save customer data' },
                 { status: 500 }
             )
         }
