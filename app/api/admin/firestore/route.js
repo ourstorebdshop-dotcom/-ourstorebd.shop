@@ -44,7 +44,7 @@ export async function POST(request) {
         const { action, collection, docId, data, items } = body
 
         // 3. Execute the requested operation
-        let success = false
+        let opResult = { success: false, error: 'No operation performed' }
 
         switch (action) {
             case 'save':
@@ -54,7 +54,7 @@ export async function POST(request) {
                         { status: 400 }
                     )
                 }
-                success = await serverSaveDoc(collection, docId, data || {})
+                opResult = await serverSaveDoc(collection, docId, data || {})
                 break
 
             case 'delete':
@@ -64,7 +64,7 @@ export async function POST(request) {
                         { status: 400 }
                     )
                 }
-                success = await serverDeleteDoc(collection, docId)
+                opResult = await serverDeleteDoc(collection, docId)
                 break
 
             case 'sync':
@@ -74,7 +74,7 @@ export async function POST(request) {
                         { status: 400 }
                     )
                 }
-                success = await serverSyncCollection(collection, items)
+                opResult = await serverSyncCollection(collection, items)
                 break
 
             default:
@@ -84,9 +84,9 @@ export async function POST(request) {
                 )
         }
 
-        if (!success) {
+        if (!opResult.success) {
             return NextResponse.json(
-                { success: false, error: 'Firestore operation failed' },
+                { success: false, error: opResult.error || 'Firestore operation failed' },
                 { status: 500 }
             )
         }
