@@ -106,7 +106,7 @@ export async function POST(request) {
                     )
                 }
                 const doc = await serverLoadDoc(collection, docId)
-                return NextResponse.json({ success: true, data: doc })
+                return NextResponse.json({ success: true, data: doc, exists: doc !== null })
             }
 
             case 'clearCollection': {
