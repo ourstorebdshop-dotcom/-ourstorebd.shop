@@ -41,9 +41,46 @@ export async function POST(request) {
 
         // 2. Parse request body
         const body = await request.json().catch(() => null)
-        if (!body || !body.action || !body.collection) {
+        if (!body || !body.action) {
             return NextResponse.json(
-                { success: false, error: 'Invalid request: action and collection required' },
+                { success: false, error: 'Invalid request: action required' },
+                { status: 400 }
+            )
+        }
+
+        // Special diagnostic action for authenticated admin
+        if (body.action === 'diagnose') {
+            const rawKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || ''
+            let parseErr = null
+            let parsedType = null
+            try {
+                let k = rawKey.trim()
+                if ((k.startsWith("'") && k.endsWith("'")) || (k.startsWith('"') && k.endsWith('"'))) {
+                    k = k.slice(1, -1)
+                }
+                const p = JSON.parse(k)
+                parsedType = p.type
+            } catch (err) {
+                parseErr = err.message
+            }
+            return NextResponse.json({
+                success: true,
+                hasServiceAccountKey: !!rawKey,
+                keyLength: rawKey.length,
+                keyPrefix: rawKey.slice(0, 25),
+                keySuffix: rawKey.slice(-25),
+                parseErr,
+                parsedType,
+                firebaseEnvKeys: Object.keys(process.env).filter(k => 
+                    k.includes('FIREBASE') || k.includes('SERVICE_ACCOUNT') || k.includes('GOOGLE')
+                ),
+                projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+            })
+        }
+
+        if (!body.collection) {
+            return NextResponse.json(
+                { success: false, error: 'Invalid request: collection required' },
                 { status: 400 }
             )
         }
