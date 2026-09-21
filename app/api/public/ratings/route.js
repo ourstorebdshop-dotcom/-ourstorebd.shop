@@ -35,19 +35,32 @@ export async function POST(request) {
             )
         }
 
+        // Extract written review text (supports both .review and .comment)
+        const reviewText = typeof review.review === 'string'
+            ? review.review.slice(0, 2000)
+            : (typeof review.comment === 'string' ? review.comment.slice(0, 2000) : '')
+
         // Sanitize review — only allow safe fields
         const safeReview = {
             id: review.id || `review_${Date.now()}`,
             rating: review.rating,
             title: typeof review.title === 'string' ? review.title.slice(0, 200) : '',
-            comment: typeof review.comment === 'string' ? review.comment.slice(0, 2000) : '',
+            review: reviewText,
+            comment: reviewText,
+            orderId: review.orderId || null,
+            productId: productId,
             user: review.user ? {
                 id: review.user.id || '',
-                name: typeof review.user.name === 'string' ? review.user.name.slice(0, 100) : 'Anonymous',
-            } : { id: '', name: 'Anonymous' },
+                name: typeof review.user.name === 'string' ? review.user.name.slice(0, 100) : 'Customer',
+                email: typeof review.user.email === 'string' ? review.user.email.slice(0, 150) : '',
+                image: typeof review.user.image === 'string' ? review.user.image.slice(0, 500) : (typeof review.user.avatar === 'string' ? review.user.avatar.slice(0, 500) : ''),
+                avatar: typeof review.user.avatar === 'string' ? review.user.avatar.slice(0, 500) : (typeof review.user.image === 'string' ? review.user.image.slice(0, 500) : ''),
+                location: typeof review.user.location === 'string' ? review.user.location.slice(0, 100) : 'Bangladesh',
+            } : { id: '', name: 'Customer' },
             createdAt: review.createdAt || new Date().toISOString(),
-            isVisible: true,
-            status: 'approved',
+            updatedAt: new Date().toISOString(),
+            isVisible: review.isVisible !== false && review.status !== 'hidden',
+            status: review.status || 'approved',
         }
 
         // Merge into existing ratings

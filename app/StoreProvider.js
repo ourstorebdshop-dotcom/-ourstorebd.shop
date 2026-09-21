@@ -793,21 +793,8 @@ export default function StoreProvider({ children }) {
                 })
             )
 
-            // Orders real-time listener — admin only (Issue 7.1, 16.1)
-            if (isAdminPath) {
-            unsubscribers.push(
-                subscribeToCollection('orders', (docs) => {
-                    if (docs && Array.isArray(docs)) {
-                    firestoreReceiveDepth++
-                    try {
-                        store.dispatch(hydrateOrders(docs))
-                        prevOrders = docs
-                        try { localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(docs)) } catch (e) { /* ignore */ }
-                    } finally { firestoreReceiveDepth-- }
-                    }
-                })
-            )
-            }
+            // Orders are loaded securely on admin paths via loadAdminCollection('orders') (Admin API / Firebase Admin SDK).
+            // Direct client SDK subscriptions to 'orders' are blocked by firestore.rules for security.
 
             // Hero Banner real-time listener
             unsubscribers.push(

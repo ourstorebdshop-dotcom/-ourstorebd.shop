@@ -126,10 +126,20 @@ export default function AdminShippingSettings() {
         setEditingSection(null)
     }
 
-    const handleToggleQuickContact = (type) => {
+    const handleToggleQuickContact = async (type) => {
+        const isCurrentlyEnabled = quickContact[type]?.enabled !== false
+        const nextQuickContact = {
+            ...quickContact,
+            [type]: {
+                ...quickContact[type],
+                enabled: !isCurrentlyEnabled
+            }
+        }
+        const nextShipping = { ...shipping, quickContact: nextQuickContact }
+        const ok = await persistShipping(nextShipping)
+        if (!ok) return
         dispatch(toggleQuickContact(type))
         const label = type === 'whatsapp' ? 'হোয়াটসঅ্যাপ' : 'কল নাও'
-        const isCurrentlyEnabled = quickContact[type]?.enabled !== false
         toast.success(`${label} বাটন ${!isCurrentlyEnabled ? 'চালু' : 'বন্ধ'} করা হয়েছে`)
     }
 

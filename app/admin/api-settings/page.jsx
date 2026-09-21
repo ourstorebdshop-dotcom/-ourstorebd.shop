@@ -142,7 +142,10 @@ export default function ApiSettingsPage() {
 
         // Persist to Firestore with exact data (merge preserves other settings)
         if (isFirebaseConfigured()) {
-            const saved = await saveDocToFirestore('settings', 'api_settings', { google: googleData })
+            const saved = await saveDocToFirestore('settings', 'api_settings', {
+                google: googleData,
+                googleAuth: googleData
+            })
             if (!saved) { toast.error('Firestore save failed!'); return }
         }
 
@@ -167,7 +170,10 @@ export default function ApiSettingsPage() {
             enabled: smsEnabled
         }
         if (isFirebaseConfigured()) {
-            const saved = await saveDocToFirestore('settings', 'api_settings', { sms: smsData })
+            const saved = await saveDocToFirestore('settings', 'api_settings', {
+                sms: smsData,
+                smsGateway: smsData
+            })
             if (!saved) { toast.error('Firestore save failed!'); return }
         }
         dispatch(updateSmsGateway(smsData))
@@ -182,7 +188,10 @@ export default function ApiSettingsPage() {
             nagadMerchantId: nagadMerchantId.trim(),
         }
         if (isFirebaseConfigured()) {
-            const saved = await saveDocToFirestore('settings', 'api_settings', { payment: paymentData })
+            const saved = await saveDocToFirestore('settings', 'api_settings', {
+                payment: paymentData,
+                paymentGateway: paymentData
+            })
             if (!saved) { toast.error('Firestore save failed!'); return }
         }
         dispatch(updatePaymentGateway(paymentData))

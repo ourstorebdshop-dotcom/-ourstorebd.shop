@@ -567,6 +567,22 @@ export async function POST(request) {
                         updatedAt: new Date().toISOString(),
                     }, { merge: true })
                 }).catch(err => console.warn('[OrderAPI] Customer record update non-blocking notice:', err))
+
+                // Increment coupon usedCount if coupon was applied (Issue 10.1)
+                if (coupon && coupon.code) {
+                    const couponCodeId = String(coupon.code).toUpperCase()
+                    adminDb.collection('coupons').doc(couponCodeId).get().then(cSnap => {
+                        if (cSnap.exists) {
+                            const curUses = typeof cSnap.data().usedCount === 'number' ? cSnap.data().usedCount : 0
+                            const curSavings = typeof cSnap.data().totalSavings === 'number' ? cSnap.data().totalSavings : 0
+                            adminDb.collection('coupons').doc(couponCodeId).update({
+                                usedCount: curUses + 1,
+                                totalSavings: curSavings + discountAmount,
+                                updatedAt: new Date().toISOString()
+                            }).catch(err => console.warn('[OrderAPI] Coupon usedCount update notice:', err))
+                        }
+                    }).catch(err => console.warn('[OrderAPI] Coupon fetch notice:', err))
+                }
             } catch (error) {
                 console.error('[OrderAPI] Failed to save order to Firestore via Admin SDK:', error)
                 return NextResponse.json(
@@ -704,3 +720,79 @@ export async function POST(request) {
         )
     }
 }
+
+/**
+ * GET /api/orders
+ * 
+ * Retrieve customer order history securely.
+ * Supported query params:
+ * - userId: filter by customer ID
+ * - phone: filter by customer phone (normalized)
+ * - orderId: retrieve single order
+ * - orderIds: comma-separated list of order IDs (for guest session tracked orders)
+ */
+export async function GET(request) {
+    try {
+        if (!adminDb) {
+            return NextResponse.json({ success: false, error: 'Database unavailable' }, { status: 503 })
+        }
+
+        const { searchParams } = new URL(request.url)
+        const userId = searchParams.get('userId')
+        const phone = searchParams.get('phone')
+        const orderId = searchParams.get('orderId')
+        const orderIds = searchParams.get('orderIds')
+
+        if (!userId && !phone && !orderId && !orderIds) {
+            return NextResponse.json(
+                { success: false, error: 'Query parameters (userId, phone, orderId, or orderIds) required' },
+                { status: 400 }
+            )
+        }
+
+        const ordersSnap = await adminDb.collection('orders').get()
+        if (ordersSnap.empty) {
+            return NextResponse.json({ success: true, orders: [] })
+        }
+
+        const normPhone = phone ? normalizePhone(phone) : null
+        const targetIds = orderIds ? orderIds.split(',').map(id => id.trim()).filter(Boolean) : []
+
+        const matchingOrders = []
+        ordersSnap.forEach(doc => {
+            const data = { id: doc.id, ...doc.data() }
+            // Strip internal admin fraud signals before returning to customer
+            const { _fraud, ...safeOrder } = data
+
+            if (orderId && String(doc.id) === String(orderId)) {
+                matchingOrders.push(safeOrder)
+                return
+            }
+            if (targetIds.length > 0 && (targetIds.includes(String(doc.id)) || targetIds.includes(`order_${doc.id}`))) {
+                matchingOrders.push(safeOrder)
+                return
+            }
+            if (userId && (data.userId === userId || data.user?.id === userId)) {
+                matchingOrders.push(safeOrder)
+                return
+            }
+            if (normPhone && (
+                data.address?.normalizedPhone === normPhone ||
+                normalizePhone(data.address?.phone || '') === normPhone ||
+                normalizePhone(data.user?.phone || '') === normPhone
+            )) {
+                matchingOrders.push(safeOrder)
+                return
+            }
+        })
+
+        // Sort newest first
+        matchingOrders.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+
+        return NextResponse.json({ success: true, orders: matchingOrders })
+    } catch (error) {
+        console.error('[Orders API GET] Error:', error)
+        return NextResponse.json({ success: false, error: 'Failed to retrieve orders' }, { status: 500 })
+    }
+}
+

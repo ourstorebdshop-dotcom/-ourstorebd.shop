@@ -80,7 +80,7 @@ function LoginForm() {
     const [regConfirmPassword, setRegConfirmPassword] = useState('')
     const [agreeTerms, setAgreeTerms] = useState(true)
 
-    const handleLoginSubmit = (e) => {
+    const handleLoginSubmit = async (e) => {
         e.preventDefault()
         setLoading(true)
 
@@ -115,38 +115,72 @@ function LoginForm() {
             trackLogin({ email: matchedUser.email, phone: matchedUser.phone, method: 'credentials' })
             toast.success(`স্বাগতম, ${matchedUser.name}!`)
             router.push(redirectUrl)
-        } else {
-            if ((identifier === 'customer@ourstorebd.com' || identifier === '01712345678') && password === 'password123') {
-                // Check if demo user has been deleted
-                let deletedIds = []
-                try { deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]') } catch (e) { /* ignore */ }
-                if (deletedIds.includes('user_demo_1')) {
-                    toast.error('এই ডেমো একাউন্টটি মুছে ফেলা হয়েছে')
-                    setLoading(false)
-                    return
-                }
-                const demoUser = savedUsers.find(u => u.id === 'user_demo_1') || {
-                    id: "user_demo_1",
-                    name: "Tanvir Ahmed",
-                    email: "customer@ourstorebd.com",
-                    phone: "01712345678",
-                    password: "password123",
-                    role: "CUSTOMER",
-                    addresses: []
-                }
-                dispatch(login(demoUser))
-                trackLogin({ email: demoUser.email, phone: demoUser.phone, method: 'demo' })
-                toast.success(`স্বাগতম, ${demoUser.name}!`)
-                router.push(redirectUrl)
-            } else {
-                toast.error('ভুল ইমেইল/ফোন অথবা পাসওয়ার্ড!')
+            setLoading(false)
+            return
+        }
+
+        if ((identifier === 'customer@ourstorebd.com' || identifier === '01712345678') && password === 'password123') {
+            // Check if demo user has been deleted
+            let deletedIds = []
+            try { deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]') } catch (e) { /* ignore */ }
+            if (deletedIds.includes('user_demo_1')) {
+                toast.error('এই ডেমো একাউন্টটি মুছে ফেলা হয়েছে')
+                setLoading(false)
+                return
             }
+            const demoUser = savedUsers.find(u => u.id === 'user_demo_1') || {
+                id: "user_demo_1",
+                name: "Tanvir Ahmed",
+                email: "customer@ourstorebd.com",
+                phone: "01712345678",
+                password: "password123",
+                role: "CUSTOMER",
+                addresses: []
+            }
+            dispatch(login(demoUser))
+            trackLogin({ email: demoUser.email, phone: demoUser.phone, method: 'demo' })
+            toast.success(`স্বাগতম, ${demoUser.name}!`)
+            router.push(redirectUrl)
+            setLoading(false)
+            return
+        }
+
+        // Server-side fallback for cross-browser, incognito, or fresh session login
+        try {
+            const serverRes = await fetch('/api/public/customers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'login', identifier, password }),
+            })
+            const serverData = await serverRes.json().catch(() => null)
+            if (serverData && serverData.success && serverData.customer) {
+                const user = { ...serverData.customer, password }
+                dispatch(login(user))
+                if (typeof window !== 'undefined') {
+                    try {
+                        localStorage.setItem('gocart_current_user', JSON.stringify(user))
+                        const existing = JSON.parse(localStorage.getItem('gocart_users') || '[]')
+                        const withoutDupe = existing.filter(u => u && u.id !== user.id)
+                        withoutDupe.push(user)
+                        localStorage.setItem('gocart_users', JSON.stringify(withoutDupe))
+                    } catch (e) { /* ignore */ }
+                }
+                trackLogin({ email: user.email, phone: user.phone, method: 'credentials' })
+                toast.success(`স্বাগতম, ${user.name}!`)
+                router.push(redirectUrl)
+                setLoading(false)
+                return
+            } else {
+                toast.error(serverData?.error || 'ভুল ইমেইল/ফোন অথবা পাসওয়ার্ড!')
+            }
+        } catch (err) {
+            toast.error('সার্ভারে যোগাযোগ করতে সমস্যা হয়েছে')
         }
 
         setLoading(false)
     }
 
-    const handleRegisterSubmit = (e) => {
+    const handleRegisterSubmit = async (e) => {
         e.preventDefault()
         setLoading(true)
 
@@ -199,37 +233,52 @@ function LoginForm() {
             return
         }
 
-        const newUser = {
-            id: `user_${Date.now()}`,
-            name: regName.trim(),
-            email: regEmail.trim() || `${regPhone.trim()}@customer.ourstorebd.com`,
-            phone: normalizedRegPhone,
-            password: regPassword,
-            role: "CUSTOMER",
-            joinedDate: new Date().toISOString(),
-            avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
-            addresses: []
+        const newId = `user_${Date.now()}`
+        try {
+            const res = await fetch('/api/public/customers', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'register',
+                    id: newId,
+                    name: regName.trim(),
+                    email: regEmail.trim() || `${regPhone.trim()}@customer.ourstorebd.com`,
+                    phone: normalizedRegPhone,
+                    password: regPassword,
+                    addresses: [],
+                }),
+            })
+            const data = await res.json().catch(() => null)
+            if (!data?.success) {
+                toast.error(data?.error || 'রেজিস্ট্রেশন ব্যর্থ হয়েছে')
+                setLoading(false)
+                return
+            }
+
+            const newUser = {
+                ...data.customer,
+                password: regPassword,
+            }
+
+            dispatch(register(newUser))
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.setItem('gocart_current_user', JSON.stringify(newUser))
+                    const existing = JSON.parse(localStorage.getItem('gocart_users') || '[]')
+                    const withoutDupe = existing.filter(u => u && u.id !== newUser.id)
+                    withoutDupe.push(newUser)
+                    localStorage.setItem('gocart_users', JSON.stringify(withoutDupe))
+                } catch (e) { /* ignore */ }
+            }
+
+            trackSignUp({ email: newUser.email, phone: newUser.phone, name: newUser.name, method: 'credentials' })
+            toast.success(`একাউন্ট সফলভাবে তৈরি হয়েছে! স্বাগতম ${newUser.name}`)
+            router.push(redirectUrl)
+        } catch (err) {
+            toast.error('সার্ভারে যোগাযোগ করতে সমস্যা হয়েছে')
+        } finally {
+            setLoading(false)
         }
-
-        dispatch(register(newUser))
-        if (typeof window !== 'undefined') {
-            try {
-                localStorage.setItem('gocart_current_user', JSON.stringify(newUser))
-                const existing = JSON.parse(localStorage.getItem('gocart_users') || '[]')
-                const withoutDupe = existing.filter(u => u && u.id !== newUser.id)
-                withoutDupe.push(newUser)
-                localStorage.setItem('gocart_users', JSON.stringify(withoutDupe))
-            } catch (e) { /* ignore */ }
-        }
-
-        // Direct async upsert to Firestore (password stripped)
-        const { password: _regPass, ...safeNewUser } = newUser
-        saveCustomerToServer(newUser.id, safeNewUser)
-
-        trackSignUp({ email: newUser.email, phone: newUser.phone, name: newUser.name, method: 'credentials' })
-        toast.success(`একাউন্ট সফলভাবে তৈরি হয়েছে! স্বাগতম ${newUser.name}`)
-        router.push(redirectUrl)
-        setLoading(false)
     }
 
     // Process genuine Google profile data

@@ -113,6 +113,9 @@ const ProductDescription = ({ product }) => {
                 status: existingReview ? (existingReview.status || 'approved') : 'approved',
             }
 
+            const currentRatings = Array.isArray(product.rating) ? product.rating : []
+            const updatedRatings = [newReview, ...currentRatings.filter(r => r.id !== newReview.id && (!r.user?.id || r.user.id !== newReview.user?.id))]
+
             // 1. Update Redux store immediately
             dispatch(addProductReview({ productId: product.id, review: newReview }))
 

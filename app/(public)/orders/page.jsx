@@ -2,12 +2,14 @@
 
 import PageTitle from "@/components/PageTitle"
 import OrderItem from "@/components/OrderItem";
-import { useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
+import { hydrateOrders } from "@/lib/features/order/orderSlice";
 import Link from "next/link";
 import { useState, useEffect, useMemo } from "react";
 import { User, LayoutDashboard, ShoppingBag } from "lucide-react";
 
 export default function Orders() {
+    const dispatch = useDispatch();
     const allOrders = useSelector(state => state.order?.orders || []);
     const { currentUser, isAuthenticated } = useSelector(state => state.user || {});
 
@@ -19,6 +21,37 @@ export default function Orders() {
             setGuestTracked(JSON.parse(raw))
         } catch { /* ignore */ }
     }, []);
+
+    // Server-side orders fetch for cross-device, incognito, and fresh session persistence
+    useEffect(() => {
+        let isCancelled = false
+        const fetchOrders = async () => {
+            try {
+                let url = null
+                if (currentUser?.id) {
+                    url = `/api/orders?userId=${encodeURIComponent(currentUser.id)}`
+                } else if (currentUser?.phone) {
+                    url = `/api/orders?phone=${encodeURIComponent(currentUser.phone)}`
+                } else if (guestTracked.length > 0) {
+                    url = `/api/orders?orderIds=${encodeURIComponent(guestTracked.join(','))}`
+                }
+                if (!url) return
+
+                const res = await fetch(url)
+                const data = await res.json().catch(() => null)
+                if (!isCancelled && data && data.success && Array.isArray(data.orders)) {
+                    const mergedMap = new Map()
+                    allOrders.forEach(o => { if (o && o.id) mergedMap.set(o.id, o) })
+                    data.orders.forEach(o => { if (o && o.id) mergedMap.set(o.id, o) })
+                    dispatch(hydrateOrders(Array.from(mergedMap.values())))
+                }
+            } catch (e) {
+                // Non-blocking
+            }
+        }
+        fetchOrders()
+        return () => { isCancelled = true }
+    }, [currentUser?.id, currentUser?.phone, guestTracked.length]);
 
     // If customer logged in, show user orders; otherwise show guest's current session orders only
     const orders = useMemo(() => (allOrders || []).filter(order => {

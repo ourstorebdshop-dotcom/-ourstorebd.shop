@@ -69,7 +69,7 @@ const saveCustomerToServer = (id, data) => {
         body: JSON.stringify({ id, ...data }),
     }).catch(e => console.warn('Customer save err:', e))
 }
-import { cancelOrder } from '@/lib/features/order/orderSlice'
+import { cancelOrder, hydrateOrders } from '@/lib/features/order/orderSlice'
 import { addToCart } from '@/lib/features/cart/cartSlice'
 import { removeFromWishlist, clearWishlist, toggleWishlist } from '@/lib/features/wishlist/wishlistSlice'
 
@@ -123,6 +123,37 @@ function ProfileDashboard() {
             dispatch(hydrateUser(localUser))
         }
     }, [mounted, reduxUser, localUser, dispatch])
+
+    // Server-side orders fetch for cross-device, incognito, and fresh session persistence
+    useEffect(() => {
+        let isCancelled = false
+        const fetchOrders = async () => {
+            try {
+                let url = null
+                if (currentUser?.id) {
+                    url = `/api/orders?userId=${encodeURIComponent(currentUser.id)}`
+                } else if (currentUser?.phone) {
+                    url = `/api/orders?phone=${encodeURIComponent(currentUser.phone)}`
+                }
+                if (!url) return
+
+                const res = await fetch(url)
+                const data = await res.json().catch(() => null)
+                if (!isCancelled && data && data.success && Array.isArray(data.orders)) {
+                    const mergedMap = new Map()
+                    allOrders.forEach(o => { if (o && o.id) mergedMap.set(o.id, o) })
+                    data.orders.forEach(o => { if (o && o.id) mergedMap.set(o.id, o) })
+                    dispatch(hydrateOrders(Array.from(mergedMap.values())))
+                }
+            } catch (e) {
+                // Non-blocking
+            }
+        }
+        if (currentUser?.id || currentUser?.phone) {
+            fetchOrders()
+        }
+        return () => { isCancelled = true }
+    }, [currentUser?.id, currentUser?.phone])
 
     const allOrders = useSelector(state => state.order.orders)
     const coupons = useSelector(state => state.coupon.coupons)

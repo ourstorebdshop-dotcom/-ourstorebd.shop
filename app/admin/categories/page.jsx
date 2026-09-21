@@ -140,12 +140,44 @@ export default function AdminCategoriesPage() {
     }
 
     // Move up / down
-    const moveUp = (id) => {
+    const moveUp = async (id) => {
+        const sorted = [...categories].sort((a, b) => (a?.order || 0) - (b?.order || 0))
+        const index = sorted.findIndex(c => c?.id === id)
+        if (index <= 0) return
+
+        const prevCat = sorted[index - 1]
+        const currCat = sorted[index]
+        const prevOrder = prevCat?.order ?? (index - 1)
+        const currOrder = currCat?.order ?? index
+
         dispatch(reorderCategory({ id, direction: 'up' }))
+
+        if (isFirebaseConfigured() && prevCat?.id && currCat?.id) {
+            await Promise.all([
+                saveDocToFirestore('categories', currCat.id, { order: prevOrder }),
+                saveDocToFirestore('categories', prevCat.id, { order: currOrder })
+            ])
+        }
     }
 
-    const moveDown = (id) => {
+    const moveDown = async (id) => {
+        const sorted = [...categories].sort((a, b) => (a?.order || 0) - (b?.order || 0))
+        const index = sorted.findIndex(c => c?.id === id)
+        if (index < 0 || index >= sorted.length - 1) return
+
+        const nextCat = sorted[index + 1]
+        const currCat = sorted[index]
+        const nextOrder = nextCat?.order ?? (index + 1)
+        const currOrder = currCat?.order ?? index
+
         dispatch(reorderCategory({ id, direction: 'down' }))
+
+        if (isFirebaseConfigured() && nextCat?.id && currCat?.id) {
+            await Promise.all([
+                saveDocToFirestore('categories', currCat.id, { order: nextOrder }),
+                saveDocToFirestore('categories', nextCat.id, { order: currOrder })
+            ])
+        }
     }
 
     // Delete

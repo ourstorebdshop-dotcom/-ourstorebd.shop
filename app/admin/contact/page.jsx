@@ -150,27 +150,28 @@ export default function AdminContactMessages() {
 
     // Handler: Save Reply
     const handleSendReply = async () => {
-        if (!viewingMessage) return
+        const currentMsgId = typeof viewingMessage === 'string' ? viewingMessage : viewingMessage?.id
+        if (!currentMsgId) return
         if (!replyText.trim()) {
             toast.error("Please enter a reply text")
             return
         }
 
         dispatch(replyMessage({
-            id: viewingMessage.id,
+            id: currentMsgId,
             replyText: replyText.trim()
         }))
 
         // Persist contact state to Firestore with exact updated data
         if (isFirebaseConfigured()) {
             const updatedMessages = [...messages].map(m =>
-                m.id === viewingMessage.id
+                m.id === currentMsgId
                     ? { ...m, status: 'REPLIED', reply: replyText.trim(), repliedAt: new Date().toISOString() }
                     : m
             )
             const saved = await saveDocToFirestore('settings', 'contact', {
                 messages: updatedMessages,
-                storeInfo: contact.storeInfo || {}
+                storeInfo: storeInfo || {}
             })
             if (!saved) {
                 toast.error('Firestore save failed!')
@@ -183,18 +184,19 @@ export default function AdminContactMessages() {
 
     // Handler: Save Admin Note
     const handleSaveNote = async () => {
-        if (!viewingMessage) return
+        const currentMsgId = typeof viewingMessage === 'string' ? viewingMessage : viewingMessage?.id
+        if (!currentMsgId) return
         dispatch(updateAdminNote({
-            id: viewingMessage.id,
+            id: currentMsgId,
             note: adminNoteText.trim()
         }))
         if (isFirebaseConfigured()) {
             const updatedMessages = [...messages].map(m =>
-                m.id === viewingMessage.id ? { ...m, adminNote: adminNoteText.trim() } : m
+                m.id === currentMsgId ? { ...m, adminNote: adminNoteText.trim() } : m
             )
             const saved = await saveDocToFirestore('settings', 'contact', {
                 messages: updatedMessages,
-                storeInfo: contact.storeInfo || {}
+                storeInfo: storeInfo || {}
             })
             if (!saved) { toast.error('Firestore save failed!'); return }
         }
@@ -210,7 +212,7 @@ export default function AdminContactMessages() {
             )
             const saved = await saveDocToFirestore('settings', 'contact', {
                 messages: updatedMessages,
-                storeInfo: contact.storeInfo || {}
+                storeInfo: storeInfo || {}
             })
             if (!saved) { toast.error('Firestore save failed!'); return }
         }
@@ -224,13 +226,13 @@ export default function AdminContactMessages() {
         if (isFirebaseConfigured()) {
             const saved = await saveDocToFirestore('settings', 'contact', {
                 messages: remainingMessages,
-                storeInfo: contact.storeInfo || {}
+                storeInfo: storeInfo || {}
             })
             if (!saved) { toast.error('Firestore delete failed!'); return }
         }
         dispatch(deleteMessage(id))
         setSelectedIds(prev => prev.filter(item => item !== id))
-        if (viewingMessage === id) {
+        if (viewingMessage === id || viewingMessage?.id === id) {
             setViewingMessage(null)
         }
         setDeletingMessageId(null)
@@ -245,7 +247,7 @@ export default function AdminContactMessages() {
         if (isFirebaseConfigured()) {
             const saved = await saveDocToFirestore('settings', 'contact', {
                 messages: remainingMessages,
-                storeInfo: contact.storeInfo || {}
+                storeInfo: storeInfo || {}
             })
             if (!saved) { toast.error('Firestore delete failed!'); return }
         }
@@ -255,8 +257,18 @@ export default function AdminContactMessages() {
     }
 
     // Handler: Bulk Mark Resolved
-    const handleBulkMarkResolved = () => {
+    const handleBulkMarkResolved = async () => {
         if (selectedIds.length === 0) return
+        const updatedMessages = messages.map(m =>
+            selectedIds.includes(m.id) ? { ...m, status: 'RESOLVED' } : m
+        )
+        if (isFirebaseConfigured()) {
+            const saved = await saveDocToFirestore('settings', 'contact', {
+                messages: updatedMessages,
+                storeInfo: storeInfo || {}
+            })
+            if (!saved) { toast.error('Firestore save failed!'); return }
+        }
         selectedIds.forEach(id => {
             dispatch(updateMessageStatus({ id, status: 'RESOLVED' }))
         })
