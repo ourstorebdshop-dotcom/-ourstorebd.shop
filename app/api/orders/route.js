@@ -15,7 +15,7 @@
  */
 
 import { NextResponse, after } from 'next/server'
-import { adminDb } from '@/lib/firebaseAdmin'
+import { adminDb, FieldValue } from '@/lib/firebaseAdmin'
 import { validateBDPhone, normalizePhone } from '@/lib/fraud/phoneValidator'
 import { checkRateLimit } from '@/lib/fraud/rateLimiter'
 import { runAllOrderChecks, invalidateOrdersCache } from '@/lib/fraud/duplicateDetector'
@@ -533,13 +533,11 @@ export async function POST(request) {
                 // Update in-memory orders cache with new order
                 invalidateOrdersCache(newOrder)
 
-                // Update / Upsert customer document in background
+                // Update / Upsert customer document in background using atomic increments
                 const customerId = (userId && userId !== 'user_guest') ? String(userId) : `cust_${normalizedPhone}`
                 const customerRef = adminDb.collection('customers').doc(customerId)
                 customerRef.get().then(custSnap => {
                     const existing = custSnap.exists ? custSnap.data() : {}
-                    const prevCount = typeof existing.orderCount === 'number' ? existing.orderCount : 0
-                    const prevSpent = typeof existing.totalSpent === 'number' ? existing.totalSpent : 0
                     const addresses = Array.isArray(existing.addresses) ? [...existing.addresses] : []
                     
                     const newAddress = {
@@ -560,28 +558,22 @@ export async function POST(request) {
                         name: (deliveryInfo.name || existing.name || 'Customer').trim(),
                         phone: (deliveryInfo.phone || existing.phone || normalizedPhone).trim(),
                         email: (body.userEmail || existing.email || `${normalizedPhone}@customer.ourstorebd.com`).trim(),
-                        orderCount: prevCount + 1,
-                        totalSpent: prevSpent + finalTotal,
+                        orderCount: FieldValue.increment(1),
+                        totalSpent: FieldValue.increment(finalTotal),
                         lastOrderAt: new Date().toISOString(),
                         addresses,
                         updatedAt: new Date().toISOString(),
                     }, { merge: true })
                 }).catch(err => console.warn('[OrderAPI] Customer record update non-blocking notice:', err))
 
-                // Increment coupon usedCount if coupon was applied (Issue 10.1)
+                // Increment coupon usedCount atomically if coupon was applied
                 if (coupon && coupon.code) {
                     const couponCodeId = String(coupon.code).toUpperCase()
-                    adminDb.collection('coupons').doc(couponCodeId).get().then(cSnap => {
-                        if (cSnap.exists) {
-                            const curUses = typeof cSnap.data().usedCount === 'number' ? cSnap.data().usedCount : 0
-                            const curSavings = typeof cSnap.data().totalSavings === 'number' ? cSnap.data().totalSavings : 0
-                            adminDb.collection('coupons').doc(couponCodeId).update({
-                                usedCount: curUses + 1,
-                                totalSavings: curSavings + discountAmount,
-                                updatedAt: new Date().toISOString()
-                            }).catch(err => console.warn('[OrderAPI] Coupon usedCount update notice:', err))
-                        }
-                    }).catch(err => console.warn('[OrderAPI] Coupon fetch notice:', err))
+                    adminDb.collection('coupons').doc(couponCodeId).update({
+                        usedCount: FieldValue.increment(1),
+                        totalSavings: FieldValue.increment(discountAmount),
+                        updatedAt: new Date().toISOString()
+                    }).catch(err => console.warn('[OrderAPI] Coupon usedCount update notice:', err))
                 }
             } catch (error) {
                 console.error('[OrderAPI] Failed to save order to Firestore via Admin SDK:', error)
@@ -750,7 +742,26 @@ export async function GET(request) {
             )
         }
 
-        const ordersSnap = await adminDb.collection('orders').get()
+        // Optimize: Use targeted Firestore queries instead of loading all orders
+        if (orderId) {
+            // Single order lookup — direct document fetch
+            const docSnap = await adminDb.collection('orders').doc(String(orderId)).get()
+            if (!docSnap.exists) {
+                return NextResponse.json({ success: true, orders: [] })
+            }
+            const { _fraud, ...safeOrder } = { id: docSnap.id, ...docSnap.data() }
+            return NextResponse.json({ success: true, orders: [safeOrder] })
+        }
+
+        let ordersSnap
+        if (userId && !phone && !orderIds) {
+            // userId-only query — use indexed Firestore query
+            ordersSnap = await adminDb.collection('orders').where('userId', '==', userId).get()
+        } else {
+            // Complex multi-field query or orderIds lookup — fall back to full scan
+            ordersSnap = await adminDb.collection('orders').get()
+        }
+
         if (ordersSnap.empty) {
             return NextResponse.json({ success: true, orders: [] })
         }
@@ -764,10 +775,6 @@ export async function GET(request) {
             // Strip internal admin fraud signals before returning to customer
             const { _fraud, ...safeOrder } = data
 
-            if (orderId && String(doc.id) === String(orderId)) {
-                matchingOrders.push(safeOrder)
-                return
-            }
             if (targetIds.length > 0 && (targetIds.includes(String(doc.id)) || targetIds.includes(`order_${doc.id}`))) {
                 matchingOrders.push(safeOrder)
                 return

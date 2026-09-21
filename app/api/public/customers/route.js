@@ -63,8 +63,7 @@ export async function POST(request) {
 
             const customerData = matchedDoc.data()
             const expectedHash = hashPassword(password)
-            const isMatch = (customerData.passwordHash && customerData.passwordHash === expectedHash) ||
-                            (customerData.password && customerData.password === password)
+            const isMatch = customerData.passwordHash && customerData.passwordHash === expectedHash
 
             if (!isMatch) {
                 return NextResponse.json(
@@ -73,7 +72,7 @@ export async function POST(request) {
                 )
             }
 
-            const { passwordHash: _ph, ...safeCustomer } = customerData
+            const { passwordHash: _ph, password: _pw, ...safeCustomer } = customerData
             return NextResponse.json({ success: true, customer: safeCustomer })
         }
 
@@ -114,7 +113,6 @@ export async function POST(request) {
                 email: lowerEmail || `${normPhone}@customer.ourstorebd.com`,
                 phone: normPhone,
                 passwordHash: hashPassword(password),
-                password: String(password),
                 role: 'CUSTOMER',
                 avatar: body.avatar || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80",
                 addresses: Array.isArray(addresses) ? addresses : [],
@@ -153,7 +151,6 @@ export async function POST(request) {
 
         if (body.password) {
             sanitized.passwordHash = hashPassword(body.password)
-            sanitized.password = body.password
         }
 
         if (!sanitized.id) {

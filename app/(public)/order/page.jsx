@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useSelector, useDispatch } from 'react-redux'
@@ -61,6 +61,7 @@ export default function OrderPage() {
     const [failedImages, setFailedImages] = useState({})
     const [idempotencyKey, setIdempotencyKey] = useState(() => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'ord_' + Math.random().toString(36).slice(2) + Date.now().toString(36))
     const [formLoadedAt] = useState(() => Date.now())
+    const hasTrackedCheckoutRef = useRef(false)
 
     const defaultAddr = currentUser?.addresses?.find(a => a.isDefault) || currentUser?.addresses?.[0]
     const isOutsideDefault = defaultAddr?.city?.toLowerCase().includes('outside') || defaultAddr?.city?.includes('বাইরে')
@@ -112,7 +113,8 @@ export default function OrderPage() {
         }
         setCartArray(items)
         setTotalPrice(total)
-        if (items.length > 0) {
+        if (items.length > 0 && !hasTrackedCheckoutRef.current) {
+            hasTrackedCheckoutRef.current = true
             trackInitiateCheckout(items, total)
         }
     }, [cartItems, products])

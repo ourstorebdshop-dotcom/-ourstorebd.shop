@@ -9,6 +9,14 @@ import {
     serverClearCollection
 } from '@/lib/firestoreServer'
 
+// Allowlist of collections that the admin proxy can access
+const ALLOWED_COLLECTIONS = new Set([
+    'products', 'categories', 'banners', 'coupons', 'orders',
+    'customers', 'settings', 'conversations', 'fraud_audit_log',
+    'shipping', 'cashflow', 'contacts', 'headerFooter', 'hero',
+    'apiSettings', 'tracking', 'favicon', 'integrations', 'wishlist'
+])
+
 /**
  * Secure Admin Firestore Proxy
  * 
@@ -48,42 +56,18 @@ export async function POST(request) {
             )
         }
 
-        // Special diagnostic action for authenticated admin
-        if (body.action === 'diagnose') {
-            const rawKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || ''
-            let parseErr = null
-            let parsedType = null
-            try {
-                let k = rawKey.trim()
-                if ((k.startsWith("'") && k.endsWith("'")) || (k.startsWith('"') && k.endsWith('"'))) {
-                    k = k.slice(1, -1)
-                }
-                const p = JSON.parse(k)
-                parsedType = p.type
-            } catch (err) {
-                parseErr = err.message
-            }
-            return NextResponse.json({
-                success: true,
-                hasServiceAccountKey: !!rawKey,
-                keyLength: rawKey.length,
-                keyPrefix: rawKey.slice(0, 25),
-                keySuffix: rawKey.slice(-25),
-                parseErr,
-                parsedType,
-                firebaseEnvKeys: Object.keys(process.env).filter(k => 
-                    k.includes('FIREBASE') || k.includes('SERVICE_ACCOUNT') || k.includes('GOOGLE')
-                ),
-                projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-                vercelCommitSha: process.env.VERCEL_GIT_COMMIT_SHA || 'local',
-                vercelEnv: process.env.VERCEL_ENV || 'unknown'
-            })
-        }
-
         if (!body.collection) {
             return NextResponse.json(
                 { success: false, error: 'Invalid request: collection required' },
                 { status: 400 }
+            )
+        }
+
+        // Validate collection against allowlist
+        if (!ALLOWED_COLLECTIONS.has(body.collection)) {
+            return NextResponse.json(
+                { success: false, error: `Access denied: collection '${body.collection}' is not allowed` },
+                { status: 403 }
             )
         }
 
