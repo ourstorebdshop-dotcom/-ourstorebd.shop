@@ -259,42 +259,48 @@ export default function AdminFraudPage() {
     }
 
     const handleToggleBlockPhone = async (phone) => {
-        if (!phone) return
+        if (!phone || actionLoadingId) return
         const normalized = normalizePhone(phone) || phone
-        const currentlyBlocked = blockedPhones.some(p => phonesMatch(p, normalized) || p === normalized)
+        setActionLoadingId('phone_' + normalized)
+        try {
+            const currentlyBlocked = blockedPhones.some(p => phonesMatch(p, normalized) || p === normalized)
 
-        let newBlocked
-        if (currentlyBlocked) {
-            newBlocked = blockedPhones.filter(p => !phonesMatch(p, normalized) && p !== normalized && p !== phone)
-            dispatch(unblockPhone(phone))
-            dispatch(unblockPhone(normalized))
-        } else {
-            newBlocked = [...blockedPhones, normalized]
-            dispatch(blockPhone(normalized))
-        }
+            let newBlocked
+            if (currentlyBlocked) {
+                newBlocked = blockedPhones.filter(p => !phonesMatch(p, normalized) && p !== normalized && p !== phone)
+                dispatch(unblockPhone(phone))
+                dispatch(unblockPhone(normalized))
+            } else {
+                newBlocked = [...blockedPhones, normalized]
+                dispatch(blockPhone(normalized))
+            }
 
-        if (isFirebaseConfigured()) {
-            await saveDocToFirestore('settings', 'fraud', {
-                ...fraudState,
-                blockedPhones: newBlocked,
-                updatedAt: new Date().toISOString()
-            })
-            await logFraudEvent({
-                type: 'ADMIN_ACTION',
-                phone: normalized,
-                reason: currentlyBlocked ? `নম্বর ${normalized} আনব্লক করা হয়েছে` : `নম্বর ${normalized} ব্লক করা হয়েছে`
-            })
-        }
+            if (isFirebaseConfigured()) {
+                await saveDocToFirestore('settings', 'fraud', {
+                    ...fraudState,
+                    blockedPhones: newBlocked,
+                    updatedAt: new Date().toISOString()
+                })
+                await logFraudEvent({
+                    type: 'ADMIN_ACTION',
+                    phone: normalized,
+                    reason: currentlyBlocked ? `নম্বর ${normalized} আনব্লক করা হয়েছে` : `নম্বর ${normalized} ব্লক করা হয়েছে`
+                })
+            }
 
-        if (currentlyBlocked) {
-            toast.success(`Phone ${phone} unblocked`)
-        } else {
-            toast.error(`Phone ${phone} blocked`)
+            if (currentlyBlocked) {
+                toast.success(`Phone ${phone} unblocked`)
+            } else {
+                toast.error(`Phone ${phone} blocked`)
+            }
+        } finally {
+            setActionLoadingId(null)
         }
     }
 
     const handleAddBlockedPhone = async (e) => {
         e.preventDefault()
+        if (actionLoadingId) return
         const raw = newPhoneInput.trim()
         if (!raw) return
         const validation = validateBDPhone(raw)
@@ -490,6 +496,7 @@ export default function AdminFraudPage() {
 
     const handleSaveSettings = async (e) => {
         e.preventDefault()
+        if (isSavingSettings) return
         setIsSavingSettings(true)
         const payload = {
             maxOrdersPerPhonePerHour: Number(settingsForm.maxOrdersPerPhonePerHour),

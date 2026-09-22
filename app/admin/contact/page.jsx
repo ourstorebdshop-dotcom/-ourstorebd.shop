@@ -66,6 +66,7 @@ export default function AdminContactMessages() {
     const [confirmingReset, setConfirmingReset] = useState(false)
 
     // Store Info Form State
+    const [isEditingSettings, setIsEditingSettings] = useState(false)
     const [settingsForm, setSettingsForm] = useState({
         phone: storeInfo.phone || '',
         whatsapp: storeInfo.whatsapp || '',
@@ -80,9 +81,9 @@ export default function AdminContactMessages() {
         announcement: storeInfo.announcement || ''
     })
 
-    // Update settingsForm whenever storeInfo changes
+    // Update settingsForm whenever storeInfo changes — but only if user is NOT actively editing
     React.useEffect(() => {
-        if (storeInfo) {
+        if (storeInfo && !isEditingSettings) {
             setSettingsForm({
                 phone: storeInfo.phone || '',
                 whatsapp: storeInfo.whatsapp || '',
@@ -97,7 +98,7 @@ export default function AdminContactMessages() {
                 announcement: storeInfo.announcement || ''
             })
         }
-    }, [storeInfo])
+    }, [storeInfo, isEditingSettings])
 
     // KPI Metrics
     const metrics = useMemo(() => {
@@ -298,6 +299,7 @@ export default function AdminContactMessages() {
             if (!saved) { toast.error('Firestore save failed!'); return }
         }
         dispatch(updateStoreInfo(nextSettings))
+        setIsEditingSettings(false)
         toast.success("Store contact settings updated and published live!")
     }
 
@@ -680,7 +682,7 @@ export default function AdminContactMessages() {
                             </div>
                         </div>
 
-                        <form onSubmit={handleSaveSettings} className="space-y-5">
+                        <form onSubmit={handleSaveSettings} onChange={() => setIsEditingSettings(true)} className="space-y-5">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-700 mb-1.5">

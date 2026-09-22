@@ -59,11 +59,20 @@ export default function AdminTrackingPage() {
     const store = useStore()
     const tracking = useSelector(state => state.tracking) || {}
 
+    const [isSaving, setIsSaving] = useState(false)
+
     // Persist tracking state to Firestore after dispatch
     const persistTracking = async () => {
-        if (isFirebaseConfigured()) {
-            const state = store.getState().tracking
-            await saveDocToFirestore('settings', 'tracking', state)
+        if (isSaving) return false
+        setIsSaving(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const state = store.getState().tracking
+                await saveDocToFirestore('settings', 'tracking', state)
+            }
+            return true
+        } finally {
+            setIsSaving(false)
         }
     }
 

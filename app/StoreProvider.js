@@ -1102,13 +1102,14 @@ export default function StoreProvider({ children }) {
         window.addEventListener('storage', onStorageChange)
 
         // ===== Mobile browser resume: re-fetch fresh data when page becomes visible =====
-        // Throttled to prevent excessive refetches (Issue 8.2) — minimum 60s between refetches
+        // Throttled to prevent excessive refetches: 60s cooldown for admin, 300s (5m) for customer pages
         let lastVisibilityRefetch = 0
-        const VISIBILITY_COOLDOWN_MS = 60 * 1000
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible' && firebaseEnabled) {
                 const now = Date.now()
-                if (now - lastVisibilityRefetch > VISIBILITY_COOLDOWN_MS) {
+                const isAdmin = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+                const cooldown = isAdmin ? 60 * 1000 : 300 * 1000
+                if (now - lastVisibilityRefetch > cooldown) {
                     lastVisibilityRefetch = now
                     hydrateData()
                 }

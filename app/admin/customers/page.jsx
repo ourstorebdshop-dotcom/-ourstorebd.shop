@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useEffect } from "react"
-import { useSelector, useDispatch } from "react-redux"
+import { useSelector, useDispatch, useStore } from "react-redux"
 import toast from "react-hot-toast"
 import { deleteUser, hydrateSavedUsers } from "@/lib/features/user/userSlice"
 import { isFirebaseConfigured, loadCollectionFromFirestore, deleteDocFromFirestore } from "@/lib/firestoreAdminApi"
@@ -29,6 +29,7 @@ export default function AdminCustomers() {
 
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
     const dispatch = useDispatch()
+    const store = useStore()
     const savedUsers = useSelector(state => state.user.savedUsers)
     const orders = useSelector(state => state.order.orders)
 
@@ -44,9 +45,11 @@ export default function AdminCustomers() {
             loadCollectionFromFirestore('customers').then(fsCustomers => {
                 if (Array.isArray(fsCustomers) && fsCustomers.length > 0) {
                     const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                    // Use store.getState() to get fresh state, not the stale closure
+                    const currentSavedUsers = store.getState().user.savedUsers || []
                     const mergedMap = new Map()
                     fsCustomers.forEach(c => { if (c.id && !deletedIds.includes(c.id)) mergedMap.set(c.id, c) })
-                    savedUsers.forEach(c => {
+                    currentSavedUsers.forEach(c => {
                         if (c.id && !deletedIds.includes(c.id)) {
                             if (!mergedMap.has(c.id)) {
                                 mergedMap.set(c.id, c)
@@ -61,7 +64,7 @@ export default function AdminCustomers() {
                 }
             }).catch(e => console.warn('Failed to load customers from Firestore in Admin:', e))
         }
-    }, [])
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     // Only show CUSTOMER role users (exclude admin)
     const customers = useMemo(() => {

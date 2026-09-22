@@ -250,7 +250,10 @@ export default function FaviconManagementPage() {
                 const res = await fetch('/api/admin/favicon', {
                     method: 'POST',
                     credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Request': '1',
+                    },
                     body: JSON.stringify({
                         faviconDataUrl: previewUrl,
                         appleTouchIconDataUrl: applePreviewUrl,
@@ -291,21 +294,27 @@ export default function FaviconManagementPage() {
 
     // Reset to default
     const handleReset = async () => {
+        if (isSaving) return
         if (confirm('আপনি কি ডিফল্ট ফেভিকনে ফিরে যেতে চান?')) {
-            dispatch(resetFavicon())
-            // Persist reset to Firestore
-            if (isFirebaseConfigured()) {
-                await saveDocToFirestore('settings', 'favicon', defaultFaviconSettings)
+            setIsSaving(true)
+            try {
+                dispatch(resetFavicon())
+                // Persist reset to Firestore
+                if (isFirebaseConfigured()) {
+                    await saveDocToFirestore('settings', 'favicon', defaultFaviconSettings)
+                }
+                setPreviewUrl('/favicon.ico')
+                setApplePreviewUrl('/apple-icon.png')
+                setFileMeta({
+                    name: 'default-favicon.ico',
+                    size: 'Default',
+                    type: 'ICO',
+                })
+                setSelectedPresetId(null)
+                toast.success('ডিফল্ট ফেভিকন রিস্টোর করা হয়েছে!')
+            } finally {
+                setIsSaving(false)
             }
-            setPreviewUrl('/favicon.ico')
-            setApplePreviewUrl('/apple-icon.png')
-            setFileMeta({
-                name: 'default-favicon.ico',
-                size: 'Default',
-                type: 'ICO',
-            })
-            setSelectedPresetId(null)
-            toast.success('ডিফল্ট ফেভিকন রিস্টোর করা হয়েছে!')
         }
     }
 

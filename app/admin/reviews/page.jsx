@@ -82,7 +82,14 @@ export default function AdminReviewsPage() {
             if (Array.isArray(p.rating)) {
                 p.rating.forEach((r, idx) => {
                     if (r && (r.review !== undefined || r.rating !== undefined)) {
-                        const reviewId = r.id || `gen_${p.id}_${idx}`
+                        // Use a stable hash based on content, not array index, to prevent ID collision on reorder
+                        const stableKey = `${p.id}_${r.user?.email || r.user?.name || ''}_${r.review || ''}_${r.createdAt || r.date || idx}`
+                        let hash = 0
+                        for (let i = 0; i < stableKey.length; i++) {
+                            hash = ((hash << 5) - hash) + stableKey.charCodeAt(i)
+                            hash = hash & hash
+                        }
+                        const reviewId = r.id || `gen_${p.id}_${Math.abs(hash).toString(36)}`
                         const isVisible = r.isVisible !== false && r.status !== 'hidden'
                         list.push({
                             ...r,

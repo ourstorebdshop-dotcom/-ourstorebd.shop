@@ -108,6 +108,8 @@ export default function AdminChatPage() {
     const [mobileShowChat, setMobileShowChat] = useState(false)
     const [convToDelete, setConvToDelete] = useState(null)
     const [isDeleting, setIsDeleting] = useState(false)
+    const [statusUpdatingId, setStatusUpdatingId] = useState(null)
+    const [deletingMsgId, setDeletingMsgId] = useState(null)
 
     // Refs
     const messageUnsubRef = useRef(null)
@@ -249,11 +251,17 @@ export default function AdminChatPage() {
     }
 
     const handleStatusChange = async (convId, newStatus) => {
-        const success = await updateConversationStatus(convId, newStatus)
-        if (success) {
-            toast.success(`Status changed to ${newStatus}`)
-        } else {
-            toast.error('Status update failed')
+        if (statusUpdatingId) return
+        setStatusUpdatingId(convId)
+        try {
+            const success = await updateConversationStatus(convId, newStatus)
+            if (success) {
+                toast.success(`Status changed to ${newStatus}`)
+            } else {
+                toast.error('Status update failed')
+            }
+        } finally {
+            setStatusUpdatingId(null)
         }
     }
 
@@ -283,9 +291,10 @@ export default function AdminChatPage() {
     }
 
     const handleDeleteSingleMessage = async (messageId) => {
-        if (!activeConversationId) return
+        if (!activeConversationId || deletingMsgId) return
         if (!window.confirm('এই মেসেজটি কি ডিলিট করতে চান?')) return
 
+        setDeletingMsgId(messageId)
         try {
             const success = await deleteMessage(activeConversationId, messageId)
             if (success) {
@@ -297,6 +306,8 @@ export default function AdminChatPage() {
         } catch (err) {
             console.error('[Chat] Delete message error:', err)
             toast.error('মেসেজ ডিলিট করা যায়নি!')
+        } finally {
+            setDeletingMsgId(null)
         }
     }
 

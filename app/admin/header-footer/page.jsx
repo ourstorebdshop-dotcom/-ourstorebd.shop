@@ -80,13 +80,24 @@ export default function AdminHeaderFooterPage() {
     const store = useStore()
     const headerFooterState = useSelector(state => state.headerFooter)
 
+    const [isSaving, setIsSaving] = useState(false)
+    const [isEditingHeader, setIsEditingHeader] = useState(false)
+    const [isEditingFooter, setIsEditingFooter] = useState(false)
+
     // Persist headerFooter state to Firestore — called AFTER dispatch
     // Uses store.getState() synchronously (no setTimeout) so state is fresh
     const persistHeaderFooter = async () => {
-        if (isFirebaseConfigured()) {
-            const state = store.getState().headerFooter
-            const saved = await saveDocToFirestore('settings', 'header_footer', state)
-            if (!saved) { toast.error('Firestore save failed!') }
+        if (isSaving) return false
+        setIsSaving(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const state = store.getState().headerFooter
+                const saved = await saveDocToFirestore('settings', 'header_footer', state)
+                if (!saved) { toast.error('Firestore save failed!'); return false }
+            }
+            return true
+        } finally {
+            setIsSaving(false)
         }
     }
 
@@ -118,16 +129,19 @@ export default function AdminHeaderFooterPage() {
 
     const [showResetConfirm, setShowResetConfirm] = useState(false)
 
-    // Sync local state when Redux state updates
+    // Sync local state when Redux state updates, only if not actively editing
     useEffect(() => {
-        if (header) setHeaderForm(header)
-        if (footer) setFooterForm(footer)
-    }, [header, footer])
+        if (header && !isEditingHeader) setHeaderForm(header)
+    }, [header, isEditingHeader])
+
+    useEffect(() => {
+        if (footer && !isEditingFooter) setFooterForm(footer)
+    }, [footer, isEditingFooter])
 
     // =========================================================================
     // HEADER ACTIONS
     // =========================================================================
-    const handleSaveHeader = (e) => {
+    const handleSaveHeader = async (e) => {
         if (e) e.preventDefault()
         dispatch(updateHeader({
             logoType: headerForm.logoType,
@@ -148,7 +162,8 @@ export default function AdminHeaderFooterPage() {
             loginLabel: headerForm.loginLabel,
             isSticky: headerForm.isSticky,
         }))
-        persistHeaderFooter()
+        setIsEditingHeader(false)
+        await persistHeaderFooter()
         toast.success('হেডার সেটিংস সফলভাবে সংরক্ষিত ও লাইভ আপডেট হয়েছে!')
     }
 
@@ -208,7 +223,7 @@ export default function AdminHeaderFooterPage() {
     // =========================================================================
     // FOOTER ACTIONS
     // =========================================================================
-    const handleSaveFooter = (e) => {
+    const handleSaveFooter = async (e) => {
         if (e) e.preventDefault()
         dispatch(updateFooter({
             showFooter: footerForm.showFooter,
@@ -231,7 +246,8 @@ export default function AdminHeaderFooterPage() {
                 badgesText: footerForm.bottomBar?.badgesText,
             }
         }))
-        persistHeaderFooter()
+        setIsEditingFooter(false)
+        await persistHeaderFooter()
         toast.success('ফুটার সেটিংস সফলভাবে সংরক্ষিত ও লাইভ আপডেট হয়েছে!')
     }
 

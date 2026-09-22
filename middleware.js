@@ -34,16 +34,16 @@ const CSP_HEADER = [
 /**
  * Validate Origin / Referer for CSRF prevention on state-changing API requests
  */
-function isAllowedOrigin(request) {
+function isAllowedOrigin(request, strict = false) {
     const origin = request.headers.get('origin')
     const referer = request.headers.get('referer')
     const host = request.headers.get('host')
 
-    // If no origin/referer (e.g. direct server-to-server or mobile app), allow
-    if (!origin && !referer) return true
+    // If no origin/referer (e.g. direct server-to-server or mobile app)
+    if (!origin && !referer) return !strict
 
     // Facebook/Instagram in-app browsers often send "null" as origin string
-    if (origin === 'null') return true
+    if (origin === 'null') return !strict
 
     if (origin) {
         try {
@@ -83,8 +83,17 @@ export async function middleware(request) {
 
     // ── 1. CSRF Protection for API Mutations ──────────────────────────
     if (pathname.startsWith('/api/') && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
-        // Exempt public tracking dispatch from strict origin if needed, but verify for admin/order
-        if (!isAllowedOrigin(request)) {
+        // Admin API routes require either verified origin or X-Admin-Request header
+        if (pathname.startsWith('/api/admin/') && pathname !== '/api/admin/login') {
+            const hasAdminHeader = request.headers.get('x-admin-request') === '1'
+            const validOrigin = isAllowedOrigin(request, true) // strict mode: rejects missing origin/referer
+            if (!hasAdminHeader && !validOrigin) {
+                return NextResponse.json(
+                    { error: 'Cross-Site Request Blocked (Admin CSRF Protection).' },
+                    { status: 403 }
+                )
+            }
+        } else if (!isAllowedOrigin(request)) {
             return NextResponse.json(
                 { error: 'Cross-Site Request Blocked (Invalid Origin).' },
                 { status: 403 }

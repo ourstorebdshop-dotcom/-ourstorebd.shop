@@ -119,6 +119,7 @@ export default function AdminAddProduct() {
 
     const onSubmitHandler = async (e) => {
         e.preventDefault()
+        if (loading) return
         setLoading(true)
         
         try {

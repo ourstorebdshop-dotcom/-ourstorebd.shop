@@ -15,8 +15,27 @@ const SESSION_DURATION = 2 * 60 * 60 * 1000 // 2 hours
 const STORAGE_KEY = 'gocart_admin_session'
 const ADMIN_EMAIL = (process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'idrisrashel@gmail.com').toLowerCase()
 
-// Crypto-grade HMAC-like hash — much harder to reverse than btoa()
-const computeHMAC = (message, key) => {
+// Crypto-grade HMAC-SHA256 using Web Crypto API with fast arithmetic fallback
+const computeHMAC = async (message, key) => {
+    if (typeof crypto !== 'undefined' && crypto.subtle && typeof TextEncoder !== 'undefined') {
+        try {
+            const encoder = new TextEncoder()
+            const keyData = encoder.encode(key)
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw',
+                keyData,
+                { name: 'HMAC', hash: 'SHA-256' },
+                false,
+                ['sign']
+            )
+            const sig = await crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message))
+            return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('')
+        } catch { /* fallback */ }
+    }
+    return computeLegacyHMAC(message, key)
+}
+
+const computeLegacyHMAC = (message, key) => {
     let h1 = 0xdeadbeef
     let h2 = 0x41c6ce57
     const combined = message + ':' + key
@@ -40,7 +59,7 @@ const getBrowserFingerprint = () => {
         const lang = navigator.language || ''
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''
         const screen = `${Math.min(window.screen.width, window.screen.height)}x${Math.max(window.screen.width, window.screen.height)}`
-        return computeHMAC(`${ua}|${lang}|${tz}|${screen}`, 'fp_salt_2026')
+        return computeLegacyHMAC(`${ua}|${lang}|${tz}|${screen}`, 'fp_salt_2026')
     } catch {
         return 'unknown'
     }
@@ -58,9 +77,9 @@ const generateSecureToken = () => {
 }
 
 // Build the session signature — ties together email + time + fingerprint + client salt
-const createSignature = (email, loginTime, fingerprint, token) => {
+const createSignature = async (email, loginTime, fingerprint, token) => {
     const salt = 'gocart_secure_client_session_salt_2026'
-    return computeHMAC(`${email}:${loginTime}:${fingerprint}:${token}`, salt)
+    return await computeHMAC(`${email}:${loginTime}:${fingerprint}:${token}`, salt)
 }
 
 // ============================================================================
@@ -71,7 +90,7 @@ const AdminLayout = ({ children }) => {
     const [isAdmin, setIsAdmin] = useState(false)
     const [loading, setLoading] = useState(true)
 
-    const validateSession = useCallback(() => {
+    const validateSession = useCallback(async () => {
         try {
             const raw = localStorage.getItem(STORAGE_KEY)
             if (!raw) return false
@@ -110,11 +129,15 @@ const AdminLayout = ({ children }) => {
                 return false
             }
 
-            // 6. HMAC signature verification — prevents any field tampering
-            const expectedSig = createSignature(
+            // 6. HMAC signature verification (Web Crypto SHA-256 with legacy fallback)
+            const expectedSig = await createSignature(
                 session.email, session.loginTime, session.fingerprint, session.token
             )
-            if (session.signature !== expectedSig) {
+            const legacySig = computeLegacyHMAC(
+                `${session.email}:${session.loginTime}:${session.fingerprint}:${session.token}`,
+                'gocart_secure_client_session_salt_2026'
+            )
+            if (session.signature !== expectedSig && session.signature !== legacySig) {
                 localStorage.removeItem(STORAGE_KEY)
                 return false
             }
@@ -140,16 +163,16 @@ const AdminLayout = ({ children }) => {
             }
         } catch { /* fallback to client validation */ }
 
-        const valid = validateSession()
+        const valid = await validateSession()
         setIsAdmin(valid)
         setLoading(false)
     }, [validateSession])
 
-    const handleLoginSuccess = useCallback(() => {
+    const handleLoginSuccess = useCallback(async () => {
         const loginTime = Date.now()
         const token = generateSecureToken()
         const fingerprint = getBrowserFingerprint()
-        const signature = createSignature(ADMIN_EMAIL, loginTime, fingerprint, token)
+        const signature = await createSignature(ADMIN_EMAIL, loginTime, fingerprint, token)
 
         const session = {
             version: 2,
@@ -176,17 +199,18 @@ const AdminLayout = ({ children }) => {
     useEffect(() => {
         checkAdminAuth()
 
+        const checkValidity = async () => {
+            const valid = await validateSession()
+            if (!valid) setIsAdmin(false)
+        }
+
         // Re-validate session every 30 seconds
-        const interval = setInterval(() => {
-            if (!validateSession()) {
-                setIsAdmin(false)
-            }
-        }, 30 * 1000)
+        const interval = setInterval(checkValidity, 30 * 1000)
 
         // Detect tampering from other tabs / DevTools
         const onStorage = (e) => {
             if (e.key === STORAGE_KEY || e.key === 'adminAuthenticated') {
-                if (!validateSession()) setIsAdmin(false)
+                checkValidity()
             }
         }
         window.addEventListener('storage', onStorage)
@@ -194,7 +218,7 @@ const AdminLayout = ({ children }) => {
         // Detect visibility changes (user coming back to tab)
         const onVisibility = () => {
             if (document.visibilityState === 'visible') {
-                if (!validateSession()) setIsAdmin(false)
+                checkValidity()
             }
         }
         document.addEventListener('visibilitychange', onVisibility)

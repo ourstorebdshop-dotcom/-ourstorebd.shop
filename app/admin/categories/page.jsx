@@ -40,6 +40,9 @@ export default function AdminCategoriesPage() {
     const [editingId, setEditingId] = useState(null)
     const [editingName, setEditingName] = useState('')
     const [deleteConfirmId, setDeleteConfirmId] = useState(null)
+    const [isSaving, setIsSaving] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [reorderingId, setReorderingId] = useState(null)
 
     // Count products per category (supports multi-category)
     const getProductCount = (catName) => {
@@ -53,6 +56,7 @@ export default function AdminCategoriesPage() {
 
     // Add new category
     const handleAdd = async () => {
+        if (isSaving) return
         const name = newCatName.trim()
         if (!name) {
             toast.error('ক্যাটাগরির নাম লিখুন')
@@ -63,15 +67,20 @@ export default function AdminCategoriesPage() {
             toast.error('এই নামে ক্যাটাগরি আগে থেকেই আছে')
             return
         }
-        const newId = 'cat_' + Date.now()
-        const newCat = { id: newId, name, order: categories.length, visible: true }
-        if (isFirebaseConfigured()) {
-            const ok = await saveDocToFirestore('categories', newId, newCat)
-            if (!ok) { toast.error('ডাটাবেজে সেভ করতে সমস্যা হয়েছে'); return }
+        setIsSaving(true)
+        try {
+            const newId = 'cat_' + Date.now()
+            const newCat = { id: newId, name, order: categories.length, visible: true }
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('categories', newId, newCat)
+                if (!ok) { toast.error('ডাটাবেজে সেভ করতে সমস্যা হয়েছে'); return }
+            }
+            dispatch(addCategory({ name, id: newId }))
+            setNewCatName('')
+            toast.success(`"${name}" ক্যাটাগরি সফলভাবে যোগ করা হয়েছে!`)
+        } finally {
+            setIsSaving(false)
         }
-        dispatch(addCategory({ name, id: newId }))
-        setNewCatName('')
-        toast.success(`"${name}" ক্যাটাগরি সফলভাবে যোগ করা হয়েছে!`)
     }
 
     // Start editing
@@ -83,6 +92,7 @@ export default function AdminCategoriesPage() {
 
     // Save edit
     const saveEdit = async () => {
+        if (isSaving) return
         const name = editingName.trim()
         if (!name) {
             toast.error('ক্যাটাগরির নাম ফাঁকা রাখা যাবে না')
@@ -93,35 +103,48 @@ export default function AdminCategoriesPage() {
             toast.error('এই নামে অন্য ক্যাটাগরি আছে')
             return
         }
-        const oldName = categories.find(c => c.id === editingId)?.name
-        if (isFirebaseConfigured()) {
-            await saveDocToFirestore('categories', editingId, { name })
-        }
-        dispatch(updateCategory({ id: editingId, name }))
-        // Update all products that reference the old category name
-        if (oldName && oldName !== name) {
-            allProducts.forEach(p => {
-                let needsUpdate = false
-                let updatedProduct = { ...p }
-                if (p.category === oldName) {
-                    updatedProduct.category = name
-                    needsUpdate = true
+        setIsSaving(true)
+        try {
+            const oldName = categories.find(c => c.id === editingId)?.name
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('categories', editingId, { name })
+                if (!ok) {
+                    toast.error('ক্যাটাগরি ডাটাবেজে সেভ করা যায়নি!')
+                    return
                 }
-                if (p.categories && Array.isArray(p.categories) && p.categories.includes(oldName)) {
-                    updatedProduct.categories = p.categories.map(c => c === oldName ? name : c)
-                    needsUpdate = true
-                }
-                if (needsUpdate) {
+            }
+            dispatch(updateCategory({ id: editingId, name }))
+            // Update all products that reference the old category name
+            if (oldName && oldName !== name) {
+                const productsToUpdate = allProducts.filter(p => {
+                    if (p.category === oldName) return true
+                    if (p.categories && Array.isArray(p.categories) && p.categories.includes(oldName)) return true
+                    return false
+                })
+                const updatePromises = productsToUpdate.map(p => {
+                    let updatedProduct = { ...p }
+                    if (p.category === oldName) updatedProduct.category = name
+                    if (p.categories && Array.isArray(p.categories) && p.categories.includes(oldName)) {
+                        updatedProduct.categories = p.categories.map(c => c === oldName ? name : c)
+                    }
                     dispatch(updateProduct(updatedProduct))
                     if (isFirebaseConfigured()) {
-                        saveDocToFirestore('products', updatedProduct.id, updatedProduct)
+                        return saveDocToFirestore('products', updatedProduct.id, updatedProduct)
                     }
+                    return Promise.resolve(true)
+                })
+                const results = await Promise.allSettled(updatePromises)
+                const failed = results.filter(r => r.status === 'rejected' || r.value === false)
+                if (failed.length > 0) {
+                    toast.error(`${failed.length}টি প্রোডাক্টের ক্যাটাগরি আপডেট ব্যর্থ হয়েছে`)
                 }
-            })
+            }
+            setEditingId(null)
+            setEditingName('')
+            toast.success('ক্যাটাগরির নাম আপডেট করা হয়েছে!')
+        } finally {
+            setIsSaving(false)
         }
-        setEditingId(null)
-        setEditingName('')
-        toast.success('ক্যাটাগরির নাম আপডেট করা হয়েছে!')
     }
 
     // Cancel edit
@@ -132,65 +155,90 @@ export default function AdminCategoriesPage() {
 
     // Toggle visibility
     const toggleVisibility = async (cat) => {
-        if (isFirebaseConfigured()) {
-            await saveDocToFirestore('categories', cat.id, { visible: !cat.visible })
+        if (isSaving) return
+        setIsSaving(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('categories', cat.id, { visible: !cat.visible })
+                if (!ok) { toast.error('ডাটাবেজে সেভ করা যায়নি'); return }
+            }
+            dispatch(updateCategory({ id: cat.id, visible: !cat.visible }))
+            toast.success(cat.visible ? `"${cat.name}" লুকানো হয়েছে` : `"${cat.name}" দৃশ্যমান করা হয়েছে`)
+        } finally {
+            setIsSaving(false)
         }
-        dispatch(updateCategory({ id: cat.id, visible: !cat.visible }))
-        toast.success(cat.visible ? `"${cat.name}" লুকানো হয়েছে` : `"${cat.name}" দৃশ্যমান করা হয়েছে`)
     }
 
     // Move up / down
     const moveUp = async (id) => {
-        const sorted = [...categories].sort((a, b) => (a?.order || 0) - (b?.order || 0))
-        const index = sorted.findIndex(c => c?.id === id)
-        if (index <= 0) return
+        if (reorderingId) return
+        setReorderingId(id)
+        try {
+            const sorted = [...categories].sort((a, b) => (a?.order || 0) - (b?.order || 0))
+            const index = sorted.findIndex(c => c?.id === id)
+            if (index <= 0) return
 
-        const prevCat = sorted[index - 1]
-        const currCat = sorted[index]
-        const prevOrder = prevCat?.order ?? (index - 1)
-        const currOrder = currCat?.order ?? index
+            const prevCat = sorted[index - 1]
+            const currCat = sorted[index]
+            const prevOrder = prevCat?.order ?? (index - 1)
+            const currOrder = currCat?.order ?? index
 
-        dispatch(reorderCategory({ id, direction: 'up' }))
+            dispatch(reorderCategory({ id, direction: 'up' }))
 
-        if (isFirebaseConfigured() && prevCat?.id && currCat?.id) {
-            await Promise.all([
-                saveDocToFirestore('categories', currCat.id, { order: prevOrder }),
-                saveDocToFirestore('categories', prevCat.id, { order: currOrder })
-            ])
+            if (isFirebaseConfigured() && prevCat?.id && currCat?.id) {
+                await Promise.all([
+                    saveDocToFirestore('categories', currCat.id, { order: prevOrder }),
+                    saveDocToFirestore('categories', prevCat.id, { order: currOrder })
+                ])
+            }
+        } finally {
+            setReorderingId(null)
         }
     }
 
     const moveDown = async (id) => {
-        const sorted = [...categories].sort((a, b) => (a?.order || 0) - (b?.order || 0))
-        const index = sorted.findIndex(c => c?.id === id)
-        if (index < 0 || index >= sorted.length - 1) return
+        if (reorderingId) return
+        setReorderingId(id)
+        try {
+            const sorted = [...categories].sort((a, b) => (a?.order || 0) - (b?.order || 0))
+            const index = sorted.findIndex(c => c?.id === id)
+            if (index < 0 || index >= sorted.length - 1) return
 
-        const nextCat = sorted[index + 1]
-        const currCat = sorted[index]
-        const nextOrder = nextCat?.order ?? (index + 1)
-        const currOrder = currCat?.order ?? index
+            const nextCat = sorted[index + 1]
+            const currCat = sorted[index]
+            const nextOrder = nextCat?.order ?? (index + 1)
+            const currOrder = currCat?.order ?? index
 
-        dispatch(reorderCategory({ id, direction: 'down' }))
+            dispatch(reorderCategory({ id, direction: 'down' }))
 
-        if (isFirebaseConfigured() && nextCat?.id && currCat?.id) {
-            await Promise.all([
-                saveDocToFirestore('categories', currCat.id, { order: nextOrder }),
-                saveDocToFirestore('categories', nextCat.id, { order: currOrder })
-            ])
+            if (isFirebaseConfigured() && nextCat?.id && currCat?.id) {
+                await Promise.all([
+                    saveDocToFirestore('categories', currCat.id, { order: nextOrder }),
+                    saveDocToFirestore('categories', nextCat.id, { order: currOrder })
+                ])
+            }
+        } finally {
+            setReorderingId(null)
         }
     }
 
     // Delete
     const confirmDelete = async (id) => {
-        const cat = categories.find(c => c.id === id)
-        if (isFirebaseConfigured()) {
-            const ok = await deleteDocFromFirestore('categories', id)
-            if (!ok) { toast.error('ডাটাবেজ থেকে মুছতে সমস্যা হয়েছে'); return }
+        if (isDeleting) return
+        setIsDeleting(true)
+        try {
+            const cat = categories.find(c => c.id === id)
+            if (isFirebaseConfigured()) {
+                const ok = await deleteDocFromFirestore('categories', id)
+                if (!ok) { toast.error('ডাটাবেজ থেকে মুছতে সমস্যা হয়েছে'); return }
+            }
+            dispatch(deleteCategory(id))
+            setDeleteConfirmId(null)
+            setEditingId(null) // Reset edit state
+            toast.success(`"${cat?.name || ''}" ক্যাটাগরি মুছে ফেলা হয়েছে!`)
+        } finally {
+            setIsDeleting(false)
         }
-        dispatch(deleteCategory(id))
-        setDeleteConfirmId(null)
-        setEditingId(null) // Reset edit state
-        toast.success(`"${cat?.name || ''}" ক্যাটাগরি মুছে ফেলা হয়েছে!`)
     }
 
     return (

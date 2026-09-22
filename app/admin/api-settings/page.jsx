@@ -60,6 +60,7 @@ export default function ApiSettingsPage() {
     const apiSettings = useSelector(state => state.apiSettings)
 
     // Local form state
+    const [isSaving, setIsSaving] = useState(false)
     const [googleClientId, setGoogleClientId] = useState('')
     const [googleClientSecret, setGoogleClientSecret] = useState('')
     const [googleEnabled, setGoogleEnabled] = useState(true)
@@ -129,6 +130,7 @@ export default function ApiSettingsPage() {
 
     const handleSaveGoogleAuth = async (e) => {
         if (e) e.preventDefault()
+        if (isSaving) return
 
         const trimmedId = googleClientId.trim()
         const trimmedSecret = googleClientSecret.trim()
@@ -140,62 +142,83 @@ export default function ApiSettingsPage() {
             autoSignup: googleAutoSignup,
         }
 
-        // Persist to Firestore with exact data (merge preserves other settings)
-        if (isFirebaseConfigured()) {
-            const saved = await saveDocToFirestore('settings', 'api_settings', {
-                google: googleData,
-                googleAuth: googleData
-            })
-            if (!saved) { toast.error('Firestore save failed!'); return }
-        }
+        setIsSaving(true)
+        try {
+            // Persist to Firestore with exact data (merge preserves other settings)
+            if (isFirebaseConfigured()) {
+                const saved = await saveDocToFirestore('settings', 'api_settings', {
+                    google: googleData,
+                    googleAuth: googleData
+                })
+                if (!saved) { toast.error('Firestore save failed!'); return }
+            }
 
-        dispatch(updateGoogleAuth(googleData))
+            dispatch(updateGoogleAuth(googleData))
 
-        if (trimmedId) {
-            toast.success('Google API সেটিংস সফলভাবে সংরক্ষিত হয়েছে!', { icon: '✅' })
-        } else {
-            toast.success('সেটিংস সংরক্ষিত হয়েছে। Client ID খালি থাকায় স্বয়ংক্রিয় সাইন-আপ মোড সক্রিয় রয়েছে।', { 
-                icon: '⚡',
-                duration: 4000 
-            })
+            if (trimmedId) {
+                toast.success('Google API সেটিংস সফলভাবে সংরক্ষিত হয়েছে!', { icon: '✅' })
+            } else {
+                toast.success('সেটিংস সংরক্ষিত হয়েছে। Client ID খালি থাকায় স্বয়ংক্রিয় সাইন-আপ মোড সক্রিয় রয়েছে।', { 
+                    icon: '⚡',
+                    duration: 4000 
+                })
+            }
+        } finally {
+            setIsSaving(false)
         }
     }
 
     const handleSaveSms = async (e) => {
         if (e) e.preventDefault()
+        if (isSaving) return
+
         const smsData = {
             provider: smsProvider,
             apiKey: smsApiKey.trim(),
             senderId: smsSenderId.trim(),
             enabled: smsEnabled
         }
-        if (isFirebaseConfigured()) {
-            const saved = await saveDocToFirestore('settings', 'api_settings', {
-                sms: smsData,
-                smsGateway: smsData
-            })
-            if (!saved) { toast.error('Firestore save failed!'); return }
+
+        setIsSaving(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const saved = await saveDocToFirestore('settings', 'api_settings', {
+                    sms: smsData,
+                    smsGateway: smsData
+                })
+                if (!saved) { toast.error('Firestore save failed!'); return }
+            }
+            dispatch(updateSmsGateway(smsData))
+            toast.success('SMS Gateway সেটিংস সংরক্ষিত হয়েছে!')
+        } finally {
+            setIsSaving(false)
         }
-        dispatch(updateSmsGateway(smsData))
-        toast.success('SMS Gateway সেটিংস সংরক্ষিত হয়েছে!')
     }
 
     const handleSavePayment = async (e) => {
         if (e) e.preventDefault()
+        if (isSaving) return
+
         const paymentData = {
             bkashApiKey: bkashApiKey.trim(),
             bkashSecretKey: bkashSecretKey.trim(),
             nagadMerchantId: nagadMerchantId.trim(),
         }
-        if (isFirebaseConfigured()) {
-            const saved = await saveDocToFirestore('settings', 'api_settings', {
-                payment: paymentData,
-                paymentGateway: paymentData
-            })
-            if (!saved) { toast.error('Firestore save failed!'); return }
+
+        setIsSaving(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const saved = await saveDocToFirestore('settings', 'api_settings', {
+                    payment: paymentData,
+                    paymentGateway: paymentData
+                })
+                if (!saved) { toast.error('Firestore save failed!'); return }
+            }
+            dispatch(updatePaymentGateway(paymentData))
+            toast.success('পেমেন্ট গেটওয়ে API সংরক্ষিত হয়েছে!')
+        } finally {
+            setIsSaving(false)
         }
-        dispatch(updatePaymentGateway(paymentData))
-        toast.success('পেমেন্ট গেটওয়ে API সংরক্ষিত হয়েছে!')
     }
 
     const isGoogleConnected = Boolean(googleClientId.trim())

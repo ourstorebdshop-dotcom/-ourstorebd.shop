@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { addCoupon, updateCoupon, deleteCoupon, toggleCouponActive, resetCoupons } from "@/lib/features/coupon/couponSlice"
 import { saveDocToFirestore, deleteDocFromFirestore, syncCollectionToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
@@ -16,6 +16,15 @@ import {
 } from "lucide-react"
 
 const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
+
+// ─── Helper: safe date format ──────────────────────────
+const safeFormat = (dateStr, fmt) => {
+    try {
+        const d = new Date(dateStr)
+        if (isNaN(d.getTime())) return '—'
+        return format(d, fmt)
+    } catch { return '—' }
+}
 
 // ─── Helper: get coupon status ─────────────────────────
 const getCouponStatus = (coupon) => {
@@ -86,17 +95,29 @@ export default function AdminCoupons() {
     const [showFilterDropdown, setShowFilterDropdown] = useState(false)
     const [newCoupon, setNewCoupon] = useState(getDefaultCoupon())
     const [showResetConfirm, setShowResetConfirm] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const sortDropdownRef = useRef(null)
+    const filterDropdownRef = useRef(null)
 
-    // Close dropdowns on outside click
+    // Close dropdowns on outside click (ref-based)
     useEffect(() => {
-        const handler = () => { setShowSortDropdown(false); setShowFilterDropdown(false) }
-        document.addEventListener('click', handler)
-        return () => document.removeEventListener('click', handler)
+        const handler = (e) => {
+            if (sortDropdownRef.current && !sortDropdownRef.current.contains(e.target)) {
+                setShowSortDropdown(false)
+            }
+            if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target)) {
+                setShowFilterDropdown(false)
+            }
+        }
+        document.addEventListener('mousedown', handler)
+        return () => document.removeEventListener('mousedown', handler)
     }, [])
 
     // ─── ADD ───────────────────────────────────────────
     const handleAddCoupon = async (e) => {
         e.preventDefault()
+        if (isSaving) return
         if (!newCoupon.code.trim()) { toast.error('Please enter a coupon code'); return }
         if (!newCoupon.discount) { toast.error('Please enter a discount value'); return }
         if (newCoupon.discountType === 'percentage' && parseFloat(newCoupon.discount) > 100) { toast.error('Percentage discount cannot exceed 100%'); return }
@@ -104,73 +125,97 @@ export default function AdminCoupons() {
         const formattedCode = newCoupon.code.toUpperCase().trim()
         if (coupons.some(c => c.code === formattedCode)) { toast.error('This coupon code already exists!'); return }
 
-        const couponData = {
-            code: formattedCode,
-            description: newCoupon.description || `${newCoupon.discount}${newCoupon.discountType === 'percentage' ? '%' : currency} discount`,
-            discount: parseFloat(newCoupon.discount) || 10,
-            discountType: newCoupon.discountType,
-            forNewUser: newCoupon.forNewUser,
-            forMember: newCoupon.forMember,
-            isPublic: newCoupon.isPublic,
-            isActive: newCoupon.isActive,
-            maxUses: parseInt(newCoupon.maxUses) || 0,
-            maxUsesPerUser: parseInt(newCoupon.maxUsesPerUser) || 1,
-            minOrderAmount: parseFloat(newCoupon.minOrderAmount) || 0,
-            maxDiscountAmount: parseFloat(newCoupon.maxDiscountAmount) || 0,
-            usedCount: 0,
-            totalSavings: 0,
-            expiresAt: new Date(newCoupon.expiresAt).toISOString(),
-            createdAt: new Date().toISOString()
+        setIsSaving(true)
+        try {
+            const couponData = {
+                code: formattedCode,
+                description: newCoupon.description || `${newCoupon.discount}${newCoupon.discountType === 'percentage' ? '%' : currency} discount`,
+                discount: parseFloat(newCoupon.discount) || 10,
+                discountType: newCoupon.discountType,
+                forNewUser: newCoupon.forNewUser,
+                forMember: newCoupon.forMember,
+                isPublic: newCoupon.isPublic,
+                isActive: newCoupon.isActive,
+                maxUses: parseInt(newCoupon.maxUses) || 0,
+                maxUsesPerUser: parseInt(newCoupon.maxUsesPerUser) || 1,
+                minOrderAmount: parseFloat(newCoupon.minOrderAmount) || 0,
+                maxDiscountAmount: parseFloat(newCoupon.maxDiscountAmount) || 0,
+                usedCount: 0,
+                totalSavings: 0,
+                expiresAt: new Date(newCoupon.expiresAt).toISOString(),
+                createdAt: new Date().toISOString()
+            }
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('coupons', formattedCode, couponData)
+                if (!ok) { toast.error('Failed to save coupon to database'); return }
+            }
+            dispatch(addCoupon(couponData))
+            toast.success(`Coupon "${formattedCode}" created!`)
+            setNewCoupon(getDefaultCoupon())
+            setShowForm(false)
+        } finally {
+            setIsSaving(false)
         }
-        if (isFirebaseConfigured()) {
-            const ok = await saveDocToFirestore('coupons', formattedCode, couponData)
-            if (!ok) { toast.error('Failed to save coupon to database'); return }
-        }
-        dispatch(addCoupon(couponData))
-        toast.success(`Coupon "${formattedCode}" created!`)
-        setNewCoupon(getDefaultCoupon())
-        setShowForm(false)
     }
 
     // ─── EDIT SAVE ─────────────────────────────────────
     const handleEditSave = async (e) => {
         e.preventDefault()
-        const updatedData = {
-            ...editingCoupon,
-            discount: parseFloat(editingCoupon.discount) || 0,
-            maxUses: parseInt(editingCoupon.maxUses) || 0,
-            maxUsesPerUser: parseInt(editingCoupon.maxUsesPerUser) || 1,
-            minOrderAmount: parseFloat(editingCoupon.minOrderAmount) || 0,
-            maxDiscountAmount: parseFloat(editingCoupon.maxDiscountAmount) || 0,
+        if (isSaving) return
+        setIsSaving(true)
+        try {
+            const updatedData = {
+                ...editingCoupon,
+                discount: parseFloat(editingCoupon.discount) || 0,
+                maxUses: parseInt(editingCoupon.maxUses) || 0,
+                maxUsesPerUser: parseInt(editingCoupon.maxUsesPerUser) || 1,
+                minOrderAmount: parseFloat(editingCoupon.minOrderAmount) || 0,
+                maxDiscountAmount: parseFloat(editingCoupon.maxDiscountAmount) || 0,
+            }
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('coupons', editingCoupon.code, updatedData)
+                if (!ok) { toast.error('Failed to update coupon in database'); return }
+            }
+            dispatch(updateCoupon(updatedData))
+            toast.success(`Coupon "${editingCoupon.code}" updated!`)
+            setEditingCoupon(null)
+        } finally {
+            setIsSaving(false)
         }
-        if (isFirebaseConfigured()) {
-            const ok = await saveDocToFirestore('coupons', editingCoupon.code, updatedData)
-            if (!ok) { toast.error('Failed to update coupon in database'); return }
-        }
-        dispatch(updateCoupon(updatedData))
-        toast.success(`Coupon "${editingCoupon.code}" updated!`)
-        setEditingCoupon(null)
     }
 
     // ─── DELETE ────────────────────────────────────────
     const confirmDelete = async () => {
-        if (isFirebaseConfigured()) {
-            const ok = await deleteDocFromFirestore('coupons', deletingCode)
-            if (!ok) { toast.error('Failed to delete coupon from database'); return }
+        if (isDeleting) return
+        setIsDeleting(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await deleteDocFromFirestore('coupons', deletingCode)
+                if (!ok) { toast.error('Failed to delete coupon from database'); return }
+            }
+            dispatch(deleteCoupon(deletingCode))
+            toast.success(`Coupon "${deletingCode}" deleted!`)
+            setDeletingCode(null)
+        } finally {
+            setIsDeleting(false)
         }
-        dispatch(deleteCoupon(deletingCode))
-        toast.success(`Coupon "${deletingCode}" deleted!`)
-        setDeletingCode(null)
     }
 
     // ─── TOGGLE ────────────────────────────────────────
     const handleToggle = async (code) => {
-        const c = coupons.find(x => x.code === code)
-        if (isFirebaseConfigured()) {
-            await saveDocToFirestore('coupons', code, { isActive: !c?.isActive })
+        if (isSaving) return
+        setIsSaving(true)
+        try {
+            const c = coupons.find(x => x.code === code)
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('coupons', code, { isActive: !c?.isActive })
+                if (!ok) { toast.error('Failed to update coupon'); return }
+            }
+            dispatch(toggleCouponActive(code))
+            toast.success(`Coupon "${code}" ${c?.isActive ? 'deactivated' : 'activated'}!`)
+        } finally {
+            setIsSaving(false)
         }
-        dispatch(toggleCouponActive(code))
-        toast.success(`Coupon "${code}" ${c?.isActive ? 'deactivated' : 'activated'}!`)
     }
 
     // ─── COPY ──────────────────────────────────────────
@@ -464,7 +509,7 @@ export default function AdminCoupons() {
                                                         {status.label}
                                                     </span>
                                                     <p className="text-[10px] text-slate-400 mt-1">
-                                                        {format(new Date(coupon.expiresAt), 'MMM dd, yyyy')}
+                                                        {safeFormat(coupon.expiresAt, 'MMM dd, yyyy')}
                                                     </p>
                                                 </td>
 
@@ -584,7 +629,7 @@ export default function AdminCoupons() {
                                     <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                                         <div className="flex items-center gap-1 text-[10px] text-slate-400">
                                             <CalendarIcon size={11} />
-                                            <span>Expires: {format(new Date(coupon.expiresAt), 'MMM dd, yyyy')}</span>
+                                            <span>Expires: {safeFormat(coupon.expiresAt, 'MMM dd, yyyy')}</span>
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <button onClick={() => setEditingCoupon({ ...coupon })} className="px-2.5 py-1.5 text-xs text-blue-600 hover:bg-blue-50 rounded-lg transition font-medium">

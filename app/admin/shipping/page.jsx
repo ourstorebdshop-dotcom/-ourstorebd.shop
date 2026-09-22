@@ -19,13 +19,21 @@ export default function AdminShippingSettings() {
     const dispatch = useDispatch()
     const shipping = useSelector(state => state.shipping)
 
+    const [isSaving, setIsSaving] = useState(false)
+
     // Helper: persist shipping state to Firestore with exact data
     const persistShipping = async (nextShipping) => {
-        if (isFirebaseConfigured()) {
-            const saved = await saveDocToFirestore('settings', 'shipping', nextShipping)
-            if (!saved) { toast.error('Firestore save failed!'); return false }
+        if (isSaving) return false
+        setIsSaving(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const saved = await saveDocToFirestore('settings', 'shipping', nextShipping)
+                if (!saved) { toast.error('Firestore save failed!'); return false }
+            }
+            return true
+        } finally {
+            setIsSaving(false)
         }
-        return true
     }
 
     // Local edit state
@@ -210,14 +218,32 @@ export default function AdminShippingSettings() {
             return
         }
         const reader = new FileReader()
-        reader.onloadend = () => {
+        reader.onloadend = async () => {
+            const nextShipping = {
+                ...shipping,
+                paymentMethods: {
+                    ...shipping.paymentMethods,
+                    [method]: { ...shipping.paymentMethods[method], iconUrl: reader.result }
+                }
+            }
+            const ok = await persistShipping(nextShipping)
+            if (!ok) return
             dispatch(updatePaymentMethod({ method, data: { iconUrl: reader.result } }))
             toast.success('আইকন আপডেট হয়েছে!')
         }
         reader.readAsDataURL(file)
     }
 
-    const removeImage = (method) => {
+    const removeImage = async (method) => {
+        const nextShipping = {
+            ...shipping,
+            paymentMethods: {
+                ...shipping.paymentMethods,
+                [method]: { ...shipping.paymentMethods[method], iconUrl: '' }
+            }
+        }
+        const ok = await persistShipping(nextShipping)
+        if (!ok) return
         dispatch(updatePaymentMethod({ method, data: { iconUrl: '' } }))
         toast.success('আইকন রিমুভ হয়েছে!')
     }

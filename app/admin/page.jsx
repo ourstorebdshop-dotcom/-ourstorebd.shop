@@ -43,12 +43,16 @@ export default function AdminDashboard() {
 
     const totalProducts = products.length
     const totalOrders = orders.length
-    const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-    const allOrders = orders.map(o => ({ createdAt: o.createdAt, total: o.total || 0 }))
+    // Exclude cancelled, refunded, and fraud-rejected orders from revenue calculation and chart
+    const nonCancelledOrders = orders.filter(o => !['CANCELLED', 'REFUNDED', 'FRAUD_REJECTED'].includes(o.status))
+    const totalRevenue = nonCancelledOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const allOrders = nonCancelledOrders.map(o => ({ createdAt: o.createdAt, total: Number(o.total) || 0 }))
 
     // Promo Banner Editor State
     const [isEditing, setIsEditing] = useState(false)
     const [editData, setEditData] = useState(null)
+    const [isSavingBanner, setIsSavingBanner] = useState(false)
+    const [isTogglingBanner, setIsTogglingBanner] = useState(false)
 
     // Get the first (top priority) banner
     const promoBanner = banners.length > 0
@@ -68,32 +72,43 @@ export default function AdminDashboard() {
     }
 
     const saveEdit = async () => {
+        if (isSavingBanner) return
         if (!editData.message.trim()) {
             toast.error('Banner message is required')
             return
         }
-        // Persist to Firestore first so data survives refresh
-        if (isFirebaseConfigured()) {
-            const ok = await saveDocToFirestore('banners', editData.id, editData)
-            if (!ok) {
-                toast.error('Failed to save banner to database')
-                return
+        setIsSavingBanner(true)
+        try {
+            // Persist to Firestore first so data survives refresh
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('banners', editData.id, editData)
+                if (!ok) {
+                    toast.error('Failed to save banner to database')
+                    setIsSavingBanner(false)
+                    return
+                }
             }
+            dispatch(updateBanner(editData))
+            toast.success('Promo banner updated!')
+            setIsEditing(false)
+            setEditData(null)
+        } finally {
+            setIsSavingBanner(false)
         }
-        dispatch(updateBanner(editData))
-        toast.success('Promo banner updated!')
-        setIsEditing(false)
-        setEditData(null)
     }
 
     const handleToggle = async () => {
-        if (promoBanner) {
+        if (!promoBanner || isTogglingBanner) return
+        setIsTogglingBanner(true)
+        try {
             // Persist toggle to Firestore so it survives refresh
             if (isFirebaseConfigured()) {
                 await saveDocToFirestore('banners', promoBanner.id, { isActive: !promoBanner.isActive })
             }
             dispatch(toggleBannerActive(promoBanner.id))
             toast.success(`Banner ${promoBanner.isActive ? 'deactivated' : 'activated'}!`)
+        } finally {
+            setIsTogglingBanner(false)
         }
     }
 
@@ -191,7 +206,8 @@ export default function AdminDashboard() {
                         <div className="flex items-center gap-1">
                             <button
                                 onClick={handleToggle}
-                                className={`p-1.5 rounded-lg transition ${promoBanner.isActive ? 'text-green-600 hover:bg-green-50' : 'text-slate-400 hover:bg-slate-100'}`}
+                                disabled={isTogglingBanner}
+                                className={`p-1.5 rounded-lg transition ${promoBanner.isActive ? 'text-green-600 hover:bg-green-50' : 'text-slate-400 hover:bg-slate-100'} ${isTogglingBanner ? 'opacity-60 cursor-not-allowed' : ''}`}
                                 title={promoBanner.isActive ? 'Deactivate' : 'Activate'}
                             >
                                 {promoBanner.isActive ? <ToggleRightIcon size={18} /> : <ToggleLeftIcon size={18} />}
@@ -358,10 +374,11 @@ export default function AdminDashboard() {
                                 </button>
                                 <button
                                     onClick={saveEdit}
-                                    className="flex-1 sm:flex-none px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg transition shadow-xs flex items-center justify-center gap-1.5"
+                                    disabled={isSavingBanner}
+                                    className={`flex-1 sm:flex-none px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-sm font-medium rounded-lg transition shadow-xs flex items-center justify-center gap-1.5 ${isSavingBanner ? 'opacity-60 cursor-not-allowed' : ''}`}
                                 >
                                     <CheckIcon size={14} />
-                                    Save Changes
+                                    {isSavingBanner ? 'Saving...' : 'Save Changes'}
                                 </button>
                             </div>
                         </div>

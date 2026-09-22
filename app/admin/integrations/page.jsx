@@ -150,6 +150,7 @@ export default function AdminIntegrationsPage() {
 
     // Save All Settings handler
     const handleSaveAll = async () => {
+        if (isSaving) return
         setIsSaving(true)
         try {
             const payload = {
@@ -201,6 +202,7 @@ export default function AdminIntegrationsPage() {
 
     // Test Telegram Connection
     const handleTestTelegram = async () => {
+        if (isTestingTelegram) return
         if (!telegramForm.botToken?.trim() && !telegramForm.isTokenConfigured) {
             toast.error('অনুগ্রহ করে টেলিগ্রাম Bot Token প্রদান করুন।')
             return
@@ -238,6 +240,7 @@ export default function AdminIntegrationsPage() {
 
     // Test Google Sheets Connection
     const handleTestSheets = async () => {
+        if (isTestingSheets) return
         if (!sheetsForm.webhookUrl?.trim()) {
             toast.error('অনুগ্রহ করে Google Apps Script Webhook URL দিন।')
             return
@@ -297,7 +300,7 @@ export default function AdminIntegrationsPage() {
 
     // Retry specific order sync
     const handleRetrySync = async (log) => {
-        if (!log?.orderId) return
+        if (!log?.orderId || retryingLogId) return
         setRetryingLogId(log.id)
 
         try {

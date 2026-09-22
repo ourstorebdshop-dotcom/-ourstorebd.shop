@@ -72,6 +72,8 @@ export default function AdminBanners() {
     const [deletingBannerId, setDeletingBannerId] = useState(null)
     const [formData, setFormData] = useState({ ...emptyBanner })
     const [showResetConfirm, setShowResetConfirm] = useState(false)
+    const [isSaving, setIsSaving] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
 
     const handleReset = async () => {
         dispatch(resetBanners())
@@ -90,6 +92,7 @@ export default function AdminBanners() {
 
     const handleSubmit = async (e) => {
         e.preventDefault()
+        if (isSaving) return
         if (!formData.message.trim()) {
             toast.error('Please enter a banner message')
             return
@@ -105,28 +108,33 @@ export default function AdminBanners() {
             return
         }
 
-        if (editingBanner) {
-            const updatedBanner = { ...formData, id: editingBanner.id }
-            if (isFirebaseConfigured()) {
-                const ok = await saveDocToFirestore('banners', editingBanner.id, updatedBanner)
-                if (!ok) { toast.error('Failed to save banner to database'); return }
+        setIsSaving(true)
+        try {
+            if (editingBanner) {
+                const updatedBanner = { ...formData, id: editingBanner.id }
+                if (isFirebaseConfigured()) {
+                    const ok = await saveDocToFirestore('banners', editingBanner.id, updatedBanner)
+                    if (!ok) { toast.error('Failed to save banner to database'); return }
+                }
+                dispatch(updateBanner(updatedBanner))
+                toast.success('Banner updated successfully!')
+                setEditingBanner(null)
+            } else {
+                const newId = `banner_${Date.now()}`
+                const newBanner = { ...formData, id: newId, priority: banners.length + 1, createdAt: new Date().toISOString() }
+                if (isFirebaseConfigured()) {
+                    const ok = await saveDocToFirestore('banners', newId, newBanner)
+                    if (!ok) { toast.error('Failed to save banner to database'); return }
+                }
+                dispatch(addBanner(newBanner))
+                toast.success('Banner created successfully!')
             }
-            dispatch(updateBanner(updatedBanner))
-            toast.success('Banner updated successfully!')
-            setEditingBanner(null)
-        } else {
-            const newId = `banner_${Date.now()}`
-            const newBanner = { ...formData, id: newId, priority: banners.length + 1, createdAt: new Date().toISOString() }
-            if (isFirebaseConfigured()) {
-                const ok = await saveDocToFirestore('banners', newId, newBanner)
-                if (!ok) { toast.error('Failed to save banner to database'); return }
-            }
-            dispatch(addBanner(newBanner))
-            toast.success('Banner created successfully!')
-        }
 
-        setFormData({ ...emptyBanner })
-        setShowForm(false)
+            setFormData({ ...emptyBanner })
+            setShowForm(false)
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     const handleEdit = (banner) => {
@@ -136,22 +144,34 @@ export default function AdminBanners() {
     }
 
     const handleDelete = async () => {
-        if (isFirebaseConfigured()) {
-            const ok = await deleteDocFromFirestore('banners', deletingBannerId)
-            if (!ok) { toast.error('Failed to delete banner from database'); return }
+        if (isDeleting) return
+        setIsDeleting(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await deleteDocFromFirestore('banners', deletingBannerId)
+                if (!ok) { toast.error('Failed to delete banner from database'); return }
+            }
+            dispatch(deleteBanner(deletingBannerId))
+            toast.success('Banner deleted!')
+            setDeletingBannerId(null)
+        } finally {
+            setIsDeleting(false)
         }
-        dispatch(deleteBanner(deletingBannerId))
-        toast.success('Banner deleted!')
-        setDeletingBannerId(null)
     }
 
     const handleToggle = async (id) => {
-        const banner = banners.find(b => b.id === id)
-        if (isFirebaseConfigured()) {
-            await saveDocToFirestore('banners', id, { isActive: !banner?.isActive })
+        if (isSaving) return
+        setIsSaving(true)
+        try {
+            const banner = banners.find(b => b.id === id)
+            if (isFirebaseConfigured()) {
+                await saveDocToFirestore('banners', id, { isActive: !banner?.isActive })
+            }
+            dispatch(toggleBannerActive(id))
+            toast.success(`Banner ${banner?.isActive ? 'deactivated' : 'activated'}!`)
+        } finally {
+            setIsSaving(false)
         }
-        dispatch(toggleBannerActive(id))
-        toast.success(`Banner ${banner?.isActive ? 'deactivated' : 'activated'}!`)
     }
 
     const handleCancel = () => {

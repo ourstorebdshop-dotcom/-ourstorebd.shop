@@ -77,13 +77,22 @@ export default function CashFlowPage() {
     const dispatch = useDispatch()
     const store = useStore()
 
+    const [isSaving, setIsSaving] = useState(false)
+
     // Persist cashflow state to Firestore — called AFTER dispatch
     // Reads state synchronously (no setTimeout) so it's always fresh
     const persistCashflow = async () => {
-        if (isFirebaseConfigured()) {
-            const state = store.getState().cashflow
-            const saved = await saveDocToFirestore('settings', 'cashflow', state)
-            if (!saved) { toast.error('Firestore save failed!') }
+        if (isSaving) return false
+        setIsSaving(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const state = store.getState().cashflow
+                const saved = await saveDocToFirestore('settings', 'cashflow', state)
+                if (!saved) { toast.error('Firestore save failed!'); return false }
+            }
+            return true
+        } finally {
+            setIsSaving(false)
         }
     }
 
@@ -402,14 +411,17 @@ export default function CashFlowPage() {
         setDeleteConfirmId(null)
     }
 
-    const handleSyncOrders = () => {
-        const completedOrders = storeOrders.filter(o => o.total > 0)
+    const handleSyncOrders = async () => {
+        if (isSaving) return
+        const completedOrders = storeOrders.filter(
+            o => Number(o.total) > 0 && !['CANCELLED', 'REFUNDED', 'FRAUD_REJECTED'].includes(o.status)
+        )
         if (completedOrders.length === 0) {
-            toast.error('সিঙ্ক করার মতো কোনো অর্ডার পাওয়া যায়নি')
+            toast.error('সিঙ্ক করার মতো কোনো বৈধ অর্ডার পাওয়া যায়নি')
             return
         }
         dispatch(syncOrdersToCashflow(completedOrders))
-        persistCashflow()
+        await persistCashflow()
         toast.success(`${completedOrders.length} টি স্টোর অর্ডারের পেমেন্ট সিঙ্ক সম্পন্ন হয়েছে!`, { icon: '🔄' })
     }
 

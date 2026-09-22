@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import toast from "react-hot-toast"
 import { updateOrderStatus as setOrderStatusRedux, deleteOrder as removeOrderRedux } from "@/lib/features/order/orderSlice"
@@ -36,34 +36,60 @@ export default function AdminOrders() {
     const [deletingOrderId, setDeletingOrderId] = useState(null)
     const [search, setSearch] = useState("")
     const [statusFilter, setStatusFilter] = useState("ALL")
+    const [savingOrderId, setSavingOrderId] = useState(null)
+    const [isDeletingOrder, setIsDeletingOrder] = useState(false)
 
-    const handleUpdateOrderStatus = async (orderId, newStatus) => {
-        if (isFirebaseConfigured()) {
-            const ok = await saveDocToFirestore('orders', orderId, { status: newStatus, updatedAt: new Date().toISOString() })
-            if (!ok) {
-                toast.error('অর্ডার স্ট্যাটাস ডাটাবেজে আপডেট করা যায়নি!')
-                return
+    // Escape key handler for modals
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') {
+                if (deletingOrderId) setDeletingOrderId(null)
+                else if (isModalOpen) { setSelectedOrder(null); setIsModalOpen(false) }
             }
         }
-        dispatch(setOrderStatusRedux({ orderId, status: newStatus }))
-        if (newStatus === 'CANCELLED' || newStatus === 'REFUNDED') {
-            const ord = orders.find(o => o.id === orderId)
-            if (ord) trackRefund(ord)
+        document.addEventListener('keydown', handleKeyDown)
+        return () => document.removeEventListener('keydown', handleKeyDown)
+    }, [deletingOrderId, isModalOpen])
+
+    const handleUpdateOrderStatus = async (orderId, newStatus) => {
+        if (savingOrderId) return
+        setSavingOrderId(orderId)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('orders', orderId, { status: newStatus, updatedAt: new Date().toISOString() })
+                if (!ok) {
+                    toast.error('অর্ডার স্ট্যাটাস ডাটাবেজে আপডেট করা যায়নি!')
+                    return
+                }
+            }
+            dispatch(setOrderStatusRedux({ orderId, status: newStatus }))
+            if (newStatus === 'CANCELLED' || newStatus === 'REFUNDED') {
+                const ord = orders.find(o => o.id === orderId)
+                if (ord) trackRefund(ord)
+            }
+            toast.success(`Order status updated to ${newStatus}`)
+        } finally {
+            setSavingOrderId(null)
         }
-        toast.success(`Order status updated to ${newStatus}`)
     }
 
     const confirmDeleteOrder = async () => {
-        if (isFirebaseConfigured()) {
-            const ok = await deleteDocFromFirestore('orders', deletingOrderId)
-            if (!ok) {
-                toast.error('অর্ডারটি ডাটাবেজ থেকে মুছে ফেলা যায়নি!')
-                return
+        if (isDeletingOrder) return
+        setIsDeletingOrder(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await deleteDocFromFirestore('orders', deletingOrderId)
+                if (!ok) {
+                    toast.error('অর্ডারটি ডাটাবেজ থেকে মুছে ফেলা যায়নি!')
+                    return
+                }
             }
+            dispatch(removeOrderRedux(deletingOrderId))
+            toast.success("Order deleted successfully!")
+            setDeletingOrderId(null)
+        } finally {
+            setIsDeletingOrder(false)
         }
-        dispatch(removeOrderRedux(deletingOrderId))
-        toast.success("Order deleted successfully!")
-        setDeletingOrderId(null)
     }
 
     const openModal = (orderId) => {
@@ -160,7 +186,7 @@ export default function AdminOrders() {
                                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                             }`}
                         >
-                            {status === "ALL" ? "All Orders" : status.replace("_", " ")}
+                            {status === "ALL" ? "All Orders" : status.replaceAll("_", " ")}
                         </button>
                     ))}
                 </div>
@@ -221,7 +247,7 @@ export default function AdminOrders() {
                                             )}
                                         </td>
                                         <td className="px-4 py-4 font-bold text-slate-800">
-                                            {currency}{Number(order.total).toLocaleString('en-IN')}
+                                            {currency}{Number(order.total || 0).toLocaleString('en-IN')}
                                         </td>
                                         <td className="px-4 py-4">
                                             <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-semibold rounded">
@@ -240,6 +266,7 @@ export default function AdminOrders() {
                                         <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                                             <select
                                                 value={order.status}
+                                                disabled={savingOrderId === order.id}
                                                 onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)}
                                                 className="border border-slate-200 rounded-lg text-xs py-1.5 px-2 font-medium bg-white focus:ring-2 focus:ring-green-100 outline-none"
                                             >
@@ -254,7 +281,7 @@ export default function AdminOrders() {
                                             </select>
                                         </td>
                                         <td className="px-4 py-4 text-xs text-slate-400">
-                                            {new Date(order.createdAt).toLocaleDateString()}
+                                            {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : '—'}
                                         </td>
                                         <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                                             <div className="flex items-center justify-center gap-1">
@@ -463,8 +490,9 @@ export default function AdminOrders() {
                                 <span className="text-xs text-slate-500 font-medium">Status:</span>
                                 <select
                                     value={modalOrder.status}
+                                    disabled={savingOrderId === modalOrder.id}
                                     onChange={(e) => handleUpdateOrderStatus(modalOrder.id, e.target.value)}
-                                    className="border border-slate-200 rounded-lg text-xs py-1.5 px-2 font-medium bg-white focus:ring-2 focus:ring-green-100 outline-none"
+                                    className="border border-slate-200 rounded-lg text-xs py-1.5 px-2 font-medium bg-white focus:ring-2 focus:ring-green-100 outline-none disabled:opacity-50"
                                 >
                                     <option value="ORDER_PLACED">ORDER PLACED</option>
                                     <option value="PENDING_REVIEW">PENDING REVIEW</option>
@@ -503,7 +531,7 @@ export default function AdminOrders() {
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-slate-500">Status:</span>
-                                        <span className="font-semibold">{delOrder.status?.replace('_', ' ')}</span>
+                                        <span className="font-semibold">{delOrder.status?.replaceAll('_', ' ')}</span>
                                     </div>
                                 </div>
                             ) : null
@@ -521,7 +549,8 @@ export default function AdminOrders() {
                             </button>
                             <button
                                 onClick={confirmDeleteOrder}
-                                className="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition shadow-xs"
+                                disabled={isDeletingOrder}
+                                className="w-full py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg transition shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 Delete
                             </button>

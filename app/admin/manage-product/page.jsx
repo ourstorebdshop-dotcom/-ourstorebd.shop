@@ -42,6 +42,9 @@ export default function AdminManageProducts() {
     const [editingProduct, setEditingProduct] = useState(null)
     const [viewingProduct, setViewingProduct] = useState(null)
     const [deletingProductId, setDeletingProductId] = useState(null)
+    const [isSaving, setIsSaving] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [togglingStockId, setTogglingStockId] = useState(null)
 
     const categories = ["All", ...new Set(products.flatMap(p => {
         if (p.categories && Array.isArray(p.categories) && p.categories.length > 0) return p.categories
@@ -51,22 +54,29 @@ export default function AdminManageProducts() {
 
     // Toggle product stock
     const toggleStock = async (productId) => {
-        const p = products.find(p => p.id === productId)
-        const newStock = !p?.inStock
-        if (isFirebaseConfigured()) {
-            const ok = await saveDocToFirestore('products', productId, { inStock: newStock })
-            if (!ok) {
-                toast.error('স্টক স্ট্যাটাস ডাটাবেজে আপডেট করা যায়নি!')
-                return
+        if (togglingStockId) return
+        setTogglingStockId(productId)
+        try {
+            const p = products.find(p => p.id === productId)
+            const newStock = !p?.inStock
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('products', productId, { inStock: newStock, updatedAt: new Date().toISOString() })
+                if (!ok) {
+                    toast.error('স্টক স্ট্যাটাস ডাটাবেজে আপডেট করা যায়নি!')
+                    return
+                }
             }
+            dispatch(toggleProductStock(productId))
+            toast.success(`Product "${p?.name}" marked as ${newStock ? 'In Stock' : 'Out of Stock'}`)
+        } finally {
+            setTogglingStockId(null)
         }
-        dispatch(toggleProductStock(productId))
-        toast.success(`Product "${p?.name}" marked as ${newStock ? 'In Stock' : 'Out of Stock'}`)
     }
 
     // Handle Edit Submit
     const handleEditSubmit = async (e) => {
         e.preventDefault()
+        if (isSaving) return
 
         const mrpVal = parseFloat(editingProduct.mrp)
         const priceVal = parseFloat(editingProduct.price)
@@ -95,66 +105,55 @@ export default function AdminManageProducts() {
             return
         }
 
-        const updatedProduct = {
-            ...editingProduct,
-            name: editingProduct.name.trim(),
-            description: editingProduct.description.trim(),
-            mrp: mrpVal,
-            price: priceVal,
-            categories: editedCategories,
-            category: editedCategories[0] || '',
-            updatedAt: new Date().toISOString()
-        }
-
-        if (isFirebaseConfigured()) {
-            const ok = await saveDocToFirestore('products', updatedProduct.id, updatedProduct)
-            if (!ok) {
-                toast.error('প্রোডাক্ট ডাটাবেজে আপডেট করা যায়নি!')
-                return
-            }
-        }
-
-        dispatch(updateProduct(updatedProduct))
-        // Immediate localStorage cache update
+        setIsSaving(true)
         try {
-            const saved = localStorage.getItem('gocart_products')
-            if (saved) {
-                const parsed = JSON.parse(saved)
-                const idx = parsed.findIndex(p => p.id === updatedProduct.id)
-                if (idx !== -1) parsed[idx] = updatedProduct
-                localStorage.setItem('gocart_products', JSON.stringify(parsed))
+            const updatedProduct = {
+                ...editingProduct,
+                name: editingProduct.name.trim(),
+                description: editingProduct.description.trim(),
+                mrp: mrpVal,
+                price: priceVal,
+                categories: editedCategories,
+                category: editedCategories[0] || '',
+                updatedAt: new Date().toISOString()
             }
-        } catch (err) { /* ignore */ }
 
-        toast.success(`"${editingProduct.name}" সফলভাবে আপডেট হয়েছে!`)
-        setEditingProduct(null)
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('products', updatedProduct.id, updatedProduct)
+                if (!ok) {
+                    toast.error('প্রোডাক্ট ডাটাবেজে আপডেট করা যায়নি!')
+                    return
+                }
+            }
+
+            dispatch(updateProduct(updatedProduct))
+            toast.success(`"${editingProduct.name}" সফলভাবে আপডেট হয়েছে!`)
+            setEditingProduct(null)
+        } finally {
+            setIsSaving(false)
+        }
     }
 
     // Handle Delete Confirm
     const handleDeleteConfirm = async () => {
-        const prod = products.find(p => p.id === deletingProductId)
-        if (isFirebaseConfigured()) {
-            const ok = await deleteDocFromFirestore('products', deletingProductId)
-            if (!ok) {
-                toast.error('প্রোডাক্ট ডাটাবেজ থেকে মুছে ফেলা যায়নি!')
-                return
-            }
-        }
-
-        dispatch(deleteProductAction(deletingProductId))
-
-        // Immediate localStorage cache update
+        if (isDeleting) return
+        setIsDeleting(true)
         try {
-            const saved = localStorage.getItem('gocart_products')
-            if (saved) {
-                const parsed = JSON.parse(saved)
-                const remaining = parsed.filter(p => p.id !== deletingProductId)
-                localStorage.setItem('gocart_products', JSON.stringify(remaining))
+            const prod = products.find(p => p.id === deletingProductId)
+            if (isFirebaseConfigured()) {
+                const ok = await deleteDocFromFirestore('products', deletingProductId)
+                if (!ok) {
+                    toast.error('প্রোডাক্ট ডাটাবেজ থেকে মুছে ফেলা যায়নি!')
+                    return
+                }
             }
-        } catch (err) { /* ignore */ }
 
-        toast.success(`Product "${prod?.name || ''}" deleted successfully!`)
-        setDeletingProductId(null)
+            dispatch(deleteProductAction(deletingProductId))
+            toast.success(`Product "${prod?.name || ''}" deleted successfully!`)
+            setDeletingProductId(null)
+        } finally {
+            setIsDeleting(false)
+        }
     }
 
     // Demo products detection & purge
