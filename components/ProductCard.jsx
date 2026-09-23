@@ -64,11 +64,95 @@ const ProductCard = ({ product }) => {
             return
         }
 
-        // Use URL-based heuristic instead of canvas pixel inspection (Issue 8.1, 9.2)
-        // This avoids creating offscreen canvases and double-downloading images
-        const style = getInitialStyle(resolved)
-        styleCache.set(srcStr, style)
-        setImgStyle(style)
+        // Canvas-based pixel inspection (same approach as ProductDetails) to determine
+        // the correct object-fit per image. Runs in requestIdleCallback to avoid blocking
+        // the main thread on homepage with many product cards.
+        let isCancelled = false
+        const scheduleIdle = 'requestIdleCallback' in window
+            ? window.requestIdleCallback
+            : (fn) => setTimeout(fn, 200)
+
+        const idleId = scheduleIdle(() => {
+            if (isCancelled) return
+            const img = new window.Image()
+            img.crossOrigin = 'anonymous'
+
+            img.onload = () => {
+                if (isCancelled) return
+                try {
+                    const nw = img.naturalWidth || 1
+                    const nh = img.naturalHeight || 1
+                    const aspectRatio = nw / nh
+
+                    const canvas = document.createElement('canvas')
+                    canvas.width = 16
+                    canvas.height = 16
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+
+                    if (!ctx) {
+                        const fallback = getInitialStyle(resolved)
+                        styleCache.set(srcStr, fallback)
+                        setImgStyle(fallback)
+                        return
+                    }
+
+                    ctx.drawImage(img, 0, 0, 16, 16)
+                    const data = ctx.getImageData(0, 0, 16, 16).data
+
+                    const corners = [0, 15, 15 * 16, 15 * 16 + 15]
+                    let hasTransparentCorner = false
+                    let whiteCornersCount = 0
+
+                    for (const idx of corners) {
+                        const p = idx * 4
+                        const r = data[p]
+                        const g = data[p + 1]
+                        const b = data[p + 2]
+                        const a = data[p + 3]
+
+                        if (a < 40) {
+                            hasTransparentCorner = true
+                        }
+                        if (a >= 200 && r > 230 && g > 230 && b > 230) {
+                            whiteCornersCount++
+                        }
+                    }
+
+                    let style
+                    if (hasTransparentCorner) {
+                        style = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-[#F8FAFC]' }
+                    } else if (whiteCornersCount >= 3) {
+                        style = { fit: 'contain', padding: 'p-3 sm:p-4', bg: 'bg-white' }
+                    } else if (aspectRatio > 1.8 || aspectRatio < 0.45) {
+                        style = { fit: 'contain', padding: 'p-3', bg: 'bg-[#F5F5F5]' }
+                    } else {
+                        style = { fit: 'cover', padding: 'p-0', bg: 'bg-[#F5F5F5]' }
+                    }
+
+                    styleCache.set(srcStr, style)
+                    setImgStyle(style)
+                } catch (e) {
+                    const fallback = getInitialStyle(resolved)
+                    styleCache.set(srcStr, fallback)
+                    setImgStyle(fallback)
+                }
+            }
+
+            img.onerror = () => {
+                const fallback = getInitialStyle(resolved)
+                styleCache.set(srcStr, fallback)
+                setImgStyle(fallback)
+            }
+
+            img.src = srcStr
+        })
+
+        return () => {
+            isCancelled = true
+            if ('cancelIdleCallback' in window && typeof idleId === 'number') {
+                window.cancelIdleCallback(idleId)
+            }
+        }
     }, [product?.images])
 
     const wishlistItems = useSelector(state => state.wishlist?.items || [])
