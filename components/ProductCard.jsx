@@ -153,14 +153,14 @@ const ProductCard = ({ product }) => {
             router.push(`/product/${product.id}`)
         }}>
             {/* Image Container — strictly preserves homepage size (h-48 sm:h-72) */}
-            <div className={`relative ${imgStyle.bg} border border-slate-100/80 h-48 sm:h-72 rounded-xl flex items-center justify-center overflow-hidden transition-colors duration-300`}>
+            <div className={`relative ${imgStyle.bg} border border-slate-100/80 h-48 sm:h-72 rounded-xl flex items-center justify-center overflow-hidden transition-colors duration-300 ${imgStyle.fit === 'cover' ? '' : imgStyle.padding}`}>
                 <Image
                     fill
                     sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                     className={`transition-all duration-300 group-hover:scale-105 ${
                         imgStyle.fit === 'cover'
                             ? 'object-cover'
-                            : `object-contain ${imgStyle.padding}`
+                            : 'object-contain'
                     }`}
                     src={currentImg}
                     onError={() => {
