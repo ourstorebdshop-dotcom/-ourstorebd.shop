@@ -61,12 +61,37 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // ── CHAT SYSTEM (Admin SDK only) ────────────────────────────────
+    // ── CHAT SYSTEM (Client SDK — no Firebase Auth in this project) ─
     match /conversations/{conversationId} {
-      allow read, write: if false;
+      // Anyone can create a conversation (customers start chats)
+      allow create: if request.resource.data.keys().hasAll(['customerName', 'status', 'createdAt'])
+                    && request.resource.data.status == 'open';
 
+      // Read: Allow (no Firebase Auth to verify identity)
+      allow read: if true;
+
+      // Update: Allow (status changes, unread count resets)
+      allow update: if true;
+
+      // Delete: Allow (admins can delete conversations)
+      allow delete: if true;
+
+      // Messages subcollection
       match /messages/{messageId} {
-        allow read, write: if false;
+        // Anyone can read messages in accessible conversations
+        allow read: if true;
+
+        // Anyone can create a message (customer or admin)
+        allow create: if request.resource.data.keys().hasAll(['message', 'senderType', 'createdAt'])
+                      && request.resource.data.message is string
+                      && request.resource.data.message.size() <= 2000
+                      && request.resource.data.senderType in ['customer', 'admin'];
+
+        // Allow updating isRead field
+        allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
+
+        // Allow deleting messages
+        allow delete: if true;
       }
     }
   }
