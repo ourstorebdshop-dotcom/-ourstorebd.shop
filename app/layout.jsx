@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import StoreProvider from "@/app/StoreProvider";
 import { OrganizationJsonLd, WebsiteJsonLd } from "@/components/seo/JsonLd";
 import TrackingManager from "@/components/tracking/TrackingManager";
+import VisitorTracker from "@/components/tracking/VisitorTracker";
 import "./globals.css";
 
 const outfit = Outfit({ 
@@ -145,6 +146,7 @@ export default function RootLayout({ children }) {
                 <StoreProvider>
                     <Suspense fallback={null}>
                         <TrackingManager />
+                        <VisitorTracker />
                     </Suspense>
                     <Toaster position="top-center" reverseOrder={false} />
                     {children}
