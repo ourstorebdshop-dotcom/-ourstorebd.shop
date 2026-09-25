@@ -18,7 +18,7 @@ const Navbar = () => {
     const [categoryDropdown, setCategoryDropdown] = useState(false);
     const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
-    const [logoError, setLogoError] = useState(false);
+    const [logoImageError, setLogoImageError] = useState(false);
     const dropdownRef = useRef(null);
     const categoryRef = useRef(null);
 
@@ -123,6 +123,11 @@ const Navbar = () => {
         setMounted(true);
     }, []);
 
+    // Reset image error state when logo URL changes (admin update)
+    useEffect(() => {
+        setLogoImageError(false);
+    }, [logoImageUrl]);
+
     const safeCartCount = mounted ? cartCount : 0;
     const safeWishlistCount = mounted ? wishlistCount : 0;
     const safeIsAuthenticated = mounted ? isAuthenticated : false;
@@ -197,9 +202,15 @@ const Navbar = () => {
             <div className="mx-6">
                 <div className="flex items-center justify-between max-w-7xl mx-auto py-3.5 transition-all">
 
-                    <Link href="/" className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight flex items-center">
-                        {logoType === 'image' && logoImageUrl && !logoError ? (
-                            <img src={logoImageUrl} alt={`${logoTextPrefix} ${logoTextMiddle} ${logoTextSuffix}`} className="h-8 sm:h-9 object-contain" onError={() => setLogoError(true)} />
+                    <Link href="/" className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight flex items-center shrink-0">
+                        {logoType === 'image' && logoImageUrl && !logoImageError ? (
+                            <img 
+                                src={logoImageUrl} 
+                                alt={`${logoTextPrefix} ${logoTextMiddle} ${logoTextSuffix}`} 
+                                className="h-8 sm:h-9 max-w-[160px] sm:max-w-[200px] object-contain" 
+                                loading="eager"
+                                onError={() => setLogoImageError(true)}
+                            />
                         ) : (
                             <>
                                 <span className="text-green-600">{logoTextPrefix}</span>{' '}
