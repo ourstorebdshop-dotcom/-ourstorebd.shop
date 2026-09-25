@@ -79,23 +79,24 @@ export default function AdminReviewsPage() {
     const allReviews = useMemo(() => {
         const list = []
         products.forEach(p => {
+            const prodId = p.id || p._id
             if (Array.isArray(p.rating)) {
                 p.rating.forEach((r, idx) => {
                     if (r && (r.review !== undefined || r.rating !== undefined)) {
                         // Use a stable hash based on content, not array index, to prevent ID collision on reorder
-                        const stableKey = `${p.id}_${r.user?.email || r.user?.name || ''}_${r.review || ''}_${r.createdAt || r.date || idx}`
+                        const stableKey = `${prodId}_${r.user?.email || r.user?.name || ''}_${r.review || ''}_${r.createdAt || r.date || idx}`
                         let hash = 0
                         for (let i = 0; i < stableKey.length; i++) {
                             hash = ((hash << 5) - hash) + stableKey.charCodeAt(i)
                             hash = hash & hash
                         }
-                        const reviewId = r.id || `gen_${p.id}_${Math.abs(hash).toString(36)}`
+                        const reviewId = r.id || `gen_${prodId}_${Math.abs(hash).toString(36)}`
                         const isVisible = r.isVisible !== false && r.status !== 'hidden'
                         list.push({
                             ...r,
                             id: reviewId,
                             originalId: r.id,
-                            productId: p.id,
+                            productId: prodId,
                             productName: p.name || "Untitled Product",
                             productImage: Array.isArray(p.images) && p.images[0] ? p.images[0] : null,
                             productCategory: p.category || (Array.isArray(p.categories) ? p.categories[0] : "General"),
@@ -185,7 +186,7 @@ export default function AdminReviewsPage() {
             const stored = localStorage.getItem('gocart_products')
             if (stored) {
                 const list = JSON.parse(stored)
-                const idx = list.findIndex(p => p.id === productId)
+                const idx = list.findIndex(p => p.id === productId || p._id === productId)
                 if (idx !== -1) {
                     list[idx].rating = updatedRatings
                     localStorage.setItem('gocart_products', JSON.stringify(list))
@@ -203,7 +204,7 @@ export default function AdminReviewsPage() {
 
         setTogglingIds(prev => new Set(prev).add(review.id))
 
-        const product = products.find(p => p.id === review.productId)
+        const product = products.find(p => p.id === review.productId || p._id === review.productId)
         if (!product) {
             toast.error("প্রোডাক্টটি খুঁজে পাওয়া যায়নি")
             setTogglingIds(prev => {
@@ -273,7 +274,7 @@ export default function AdminReviewsPage() {
         setIsSaving(true)
 
         try {
-            const product = products.find(p => p.id === deletingReview.productId)
+            const product = products.find(p => p.id === deletingReview.productId || p._id === deletingReview.productId)
             if (product) {
                 const currentRatings = Array.isArray(product.rating) ? product.rating : []
                 const updatedRatings = currentRatings.filter((r, idx) => {
@@ -330,7 +331,7 @@ export default function AdminReviewsPage() {
 
         setIsSaving(true)
         try {
-            const product = products.find(p => p.id === editingReview.productId)
+            const product = products.find(p => p.id === editingReview.productId || p._id === editingReview.productId)
             if (product) {
                 const currentRatings = Array.isArray(product.rating) ? [...product.rating] : []
                 const updatedRatings = currentRatings.map((r, idx) => {
@@ -427,7 +428,7 @@ export default function AdminReviewsPage() {
 
         setIsSaving(true)
         try {
-            const product = products.find(p => p.id === newReviewForm.productId)
+            const product = products.find(p => p.id === newReviewForm.productId || p._id === newReviewForm.productId)
             if (product) {
                 const newId = `rat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
                 const reviewObj = {

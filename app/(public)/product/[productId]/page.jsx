@@ -16,7 +16,7 @@ export default function Product() {
 
     useEffect(() => {
         if (products && products.length > 0) {
-            const foundProduct = products.find((p) => p.id === productId);
+            const foundProduct = products.find((p) => (p.id && p.id === productId) || (p._id && p._id === productId));
             setProduct(foundProduct || null);
             setHasChecked(true);
             if (foundProduct?.name) {
@@ -30,7 +30,7 @@ export default function Product() {
         { name: "Home", url: "/" },
         { name: "Products", url: "/shop" },
         ...(product?.category ? [{ name: product.category, url: `/shop?search=${encodeURIComponent(product.category)}` }] : []),
-        ...(product?.name ? [{ name: product.name, url: `/product/${productId}` }] : [])
+        ...(product?.name ? [{ name: product.name, url: `/product/${product.id || product._id || productId}` }] : [])
     ];
 
     return (

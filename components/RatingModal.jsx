@@ -18,15 +18,17 @@ const RatingModal = ({ ratingModal, setRatingModal }) => {
 
     const handleSubmit = async () => {
         if (rating < 1 || rating > 5) {
-            return toast('Please select a rating');
+            toast.error('Please select a rating (1-5 stars)');
+            return;
         }
-        if (review.length < 5) {
-            return toast('write a short review');
+        if (review.trim() && review.trim().length < 3) {
+            toast.error('Please write at least 3 characters for the review');
+            return;
         }
 
         try {
             const prodId = ratingModal?.productId
-            const product = products.find(p => p.id === prodId)
+            const product = products.find(p => p.id === prodId || p._id === prodId)
             const currentRatings = Array.isArray(product?.rating) ? [...product.rating] : []
 
             const newReview = {
@@ -65,7 +67,7 @@ const RatingModal = ({ ratingModal, setRatingModal }) => {
                 const stored = localStorage.getItem('gocart_products')
                 if (stored && prodId) {
                     const list = JSON.parse(stored)
-                    const idx = list.findIndex(p => p.id === prodId)
+                    const idx = list.findIndex(p => p.id === prodId || p._id === prodId)
                     if (idx !== -1) {
                         list[idx].rating = updatedRatings
                         localStorage.setItem('gocart_products', JSON.stringify(list))
@@ -104,7 +106,7 @@ const RatingModal = ({ ratingModal, setRatingModal }) => {
                     value={review}
                     onChange={(e) => setReview(e.target.value)}
                 ></textarea>
-                <button onClick={e => toast.promise(handleSubmit(), { loading: 'Submitting...' })} className='w-full bg-green-500 text-white py-2 rounded-md hover:bg-green-600 transition'>
+                <button onClick={() => handleSubmit()} className='w-full bg-green-500 text-white py-2 rounded-md hover:bg-green-600 transition cursor-pointer'>
                     Submit Rating
                 </button>
             </div>

@@ -22,7 +22,6 @@ import { runAllOrderChecks, invalidateOrdersCache } from '@/lib/fraud/duplicateD
 import { calculateRiskScore } from '@/lib/fraud/riskScorer'
 import { logFraudEvent } from '@/lib/fraud/auditLog'
 import { getFraudConfig } from '@/lib/fraud/config'
-import { productDummyData } from '@/assets/assets'
 import { syncOrderIntegrations } from '@/lib/integrations/syncEngine'
 
 // ── In-memory caches with TTL (shared across requests in the same node process) ──
@@ -116,12 +115,6 @@ async function getOrderProducts(productIds, firebaseReady) {
                 } catch (e) {
                     console.warn(`[OrderAPI] Failed to fetch product ${strId} via Admin SDK:`, e)
                 }
-            }
-
-            // Fallback to dummy data
-            const dummy = Array.isArray(productDummyData) && productDummyData.find(p => String(p.id) === strId)
-            if (dummy) {
-                return dummy
             }
             return null
         })
@@ -340,8 +333,7 @@ export async function POST(request) {
         const validatedItems = []
 
         for (const item of items) {
-            const serverProduct = serverProducts.find(p => String(p.id) === String(item.productId)) ||
-                                  (Array.isArray(productDummyData) && productDummyData.find(p => String(p.id) === String(item.productId)))
+            const serverProduct = serverProducts.find(p => String(p.id || p._id) === String(item.productId))
             
             if (!serverProduct) {
                 return NextResponse.json(
@@ -352,31 +344,33 @@ export async function POST(request) {
 
             if (serverProduct.inStock === false) {
                 return NextResponse.json(
-                    { error: `"${serverProduct.name}" স্টকে নেই।`, code: 'OUT_OF_STOCK' },
+                    { error: `"${serverProduct.name || serverProduct.title || 'পণ্য'}" স্টকে নেই।`, code: 'OUT_OF_STOCK' },
                     { status: 400 }
                 )
             }
 
             const qty = Math.max(1, Math.min(parseInt(item.quantity) || 1, 100))
             const price = serverProduct.offerPrice || serverProduct.price || 0
+            const resolvedProdId = serverProduct.id || serverProduct._id || item.productId
+            const resolvedProdName = serverProduct.name || serverProduct.title || item.name || 'Product'
             serverCalculatedSubtotal += price * qty
 
             validatedItems.push({
-                productId: serverProduct.id,
-                id: serverProduct.id,
-                name: serverProduct.name,
-                title: serverProduct.name,
+                productId: resolvedProdId,
+                id: resolvedProdId,
+                name: resolvedProdName,
+                title: resolvedProdName,
                 quantity: qty,
                 price: price,
                 effectivePrice: price,
                 color: item.color || null,
                 size: item.size || null,
                 product: {
-                    id: serverProduct.id,
-                    name: serverProduct.name,
+                    id: resolvedProdId,
+                    name: resolvedProdName,
                     price: price,
-                    images: serverProduct.images,
-                    category: serverProduct.category,
+                    images: serverProduct.images || [],
+                    category: serverProduct.category || '',
                 },
             })
         }
@@ -753,16 +747,27 @@ export async function GET(request) {
             return NextResponse.json({ success: true, orders: [safeOrder] })
         }
 
-        let ordersSnap
+        let orderDocs = []
         if (userId && !phone && !orderIds) {
-            // userId-only query — use indexed Firestore query
-            ordersSnap = await adminDb.collection('orders').where('userId', '==', userId).get()
+            // userId-only query — query by both top-level userId and nested user.id
+            const [snap1, snap2] = await Promise.all([
+                adminDb.collection('orders').where('userId', '==', userId).get().catch(() => null),
+                adminDb.collection('orders').where('user.id', '==', userId).get().catch(() => null)
+            ])
+            const seen = new Set()
+            if (snap1 && !snap1.empty) {
+                snap1.docs.forEach(d => { seen.add(d.id); orderDocs.push(d) })
+            }
+            if (snap2 && !snap2.empty) {
+                snap2.docs.forEach(d => { if (!seen.has(d.id)) { seen.add(d.id); orderDocs.push(d) } })
+            }
         } else {
             // Complex multi-field query or orderIds lookup — fall back to full scan
-            ordersSnap = await adminDb.collection('orders').get()
+            const snap = await adminDb.collection('orders').get().catch(() => null)
+            orderDocs = snap ? snap.docs : []
         }
 
-        if (ordersSnap.empty) {
+        if (orderDocs.length === 0) {
             return NextResponse.json({ success: true, orders: [] })
         }
 
@@ -770,7 +775,7 @@ export async function GET(request) {
         const targetIds = orderIds ? orderIds.split(',').map(id => id.trim()).filter(Boolean) : []
 
         const matchingOrders = []
-        ordersSnap.forEach(doc => {
+        orderDocs.forEach(doc => {
             const data = { id: doc.id, ...doc.data() }
             // Strip internal admin fraud signals before returning to customer
             const { _fraud, ...safeOrder } = data

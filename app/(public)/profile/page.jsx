@@ -98,6 +98,12 @@ function ProfileDashboard() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
 
     const { currentUser: reduxUser, isAuthenticated: reduxAuthenticated } = useSelector(state => state.user)
+    const allOrders = useSelector(state => state.order?.orders || [])
+    const coupons = useSelector(state => state.coupon?.coupons || [])
+    const wishlistIds = useSelector(state => state.wishlist?.items || [])
+    const allProducts = useSelector(state => state.product?.list || [])
+    const wishlistProducts = allProducts.filter(p => wishlistIds.includes(p.id) || (p._id && wishlistIds.includes(p._id)))
+    const quickContact = useSelector(state => state.shipping?.quickContact || {})
     const [mounted, setMounted] = useState(false)
 
     const localUser = useMemo(() => {
@@ -154,13 +160,6 @@ function ProfileDashboard() {
         }
         return () => { isCancelled = true }
     }, [currentUser?.id, currentUser?.phone])
-
-    const allOrders = useSelector(state => state.order.orders)
-    const coupons = useSelector(state => state.coupon.coupons)
-    const wishlistIds = useSelector(state => state.wishlist?.items || [])
-    const allProducts = useSelector(state => state.product?.list || [])
-    const wishlistProducts = allProducts.filter(p => wishlistIds.includes(p.id) || (p._id && wishlistIds.includes(p._id)))
-    const quickContact = useSelector(state => state.shipping?.quickContact || {})
 
     // WhatsApp Helpline number
     const rawSupportWa = quickContact.whatsapp?.number || '01577272145'
@@ -287,7 +286,10 @@ function ProfileDashboard() {
                 order.user?.email?.toLowerCase() === currentUser.email.toLowerCase()
             ))
 
-            const matchesUserId = Boolean(order.userId && order.userId === currentUser.id)
+            const matchesUserId = Boolean(
+                (order.userId && order.userId === currentUser.id) ||
+                (order.user?.id && order.user.id === currentUser.id)
+            )
 
             return matchesUserId || 
                    matchesEmail || 

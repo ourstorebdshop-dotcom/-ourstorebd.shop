@@ -95,6 +95,7 @@ const ProductDescription = ({ product }) => {
         const toastId = toast.loading(existingReview ? "রিভিউ আপডেট হচ্ছে..." : "রিভিউ জমা হচ্ছে...")
 
         try {
+            const prodId = product.id || product._id
             const newReview = {
                 id: existingReview?.id || `rat_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
                 rating: Number(userRating),
@@ -106,7 +107,7 @@ const ProductDescription = ({ product }) => {
                     email: currentUser.email || "",
                     location: currentUser.addresses?.[0]?.city || currentUser.addresses?.[0]?.district || "Bangladesh",
                 },
-                productId: product.id,
+                productId: prodId,
                 createdAt: existingReview?.createdAt || new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 isVisible: existingReview ? (existingReview.isVisible !== false && existingReview.status !== 'hidden') : true,
@@ -117,21 +118,21 @@ const ProductDescription = ({ product }) => {
             const updatedRatings = [newReview, ...currentRatings.filter(r => r.id !== newReview.id && (!r.user?.id || r.user.id !== newReview.user?.id))]
 
             // 1. Update Redux store immediately
-            dispatch(addProductReview({ productId: product.id, review: newReview }))
+            dispatch(addProductReview({ productId: prodId, review: newReview }))
 
             // 2. Persist to Firestore
             await fetch('/api/public/ratings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ productId: product.id, review: newReview }),
+                body: JSON.stringify({ productId: prodId, review: newReview }),
             })
 
             // 3. Update localStorage cache
             try {
                 const stored = localStorage.getItem('gocart_products')
-                if (stored) {
+                if (stored && prodId) {
                     const list = JSON.parse(stored)
-                    const idx = list.findIndex(p => p.id === product.id)
+                    const idx = list.findIndex(p => p.id === prodId || p._id === prodId)
                     if (idx !== -1) {
                         list[idx].rating = updatedRatings
                         localStorage.setItem('gocart_products', JSON.stringify(list))

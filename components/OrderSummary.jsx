@@ -176,7 +176,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                 signal: controller.signal,
                 body: JSON.stringify({
                     items: (items || []).map(item => ({
-                        productId: item.id,
+                        productId: item.id || item._id,
                         quantity: item.quantity,
                         color: item.selectedColor || null,
                         size: item.selectedSize || null,

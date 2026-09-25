@@ -194,10 +194,12 @@ const ProductCard = ({ product }) => {
                     ? { label: 'Hot', color: 'bg-orange-500', icon: FlameIcon }
                     : null;
 
+    const prodId = product.id || product._id
+
     const handleAddToCart = (e) => {
         e.preventDefault()
         e.stopPropagation()
-        dispatch(addToCart({ productId: product.id }))
+        dispatch(addToCart({ productId: prodId }))
         trackAddToCart(product, 1)
         setAddedToCart(true)
         setTimeout(() => setAddedToCart(false), 1500)
@@ -206,7 +208,7 @@ const ProductCard = ({ product }) => {
     const handleBuyNow = (e) => {
         e.preventDefault()
         e.stopPropagation()
-        dispatch(addToCart({ productId: product.id }))
+        dispatch(addToCart({ productId: prodId }))
         trackAddToCart(product, 1)
         router.push('/order')
     }
@@ -214,7 +216,6 @@ const ProductCard = ({ product }) => {
     const handleWishlist = (e) => {
         e.preventDefault()
         e.stopPropagation()
-        const prodId = product.id || product._id
         dispatch(toggleWishlist(prodId))
         if (!isWishlisted) {
             trackWishlist(product)
@@ -234,7 +235,7 @@ const ProductCard = ({ product }) => {
         <div className='group w-full cursor-pointer' onClick={(e) => {
             // Only navigate if clicking on the card itself, not on buttons
             if (e.target.closest('button')) return
-            router.push(`/product/${product.id}`)
+            router.push(`/product/${prodId}`)
         }}>
             {/* Image Container — strictly preserves homepage size (h-48 sm:h-72) */}
             <div className={`relative ${imgStyle.bg} border border-slate-100/80 h-48 sm:h-72 rounded-xl flex items-center justify-center overflow-hidden transition-colors duration-300 ${imgStyle.fit === 'cover' ? '' : imgStyle.padding}`}>

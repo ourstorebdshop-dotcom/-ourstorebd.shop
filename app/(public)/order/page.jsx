@@ -16,7 +16,6 @@ import {
     Lock
 } from 'lucide-react'
 import { trackInitiateCheckout, trackRemoveFromCart } from '@/lib/tracking/clientTracker'
-import { productDummyData } from '@/assets/assets'
 
 const getItemImage = (item) => {
     if (!item) return '/placeholder.svg'
@@ -94,8 +93,7 @@ export default function OrderPage() {
         let total = 0
         const items = []
         for (const [key, value] of Object.entries(cartItems || {})) {
-            const product = (products || []).find(p => String(p.id) === String(key)) ||
-                            (Array.isArray(productDummyData) && productDummyData.find(p => String(p.id) === String(key)))
+            const product = (products || []).find(p => p?.id === key || p?._id === key || String(p?.id) === String(key) || String(p?._id) === String(key))
             if (product) {
                 const qty = typeof value === 'number' ? value : (value?.quantity || 1)
                 const color = typeof value === 'object' ? value?.color : null

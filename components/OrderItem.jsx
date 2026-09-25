@@ -23,7 +23,7 @@ const OrderItem = ({ order }) => {
                         {(order.orderItems || []).map((item, index) => {
                             const itemImg = item.product?.images?.[0] || item.product?.image || '/placeholder.svg';
                             const itemName = item.product?.name || 'Product';
-                            const prodId = item.product?.id;
+                            const prodId = item.product?.id || item.product?._id || item.productId || item.id;
 
                             return (
                                 <div key={index} className="flex items-center gap-4">
@@ -53,8 +53,8 @@ const OrderItem = ({ order }) => {
                                         )}
                                         <p className="mb-1">{order.createdAt ? new Date(order.createdAt).toDateString() : ''}</p>
                                         <div>
-                                            {prodId && ratings?.find(rating => order.id === rating.orderId && prodId === rating.productId)
-                                                ? <Rating value={ratings.find(rating => order.id === rating.orderId && prodId === rating.productId).rating} />
+                                            {prodId && ratings?.find(rating => String(order.id) === String(rating.orderId) && String(prodId) === String(rating.productId))
+                                                ? <Rating value={ratings.find(rating => String(order.id) === String(rating.orderId) && String(prodId) === String(rating.productId)).rating} />
                                                 : <button onClick={() => setRatingModal({ orderId: order.id, productId: prodId })} className={`text-green-500 hover:bg-green-50 transition ${order.status !== "DELIVERED" && 'hidden'}`}>Rate Product</button>
                                             }
                                         </div>

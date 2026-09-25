@@ -129,7 +129,7 @@ export default function AdminCategoriesPage() {
                     }
                     dispatch(updateProduct(updatedProduct))
                     if (isFirebaseConfigured()) {
-                        return saveDocToFirestore('products', updatedProduct.id, updatedProduct)
+                        return saveDocToFirestore('products', updatedProduct.id || updatedProduct._id, updatedProduct)
                     }
                     return Promise.resolve(true)
                 })

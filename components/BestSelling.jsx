@@ -72,7 +72,7 @@ const BestSelling = () => {
             ) : (
                 <div className='mt-8 sm:mt-12 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6'>
                     {bestProducts.slice(0, displayQuantity).map((product, index) => (
-                        <ProductCard key={product.id || index} product={product} />
+                        <ProductCard key={product.id || product._id || index} product={product} />
                     ))}
                 </div>
             )}

@@ -57,6 +57,7 @@ export default function Orders() {
     const orders = useMemo(() => (allOrders || []).filter(order => {
         if (currentUser) {
             return order.userId === currentUser.id || 
+                   order.user?.id === currentUser.id ||
                    order.user?.email === currentUser.email || 
                    order.user?.phone === currentUser.phone;
         }

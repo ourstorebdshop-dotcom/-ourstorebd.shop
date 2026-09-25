@@ -77,11 +77,13 @@ export async function POST(request) {
         let opResult = { success: false, error: 'No operation performed' }
 
         switch (action) {
+            case 'loadCollection':
             case 'getCollection': {
                 const docs = await serverLoadCollection(collection)
                 return NextResponse.json({ success: true, data: docs || [] })
             }
 
+            case 'loadDoc':
             case 'getDoc': {
                 if (!docId) {
                     return NextResponse.json(

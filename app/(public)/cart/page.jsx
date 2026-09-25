@@ -69,14 +69,16 @@ export default function CartPage() {
         let total = 0
         const items = []
         for (const [key, value] of Object.entries(cartItems || {})) {
-            const product = (products || []).find(p => p?.id === key)
+            const product = (products || []).find(p => p?.id === key || p?._id === key || String(p?.id) === String(key) || String(p?._id) === String(key))
             if (product) {
                 const qty = typeof value === 'number' ? value : value.quantity
                 const color = typeof value === 'object' ? value.color : null
                 const size = typeof value === 'object' ? value.size : null
                 const effectivePrice = product.offerPrice || product.price
+                const resolvedId = product.id || product._id || key
                 items.push({
                     ...product,
+                    id: resolvedId,
                     quantity: qty,
                     selectedColor: color,
                     selectedSize: size,
@@ -93,7 +95,7 @@ export default function CartPage() {
     }, [cartItems, products])
 
     const handleDeleteItem = (productId, name) => {
-        const itemToRemove = cartArray.find(i => i.id === productId)
+        const itemToRemove = cartArray.find(i => (i.id || i._id) === productId)
         dispatch(deleteItemFromCart({ productId }))
         if (itemToRemove) {
             trackRemoveFromCart(itemToRemove, itemToRemove.quantity || 1)

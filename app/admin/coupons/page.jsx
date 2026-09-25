@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import { addCoupon, updateCoupon, deleteCoupon, toggleCouponActive, resetCoupons } from "@/lib/features/coupon/couponSlice"
 import { saveDocToFirestore, deleteDocFromFirestore, syncCollectionToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
-import { couponDummyData } from '@/assets/assets'
 import { format } from "date-fns"
 import toast from "react-hot-toast"
 import {
@@ -222,11 +221,7 @@ export default function AdminCoupons() {
     // ─── RESET TO DEFAULTS ─────────────────────────────
     const handleReset = async () => {
         dispatch(resetCoupons())
-        if (isFirebaseConfigured()) {
-            const defaults = couponDummyData.map(c => ({ ...c }))
-            await syncCollectionToFirestore('coupons', defaults)
-        }
-        toast.success('Coupons reset to defaults!')
+        toast.success('Coupons cleared!')
         setShowResetConfirm(false)
     }
 
