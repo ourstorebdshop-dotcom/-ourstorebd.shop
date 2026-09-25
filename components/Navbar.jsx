@@ -18,6 +18,7 @@ const Navbar = () => {
     const [categoryDropdown, setCategoryDropdown] = useState(false);
     const [mobileCategoryOpen, setMobileCategoryOpen] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [logoError, setLogoError] = useState(false);
     const dropdownRef = useRef(null);
     const categoryRef = useRef(null);
 
@@ -197,8 +198,8 @@ const Navbar = () => {
                 <div className="flex items-center justify-between max-w-7xl mx-auto py-3.5 transition-all">
 
                     <Link href="/" className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight flex items-center">
-                        {logoType === 'image' && logoImageUrl ? (
-                            <img src={logoImageUrl} alt={`${logoTextPrefix} ${logoTextMiddle} ${logoTextSuffix}`} className="h-8 sm:h-9 object-contain" />
+                        {logoType === 'image' && logoImageUrl && !logoError ? (
+                            <img src={logoImageUrl} alt={`${logoTextPrefix} ${logoTextMiddle} ${logoTextSuffix}`} className="h-8 sm:h-9 object-contain" onError={() => setLogoError(true)} />
                         ) : (
                             <>
                                 <span className="text-green-600">{logoTextPrefix}</span>{' '}

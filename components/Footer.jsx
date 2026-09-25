@@ -165,7 +165,14 @@ const Footer = () => {
                         <div className="max-w-md">
                             <Link href="/" className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight flex items-center">
                                 {logoUrl ? (
-                                    <img src={logoUrl} alt={`${titlePrefix} ${titleMiddle} ${titleSuffix}`} className="h-8 sm:h-9 object-contain" />
+                                    <>
+                                        <img src={logoUrl} alt={`${titlePrefix} ${titleMiddle} ${titleSuffix}`} className="h-8 sm:h-9 object-contain" onError={(e) => { e.target.style.display = 'none'; if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'inline'; }} />
+                                        <span style={{ display: 'none' }}>
+                                            <span className="text-green-600">{titlePrefix}</span>{' '}
+                                            <span>{titleMiddle}</span>{' '}
+                                            <span className="text-green-600">{titleSuffix}</span>
+                                        </span>
+                                    </>
                                 ) : (
                                     <>
                                         <span className="text-green-600">{titlePrefix}</span>{' '}
