@@ -44,7 +44,12 @@ export default function AdminCustomers() {
         if (isFirebaseConfigured()) {
             loadCollectionFromFirestore('customers').then(fsCustomers => {
                 if (Array.isArray(fsCustomers) && fsCustomers.length > 0) {
-                    const deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                    let deletedIds = []
+                    try {
+                        deletedIds = JSON.parse(localStorage.getItem('gocart_deleted_user_ids') || '[]')
+                    } catch {
+                        deletedIds = []
+                    }
                     // Use store.getState() to get fresh state, not the stale closure
                     const currentSavedUsers = store.getState().user.savedUsers || []
                     const mergedMap = new Map()

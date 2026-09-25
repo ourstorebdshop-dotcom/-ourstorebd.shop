@@ -1712,7 +1712,7 @@ function ProfileDashboard() {
                                     </button>
                                 </div>
 
-                                {(!currentUser.addresses || currentUser.addresses.length === 0) ? (
+                                {(!Array.isArray(currentUser?.addresses) || currentUser.addresses.length === 0) ? (
                                     <div className="text-center py-16 text-slate-400">
                                         <MapPin size={44} className="mx-auto mb-3 opacity-30" />
                                         <h3 className="text-base font-semibold text-slate-700">কোনো সংরক্ষিত ঠিকানা নেই</h3>
@@ -1726,7 +1726,7 @@ function ProfileDashboard() {
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                        {currentUser.addresses.map((addr) => (
+                                        {(Array.isArray(currentUser?.addresses) ? currentUser.addresses : []).map((addr) => (
                                             <div 
                                                 key={addr.id}
                                                 className={`p-5 rounded-3xl border transition-all relative flex flex-col justify-between ${

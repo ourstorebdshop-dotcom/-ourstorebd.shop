@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { verifyAdminSessionToken, COOKIE_NAME } from '@/lib/security/auth'
+import { verifyAdminSessionToken, extractAdminToken, COOKIE_NAME } from '@/lib/security/auth'
 import { getActiveVisitors } from '@/lib/presence/presenceService'
 
 export const dynamic = 'force-dynamic'
@@ -11,8 +11,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(request) {
     try {
         // 1. Authenticate Admin Session
-        const token = request.cookies.get(COOKIE_NAME)?.value ||
-                      request.headers.get('authorization')?.replace('Bearer ', '')
+        const token = extractAdminToken(request)
 
         if (!token) {
             return NextResponse.json(

@@ -121,9 +121,14 @@ export async function POST(request) {
                 updatedAt: new Date().toISOString(),
             }
 
-            if (adminDb) {
-                await adminDb.collection('customers').doc(customerId).set(newCustomer, { merge: true })
+            if (!adminDb) {
+                return NextResponse.json(
+                    { success: false, error: 'ডাটাবেজ সংযোগে সমস্যা হয়েছে (Database unavailable)' },
+                    { status: 503 }
+                )
             }
+
+            await adminDb.collection('customers').doc(customerId).set(newCustomer, { merge: true })
 
             const { passwordHash: _ph, ...safeCustomer } = newCustomer
             return NextResponse.json({ success: true, customer: safeCustomer })

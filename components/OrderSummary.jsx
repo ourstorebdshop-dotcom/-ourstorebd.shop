@@ -294,7 +294,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
             </div>
 
             {/* Quick-select from saved addresses if available */}
-            {currentUser?.addresses && currentUser.addresses.length > 0 && (
+            {Array.isArray(currentUser?.addresses) && currentUser.addresses.length > 0 && (
                 <div className='mt-3 p-2.5 bg-emerald-50/80 border border-emerald-200/80 rounded-xl'>
                     <div className='flex items-center justify-between mb-1.5'>
                         <span className='text-[11px] font-semibold text-emerald-800 flex items-center gap-1'>
@@ -303,7 +303,7 @@ const OrderSummary = ({ totalPrice, items, deliveryInfo, setDeliveryInfo, onOrde
                         </span>
                     </div>
                     <div className='flex flex-wrap gap-1.5'>
-                        {currentUser.addresses.map((addr) => {
+                        {(currentUser.addresses || []).map((addr) => {
                             const isSelected = deliveryInfo.address === addr.street && deliveryInfo.phone === addr.phone;
                             return (
                                 <button

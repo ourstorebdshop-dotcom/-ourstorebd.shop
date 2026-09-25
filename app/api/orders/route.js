@@ -632,6 +632,13 @@ export async function POST(request) {
                     { status: 500 }
                 )
             }
+        } else {
+            cleanupInFlight(new Error('DATABASE_UNAVAILABLE'))
+            console.error('[OrderAPI] Database unavailable: Firebase Admin SDK is not initialized')
+            return NextResponse.json(
+                { error: 'ডাটাবেজ সংযোগ পাওয়া যায়নি। অনুগ্রহ করে কিছুক্ষণ পর আবার চেষ্টা করুন।', code: 'DATABASE_UNAVAILABLE' },
+                { status: 503 }
+            )
         }
 
         // Prepare response payload

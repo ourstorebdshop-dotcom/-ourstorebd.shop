@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { verifyAdminSessionToken } from '@/lib/security/auth'
+import { verifyAdminSessionToken, extractAdminToken, COOKIE_NAME } from '@/lib/security/auth'
+import { adminDb } from '@/lib/firebaseAdmin'
 import {
     serverSaveDoc,
     serverDeleteDoc,
@@ -14,7 +15,8 @@ const ALLOWED_COLLECTIONS = new Set([
     'products', 'categories', 'banners', 'coupons', 'orders',
     'customers', 'settings', 'conversations', 'fraud_audit_log',
     'shipping', 'cashflow', 'contacts', 'headerFooter', 'hero',
-    'apiSettings', 'tracking', 'favicon', 'integrations', 'wishlist'
+    'apiSettings', 'tracking', 'favicon', 'integrations', 'wishlist',
+    'tracking_logs'
 ])
 
 /**
@@ -30,20 +32,28 @@ const ALLOWED_COLLECTIONS = new Set([
  */
 export async function POST(request) {
     try {
-        // 1. Extract and verify admin session
-        const sessionCookie = request.cookies.get('gocart_admin_session')?.value
-        if (!sessionCookie) {
+        // 1. Extract and verify admin session (cookie, Bearer header, or x-admin-token)
+        const sessionToken = extractAdminToken(request)
+        if (!sessionToken) {
             return NextResponse.json(
                 { success: false, error: 'Unauthorized: No admin session' },
                 { status: 401 }
             )
         }
 
-        const session = verifyAdminSessionToken(sessionCookie)
+        const session = verifyAdminSessionToken(sessionToken)
         if (!session.valid) {
             return NextResponse.json(
                 { success: false, error: `Unauthorized: ${session.error}` },
                 { status: 401 }
+            )
+        }
+
+        // 2. Ensure Database is available before executing any operation
+        if (!adminDb) {
+            return NextResponse.json(
+                { success: false, error: 'Database unavailable: Firebase Admin SDK is not initialized.' },
+                { status: 503 }
             )
         }
 

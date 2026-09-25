@@ -1,10 +1,9 @@
 import { NextResponse } from 'next/server'
-import { verifyAdminSessionToken, COOKIE_NAME } from '@/lib/security/auth'
+import { verifyAdminSessionToken, extractAdminToken, COOKIE_NAME } from '@/lib/security/auth'
 
 export async function GET(request) {
     try {
-        const token = request.cookies.get(COOKIE_NAME)?.value ||
-                      request.headers.get('authorization')?.replace('Bearer ', '')
+        const token = extractAdminToken(request)
 
         if (!token) {
             return NextResponse.json(

@@ -71,6 +71,7 @@ const nextConfig = {
                     },
                 ],
             },
+
             {
                 source: '/(.*)',
                 headers: [

@@ -236,7 +236,7 @@ const ProductDetails = ({ product }) => {
             <div className="flex max-sm:flex-col-reverse gap-3">
                 {/* Thumbnails */}
                 <div className="flex max-sm:flex-row max-sm:overflow-x-auto sm:flex-col gap-3 pb-2 sm:pb-0">
-                    {product.images.map((image, index) => {
+                    {(Array.isArray(product?.images) ? product.images : []).map((image, index) => {
                         const resolved = resolveImage(image);
                         const isActive = mainImage === resolved;
                         return (

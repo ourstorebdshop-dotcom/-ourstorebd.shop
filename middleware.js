@@ -103,9 +103,14 @@ export async function middleware(request) {
 
     // ── 2. Admin API Authorization Guard ──────────────────────────────
     // Protect all /api/admin/* routes (except /api/admin/login)
+    // Ensures admin session token is provided (cookie, Bearer header, or x-admin-token)
+    // Full cryptographic HMAC verification is executed in the route handlers via verifyAdminSessionToken
     if (pathname.startsWith('/api/admin/') && pathname !== '/api/admin/login') {
-        const sessionCookie = request.cookies.get('gocart_admin_session')?.value
-        if (!sessionCookie) {
+        const sessionToken = request.cookies.get('gocart_admin_session')?.value ||
+                             request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
+                             request.headers.get('x-admin-token')
+
+        if (!sessionToken) {
             return NextResponse.json(
                 { error: 'Unauthorized: Admin session required.' },
                 { status: 401 }
