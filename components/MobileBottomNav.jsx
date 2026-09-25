@@ -70,10 +70,11 @@ export default function MobileBottomNav() {
     const { currentUser, isAuthenticated } = useSelector(state => state.user || {})
     const managedCategories = useSelector(state => state.category?.categories || [])
 
-    const categories = useMemo(() => [...managedCategories]
-        .filter(c => c.visible !== false)
-        .sort((a, b) => (a.order || 0) - (b.order || 0))
-        .map(c => c.name), [managedCategories])
+    const activeCategories = useMemo(() => [...managedCategories]
+        .filter(c => c && c.visible !== false)
+        .sort((a, b) => (a.order || 0) - (b.order || 0)), [managedCategories])
+
+    const categories = useMemo(() => activeCategories.map(c => c.name), [activeCategories])
 
     useEffect(() => {
         setMounted(true)
@@ -317,20 +318,36 @@ export default function MobileBottomNav() {
 
                         {/* Categories List / Grid */}
                         <div className="overflow-y-auto overscroll-contain px-4 py-3 max-h-[55vh] space-y-1.5">
-                            {categories.map((cat) => {
-                                const IconComponent = categoryIcons[cat] || Tag
+                            {activeCategories.map((cat) => {
+                                const catName = cat.name;
+                                const IconComponent = categoryIcons[catName] || Tag
                                 return (
                                     <Link
-                                        key={cat}
-                                        href={`/shop?search=${encodeURIComponent(cat)}`}
+                                        key={cat.id || catName}
+                                        href={`/shop?search=${encodeURIComponent(catName)}`}
                                         onClick={() => setIsMenuOpen(false)}
-                                        className="flex items-center justify-between px-3.5 py-3 rounded-2xl border border-slate-100/80 bg-slate-50/50 hover:bg-green-50/70 hover:border-green-200 active:scale-[0.98] transition-all"
+                                        className="flex items-center justify-between px-3.5 py-3 rounded-2xl border border-slate-100/80 bg-slate-50/50 hover:bg-green-50/70 hover:border-green-200 active:scale-[0.98] transition-all group"
                                     >
                                         <div className="flex items-center gap-3">
-                                            <div className="w-9 h-9 rounded-xl bg-white border border-slate-100 shadow-xs flex items-center justify-center text-slate-600 group-hover:text-green-600">
-                                                <IconComponent size={18} />
+                                            <div className="w-9 h-9 rounded-xl bg-white border border-slate-100 shadow-xs flex items-center justify-center text-slate-600 group-hover:text-green-600 overflow-hidden shrink-0">
+                                                {cat.image ? (
+                                                    <img
+                                                        src={cat.image}
+                                                        alt={catName}
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                            e.currentTarget.style.display = 'none';
+                                                            const fallback = e.currentTarget.parentElement?.querySelector('.cat-fallback-icon');
+                                                            if (fallback) fallback.classList.remove('hidden');
+                                                        }}
+                                                    />
+                                                ) : null}
+                                                <IconComponent
+                                                    size={18}
+                                                    className={`cat-fallback-icon ${cat.image ? 'hidden' : ''}`}
+                                                />
                                             </div>
-                                            <span className="text-sm font-semibold text-slate-800">{cat}</span>
+                                            <span className="text-sm font-semibold text-slate-800">{catName}</span>
                                         </div>
                                         <ChevronRight size={16} className="text-slate-400" />
                                     </Link>

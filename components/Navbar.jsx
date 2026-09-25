@@ -24,12 +24,15 @@ const Navbar = () => {
 
     // Managed categories from Redux store (admin-controlled order & visibility)
     const managedCategories = useSelector(state => state.category?.categories || []);
-    const categories = useMemo(() => {
+    const activeCategories = useMemo(() => {
         return [...managedCategories]
-            .filter(c => c.visible !== false)
-            .sort((a, b) => a.order - b.order)
-            .map(c => c.name);
+            .filter(c => c && c.visible !== false)
+            .sort((a, b) => (a.order || 0) - (b.order || 0));
     }, [managedCategories]);
+
+    const categories = useMemo(() => {
+        return activeCategories.map(c => c.name);
+    }, [activeCategories]);
 
     // Category icon mapping
     const categoryIcons = {
@@ -257,17 +260,33 @@ const Navbar = () => {
                                             <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">All Categories</p>
                                         </div>
                                         <div className="py-1 max-h-72 overflow-y-auto">
-                                            {categories.map((cat) => {
-                                                const IconComp = categoryIcons[cat] || Tag;
+                                            {activeCategories.map((cat) => {
+                                                const catName = cat.name;
+                                                const IconComp = categoryIcons[catName] || Tag;
                                                 return (
                                                     <Link
-                                                        key={cat}
-                                                        href={`/shop?search=${encodeURIComponent(cat)}`}
+                                                        key={cat.id || catName}
+                                                        href={`/shop?search=${encodeURIComponent(catName)}`}
                                                         onClick={() => setCategoryDropdown(false)}
-                                                        className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-slate-700 hover:bg-green-50 hover:text-green-700 transition"
+                                                        className="flex items-center gap-2.5 px-4 py-2.5 text-xs font-medium text-slate-700 hover:bg-green-50 hover:text-green-700 transition group"
                                                     >
-                                                        <IconComp size={15} className="text-slate-400" />
-                                                        {cat}
+                                                        {cat.image ? (
+                                                            <img
+                                                                src={cat.image}
+                                                                alt={catName}
+                                                                className="w-4.5 h-4.5 rounded-md object-cover shrink-0 border border-slate-100"
+                                                                onError={(e) => {
+                                                                    e.currentTarget.style.display = 'none';
+                                                                    const fallback = e.currentTarget.parentElement?.querySelector('.cat-fallback-icon');
+                                                                    if (fallback) fallback.classList.remove('hidden');
+                                                                }}
+                                                            />
+                                                        ) : null}
+                                                        <IconComp
+                                                            size={15}
+                                                            className={`text-slate-400 group-hover:text-green-600 shrink-0 cat-fallback-icon ${cat.image ? 'hidden' : ''}`}
+                                                        />
+                                                        <span className="truncate">{catName}</span>
                                                     </Link>
                                                 );
                                             })}
@@ -491,17 +510,33 @@ const Navbar = () => {
                                     </button>
                                     {mobileCategoryOpen && (
                                         <div className="pl-4 pb-2 space-y-0.5 animate-[fadeIn_0.15s_ease-out]">
-                                            {categories.map((cat) => {
-                                                const IconComp = categoryIcons[cat] || Tag;
+                                            {activeCategories.map((cat) => {
+                                                const catName = cat.name;
+                                                const IconComp = categoryIcons[catName] || Tag;
                                                 return (
                                                     <Link
-                                                        key={cat}
-                                                        href={`/shop?search=${encodeURIComponent(cat)}`}
+                                                        key={cat.id || catName}
+                                                        href={`/shop?search=${encodeURIComponent(catName)}`}
                                                         onClick={() => { closeMobileMenu(); setMobileCategoryOpen(false); }}
-                                                        className="flex items-center gap-2.5 py-2.5 px-3 text-sm text-slate-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition"
+                                                        className="flex items-center gap-2.5 py-2.5 px-3 text-sm text-slate-600 hover:text-green-700 hover:bg-green-50 rounded-lg transition group"
                                                     >
-                                                        <IconComp size={15} className="text-slate-400" />
-                                                        {cat}
+                                                        {cat.image ? (
+                                                            <img
+                                                                src={cat.image}
+                                                                alt={catName}
+                                                                className="w-4.5 h-4.5 rounded-md object-cover shrink-0 border border-slate-100"
+                                                                onError={(e) => {
+                                                                    e.currentTarget.style.display = 'none';
+                                                                    const fallback = e.currentTarget.parentElement?.querySelector('.cat-fallback-icon');
+                                                                    if (fallback) fallback.classList.remove('hidden');
+                                                                }}
+                                                            />
+                                                        ) : null}
+                                                        <IconComp
+                                                            size={15}
+                                                            className={`text-slate-400 group-hover:text-green-600 shrink-0 cat-fallback-icon ${cat.image ? 'hidden' : ''}`}
+                                                        />
+                                                        <span>{catName}</span>
                                                     </Link>
                                                 );
                                             })}

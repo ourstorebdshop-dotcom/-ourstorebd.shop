@@ -10,6 +10,7 @@ import {
 } from '@/lib/features/category/categorySlice'
 import { updateProduct } from '@/lib/features/product/productSlice'
 import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
+import { compressImage } from '@/lib/imageCompressor'
 import {
     Plus,
     PencilIcon,
@@ -24,6 +25,10 @@ import {
     GripVertical,
     CheckCircle2,
     AlertTriangle,
+    Camera,
+    Image as ImageIcon,
+    Upload,
+    Loader2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -37,12 +42,111 @@ export default function AdminCategoriesPage() {
 
     // State
     const [newCatName, setNewCatName] = useState('')
+    const [newCatImage, setNewCatImage] = useState(null)
+    const [newCatImageLoading, setNewCatImageLoading] = useState(false)
     const [editingId, setEditingId] = useState(null)
     const [editingName, setEditingName] = useState('')
     const [deleteConfirmId, setDeleteConfirmId] = useState(null)
     const [isSaving, setIsSaving] = useState(false)
     const [isDeleting, setIsDeleting] = useState(false)
     const [reorderingId, setReorderingId] = useState(null)
+    const [uploadingId, setUploadingId] = useState(null)
+
+    // Image Modal State
+    const [imageModalCat, setImageModalCat] = useState(null)
+    const [modalImagePreview, setModalImagePreview] = useState(null)
+    const [modalUrlInput, setModalUrlInput] = useState('')
+
+    // Open image modal
+    const openImageModal = (cat) => {
+        setImageModalCat(cat)
+        setModalImagePreview(cat.image || null)
+        setModalUrlInput(cat.image && !cat.image.startsWith('data:') ? cat.image : '')
+    }
+
+    // Close image modal
+    const closeImageModal = () => {
+        setImageModalCat(null)
+        setModalImagePreview(null)
+        setModalUrlInput('')
+    }
+
+    // Direct Image Upload from file input
+    const handleImageUpload = async (cat, file) => {
+        if (!file || !cat) return
+        setUploadingId(cat.id)
+        try {
+            const compressed = await compressImage(file, 200, 200, 0.85)
+            if (!compressed) {
+                toast.error('ইমেজ প্রসেস করা যায়নি')
+                return
+            }
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('categories', cat.id, { image: compressed })
+                if (!ok) {
+                    toast.error('ডাটাবেজে ইমেজ সেভ করা যায়নি!')
+                    return
+                }
+            }
+            dispatch(updateCategory({ id: cat.id, image: compressed }))
+            toast.success(`"${cat.name}" এর ইমেজ সফলভাবে আপডেট হয়েছে!`)
+        } catch (err) {
+            console.error('Category image upload error:', err)
+            toast.error('ইমেজ আপলোড ব্যর্থ হয়েছে')
+        } finally {
+            setUploadingId(null)
+        }
+    }
+
+    // Remove Image
+    const handleRemoveImage = async (cat) => {
+        if (!cat) return
+        setIsSaving(true)
+        try {
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('categories', cat.id, { image: null })
+                if (!ok) {
+                    toast.error('ডাটাবেজে পরিবর্তন সেভ করা যায়নি!')
+                    return
+                }
+            }
+            dispatch(updateCategory({ id: cat.id, image: null }))
+            if (imageModalCat?.id === cat.id) {
+                setModalImagePreview(null)
+                setModalUrlInput('')
+            }
+            toast.success(`"${cat.name}" এর ইমেজ মুছে ফেলা হয়েছে!`)
+        } catch (err) {
+            console.error('Remove image error:', err)
+            toast.error('ইমেজ মুছতে সমস্যা হয়েছে')
+        } finally {
+            setIsSaving(false)
+        }
+    }
+
+    // Save Image from Modal
+    const handleSaveModalImage = async () => {
+        if (!imageModalCat || isSaving) return
+        setIsSaving(true)
+        try {
+            const finalImage = modalImagePreview || null
+            if (isFirebaseConfigured()) {
+                const ok = await saveDocToFirestore('categories', imageModalCat.id, { image: finalImage })
+                if (!ok) {
+                    toast.error('ডাটাবেজে ইমেজ সেভ করা যায়নি!')
+                    return
+                }
+            }
+            dispatch(updateCategory({ id: imageModalCat.id, image: finalImage }))
+            toast.success(`"${imageModalCat.name}" এর ইমেজ সংরক্ষিত হয়েছে!`)
+            closeImageModal()
+        } catch (err) {
+            console.error('Save modal image error:', err)
+            toast.error('ইমেজ সংরক্ষণ ব্যর্থ হয়েছে')
+        } finally {
+            setIsSaving(false)
+        }
+    }
 
     // Count products per category (supports multi-category)
     const getProductCount = (catName) => {
@@ -70,13 +174,14 @@ export default function AdminCategoriesPage() {
         setIsSaving(true)
         try {
             const newId = 'cat_' + Date.now()
-            const newCat = { id: newId, name, order: categories.length, visible: true }
+            const newCat = { id: newId, name, order: categories.length, visible: true, image: newCatImage || null }
             if (isFirebaseConfigured()) {
                 const ok = await saveDocToFirestore('categories', newId, newCat)
                 if (!ok) { toast.error('ডাটাবেজে সেভ করতে সমস্যা হয়েছে'); return }
             }
-            dispatch(addCategory({ name, id: newId }))
+            dispatch(addCategory({ name, id: newId, image: newCatImage || null }))
             setNewCatName('')
+            setNewCatImage(null)
             toast.success(`"${name}" ক্যাটাগরি সফলভাবে যোগ করা হয়েছে!`)
         } finally {
             setIsSaving(false)
@@ -251,7 +356,7 @@ export default function AdminCategoriesPage() {
                         Categories Management
                     </h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        ক্যাটাগরি যোগ, নাম পরিবর্তন, ক্রম পরিবর্তন ও কন্ট্রোল করুন
+                        ক্যাটাগরি যোগ, ইমেজ আপলোড/পরিবর্তন, নাম ও ক্রম পরিবর্তন করুন
                     </p>
                 </div>
                 <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 text-sm">
@@ -266,7 +371,69 @@ export default function AdminCategoriesPage() {
                     <Plus size={18} className="text-green-600" />
                     নতুন ক্যাটাগরি যোগ করুন
                 </h2>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    {/* Optional Image Picker for New Category */}
+                    <div className="relative shrink-0 flex items-center gap-2">
+                        <label
+                            htmlFor="new-cat-img-input"
+                            className="w-11 h-11 rounded-xl border-2 border-dashed border-slate-300 hover:border-green-500 bg-slate-50 flex items-center justify-center overflow-hidden cursor-pointer transition relative group shadow-2xs"
+                            title="ক্যাটাগরি ইমেজ নির্বাচন করুন (ঐচ্ছিক)"
+                        >
+                            {newCatImage ? (
+                                <>
+                                    <img src={newCatImage} alt="Preview" className="w-full h-full object-cover" />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                        <Camera size={14} />
+                                    </div>
+                                </>
+                            ) : newCatImageLoading ? (
+                                <Loader2 size={16} className="text-green-600 animate-spin" />
+                            ) : (
+                                <div className="flex flex-col items-center justify-center text-slate-400 group-hover:text-green-600 transition">
+                                    <ImageIcon size={18} />
+                                    <span className="text-[8px] font-bold text-slate-400 group-hover:text-green-600 scale-90 leading-none mt-0.5">
+                                        +ছবি
+                                    </span>
+                                </div>
+                            )}
+                        </label>
+                        <input
+                            id="new-cat-img-input"
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif"
+                            className="hidden"
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0]
+                                if (!file) return
+                                setNewCatImageLoading(true)
+                                try {
+                                    const compressed = await compressImage(file, 200, 200, 0.85)
+                                    if (compressed) {
+                                        setNewCatImage(compressed)
+                                        toast.success('ইমেজ নির্বাচিত হয়েছে!')
+                                    } else {
+                                        toast.error('ইমেজ প্রসেস করা যায়নি')
+                                    }
+                                } catch {
+                                    toast.error('ইমেজ আপলোড ব্যর্থ হয়েছে')
+                                } finally {
+                                    setNewCatImageLoading(false)
+                                    e.target.value = ''
+                                }
+                            }}
+                        />
+                        {newCatImage && (
+                            <button
+                                type="button"
+                                onClick={() => setNewCatImage(null)}
+                                className="w-5 h-5 bg-red-100 hover:bg-red-200 text-red-600 rounded-full flex items-center justify-center text-xs font-bold transition cursor-pointer"
+                                title="ইমেজ বাতিল করুন"
+                            >
+                                ×
+                            </button>
+                        )}
+                    </div>
+
                     <input
                         type="text"
                         value={newCatName}
@@ -277,9 +444,10 @@ export default function AdminCategoriesPage() {
                     />
                     <button
                         onClick={handleAdd}
-                        className="px-5 py-2.5 bg-green-600 hover:bg-green-700 active:scale-95 text-white text-sm font-semibold rounded-xl transition shadow-xs flex items-center gap-2 cursor-pointer whitespace-nowrap"
+                        disabled={isSaving}
+                        className="px-5 py-2.5 bg-green-600 hover:bg-green-700 active:scale-95 text-white text-sm font-semibold rounded-xl transition shadow-xs flex items-center justify-center gap-2 cursor-pointer whitespace-nowrap disabled:opacity-50"
                     >
-                        <Plus size={16} />
+                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
                         যোগ করুন
                     </button>
                 </div>
@@ -289,7 +457,7 @@ export default function AdminCategoriesPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
                 <div className="px-5 sm:px-6 py-4 border-b border-slate-100 bg-slate-50/50">
                     <h2 className="text-base font-bold text-slate-700">সকল ক্যাটাগরি</h2>
-                    <p className="text-xs text-slate-400 mt-0.5">উপরে-নিচে তীর চিহ্ন দিয়ে ক্রম পরিবর্তন করুন, পেন্সিল আইকনে ক্লিক করে নাম পরিবর্তন করুন</p>
+                    <p className="text-xs text-slate-400 mt-0.5">ছবি আইকনে ক্লিক করে সরাসরি ইমেজ আপলোড বা পরিবর্তন করুন, তীর চিহ্ন দিয়ে ক্রম পরিবর্তন করুন</p>
                 </div>
 
                 {sortedCategories.length === 0 ? (
@@ -333,6 +501,50 @@ export default function AdminCategoriesPage() {
                                     >
                                         <ChevronDown size={14} className="text-green-700" />
                                     </button>
+                                </div>
+
+                                {/* Category Image Thumbnail (Click to upload/change image) */}
+                                <div className="relative shrink-0">
+                                    <label
+                                        htmlFor={`cat-img-${cat.id}`}
+                                        className="w-10 h-10 rounded-xl border border-slate-200 bg-slate-50 hover:border-green-500 flex items-center justify-center overflow-hidden cursor-pointer transition relative group/thumb shadow-2xs"
+                                        title="ইমেজ আপলোড বা পরিবর্তন করতে ক্লিক করুন"
+                                    >
+                                        {uploadingId === cat.id ? (
+                                            <div className="w-full h-full flex items-center justify-center bg-slate-50">
+                                                <Loader2 size={16} className="text-green-600 animate-spin" />
+                                            </div>
+                                        ) : cat.image ? (
+                                            <>
+                                                <img
+                                                    src={cat.image}
+                                                    alt={cat.name}
+                                                    className="w-full h-full object-cover"
+                                                />
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/thumb:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                                    <Camera size={13} />
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center text-slate-300 group-hover/thumb:text-green-600 transition">
+                                                <ImageIcon size={18} />
+                                                <span className="text-[8px] font-bold text-slate-400 group-hover/thumb:text-green-600 scale-90 leading-none mt-0.5">
+                                                    +ছবি
+                                                </span>
+                                            </div>
+                                        )}
+                                    </label>
+                                    <input
+                                        id={`cat-img-${cat.id}`}
+                                        type="file"
+                                        accept="image/png,image/jpeg,image/webp,image/gif"
+                                        className="hidden"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0]
+                                            if (file) handleImageUpload(cat, file)
+                                            e.target.value = ''
+                                        }}
+                                    />
                                 </div>
 
                                 {/* Category Name */}
@@ -387,6 +599,15 @@ export default function AdminCategoriesPage() {
 
                                 {/* Actions */}
                                 <div className="flex items-center gap-1 shrink-0">
+                                    {/* Image Upload/Modal Button */}
+                                    <button
+                                        onClick={() => openImageModal(cat)}
+                                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                        title="ইমেজ অপশন (আপলোড / পরিবর্তন / URL)"
+                                    >
+                                        <Camera size={16} />
+                                    </button>
+
                                     {/* Visibility Toggle */}
                                     <button
                                         onClick={() => toggleVisibility(cat)}
@@ -400,7 +621,7 @@ export default function AdminCategoriesPage() {
                                         {cat.visible ? <Eye size={16} /> : <EyeOff size={16} />}
                                     </button>
 
-                                    {/* Edit */}
+                                    {/* Edit Name */}
                                     <button
                                         onClick={() => startEdit(cat)}
                                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition cursor-pointer"
@@ -451,6 +672,143 @@ export default function AdminCategoriesPage() {
                 )}
             </div>
 
+            {/* Image Upload & Management Modal */}
+            {imageModalCat && (
+                <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-[fadeIn_0.15s_ease-out]">
+                    <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
+                                    <ImageIcon size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-slate-800">ক্যাটাগরি ইমেজ</h3>
+                                    <p className="text-xs text-slate-500">{imageModalCat.name}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={closeImageModal}
+                                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                            >
+                                <XIcon size={18} />
+                            </button>
+                        </div>
+
+                        {/* Image Preview Box */}
+                        <div className="flex flex-col items-center justify-center py-5 bg-slate-50 rounded-xl border border-slate-200/80">
+                            {modalImagePreview ? (
+                                <div className="relative group">
+                                    <img
+                                        src={modalImagePreview}
+                                        alt={imageModalCat.name}
+                                        className="w-24 h-24 rounded-2xl object-cover border-2 border-white shadow-md"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => { setModalImagePreview(null); setModalUrlInput(''); }}
+                                        className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow transition cursor-pointer"
+                                        title="ইমেজ সরান"
+                                    >
+                                        <Trash2 size={12} />
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="text-center text-slate-400 py-3">
+                                    <ImageIcon size={36} className="mx-auto mb-1 text-slate-300" />
+                                    <p className="text-xs font-medium">কোনো ইমেজ যুক্ত নেই</p>
+                                    <p className="text-[10px] text-slate-400">নিচ থেকে ফাইল আপলোড করুন অথবা URL দিন</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* File Upload Button */}
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold text-slate-700">ফাইল থেকে আপলোড করুন:</label>
+                            <label className="flex items-center justify-center gap-2 p-3 bg-white border-2 border-dashed border-slate-300 hover:border-green-500 rounded-xl cursor-pointer transition text-xs font-semibold text-slate-700 hover:text-green-700">
+                                <Upload size={16} />
+                                ডিভাইস থেকে ইমেজ সিলেক্ট করুন
+                                <input
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp,image/gif"
+                                    className="hidden"
+                                    onChange={async (e) => {
+                                        const file = e.target.files?.[0]
+                                        if (!file) return
+                                        try {
+                                            const compressed = await compressImage(file, 200, 200, 0.85)
+                                            if (compressed) {
+                                                setModalImagePreview(compressed)
+                                                setModalUrlInput('')
+                                                toast.success('ইমেজ নির্বাচিত হয়েছে!')
+                                            } else {
+                                                toast.error('ইমেজ প্রসেস করা যায়নি')
+                                            }
+                                        } catch {
+                                            toast.error('ইমেজ লোড ব্যর্থ হয়েছে')
+                                        }
+                                        e.target.value = ''
+                                    }}
+                                />
+                            </label>
+                        </div>
+
+                        {/* OR URL Input */}
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase">
+                                <div className="flex-1 h-px bg-slate-200" />
+                                অথবা ইমেজ URL দিন
+                                <div className="flex-1 h-px bg-slate-200" />
+                            </div>
+                            <input
+                                type="url"
+                                value={modalUrlInput}
+                                onChange={(e) => {
+                                    setModalUrlInput(e.target.value)
+                                    if (e.target.value.trim()) {
+                                        setModalImagePreview(e.target.value.trim())
+                                    }
+                                }}
+                                placeholder="https://example.com/category-image.png"
+                                className="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-xl outline-none focus:border-green-500 focus:ring-2 focus:ring-green-100 transition"
+                            />
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                            {imageModalCat.image ? (
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveImage(imageModalCat)}
+                                    disabled={isSaving}
+                                    className="px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-xl transition flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                >
+                                    <Trash2 size={13} />
+                                    ইমেজ মুছুন
+                                </button>
+                            ) : <div />}
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={closeImageModal}
+                                    className="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer"
+                                >
+                                    বাতিল
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleSaveModalImage}
+                                    disabled={isSaving}
+                                    className="px-5 py-2 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 rounded-xl transition flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                                >
+                                    {isSaving ? <Loader2 size={14} className="animate-spin" /> : <SaveIcon size={14} />}
+                                    সংরক্ষণ করুন
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Help / Tips */}
             <div className="mt-6 bg-blue-50 border border-blue-200 rounded-2xl p-5 sm:p-6">
                 <h3 className="text-sm font-bold text-blue-800 flex items-center gap-2 mb-3">
@@ -458,13 +816,15 @@ export default function AdminCategoriesPage() {
                     ক্যাটাগরি ম্যানেজমেন্ট গাইড
                 </h3>
                 <ul className="text-xs text-blue-700 space-y-1.5 list-disc list-inside">
+                    <li><strong>ইমেজ আপলোড / পরিবর্তন:</strong> তালিকার ছবির বক্সে বা ক্যামেরা আইকনে ক্লিক করে সরাসরি ছবি আপলোড বা URL সেট করুন — এটি ইউজার সাইডের Navbar Categories ড্রপডাউনে প্রদর্শিত হবে।</li>
                     <li><strong>ক্রম পরিবর্তন:</strong> উপর/নিচ তীর চিহ্ন (▲ ▼) দিয়ে ক্যাটাগরির পজিশন বদলান — এই ক্রমেই Navbar-এর Categories ড্রপডাউনে দেখাবে।</li>
                     <li><strong>নাম পরিবর্তন:</strong> পেন্সিল আইকনে ক্লিক করে নতুন নাম দিন, Enter চাপুন বা সবুজ টিক দিন।</li>
                     <li><strong>লুকানো/দৃশ্যমান:</strong> চোখের আইকনে ক্লিক করলে ক্যাটাগরি Navbar থেকে লুকানো বা দেখানো যাবে।</li>
-                    <li><strong>নতুন ক্যাটাগরি:</strong> উপরে নাম লিখে &quot;যোগ করুন&quot; বাটনে ক্লিক করুন — নতুন প্রোডাক্ট যোগ করার সময় এই ক্যাটাগরি পাবেন।</li>
+                    <li><strong>নতুন ক্যাটাগরি:</strong> উপরে নাম ও ঐচ্ছিক ছবি দিয়ে &quot;যোগ করুন&quot; বাটনে ক্লিক করুন।</li>
                     <li><strong>মুছে ফেলা:</strong> ট্র্যাশ আইকনে ক্লিক করলে নিশ্চিতকরণ চাইবে — এটি শুধু ক্যাটাগরি মুছবে, পণ্য মুছবে না।</li>
                 </ul>
             </div>
         </div>
     )
 }
+
