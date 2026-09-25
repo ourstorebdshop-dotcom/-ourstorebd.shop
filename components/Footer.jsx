@@ -1,6 +1,6 @@
 'use client'
 
-import React from "react";
+import React, { memo } from "react";
 import Link from "next/link";
 import { useSelector } from "react-redux";
 
@@ -223,6 +223,7 @@ const Footer = () => {
                                                         target={path.startsWith('http') ? '_blank' : undefined}
                                                         rel={path.startsWith('http') ? 'noopener noreferrer' : undefined}
                                                         className="text-slate-600 hover:text-green-600 hover:underline transition"
+                                                        style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
                                                     >
                                                         {link.text}
                                                     </a>
@@ -230,6 +231,7 @@ const Footer = () => {
                                                     <Link
                                                         href={path || '/'}
                                                         className="text-slate-600 hover:text-green-600 hover:underline transition"
+                                                        style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
                                                     >
                                                         {link.text}
                                                     </Link>
@@ -254,10 +256,8 @@ const Footer = () => {
                 )}
             </div>
         </footer>
-        {/* Mobile bottom nav spacer */}
-        <div className="h-20 sm:h-0" aria-hidden="true" />
         </>
     );
 };
 
-export default Footer;
+export default memo(Footer);

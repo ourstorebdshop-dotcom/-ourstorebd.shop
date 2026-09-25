@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useSelector } from 'react-redux'
@@ -63,17 +63,17 @@ export default function MobileBottomNav() {
 
     // Redux selectors
     const cartItems = useSelector(state => state.cart?.cartItems || {})
-    const cartCount = Object.values(cartItems).reduce(
+    const cartCount = useMemo(() => Object.values(cartItems).reduce(
         (sum, item) => sum + (typeof item === 'number' ? item : (item?.quantity || 0)), 
         0
-    )
+    ), [cartItems])
     const { currentUser, isAuthenticated } = useSelector(state => state.user || {})
     const managedCategories = useSelector(state => state.category?.categories || [])
 
-    const categories = [...managedCategories]
+    const categories = useMemo(() => [...managedCategories]
         .filter(c => c.visible !== false)
         .sort((a, b) => (a.order || 0) - (b.order || 0))
-        .map(c => c.name)
+        .map(c => c.name), [managedCategories])
 
     useEffect(() => {
         setMounted(true)
@@ -85,44 +85,57 @@ export default function MobileBottomNav() {
         setIsSearchOpen(false)
     }, [pathname])
 
-    // Body scroll lock when modals are open
+    // Body scroll lock when modals are open (unified class-based approach)
     useEffect(() => {
         if (isMenuOpen || isSearchOpen) {
-            document.body.style.overflow = 'hidden'
+            const scrollY = window.scrollY
+            document.body.classList.add('body-scroll-lock')
+            document.body.style.top = `-${scrollY}px`
         } else {
-            document.body.style.overflow = ''
+            const scrollY = document.body.style.top
+            document.body.classList.remove('body-scroll-lock')
+            document.body.style.top = ''
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0', 10) * -1)
+            }
         }
         return () => {
-            document.body.style.overflow = ''
+            const scrollY = document.body.style.top
+            document.body.classList.remove('body-scroll-lock')
+            document.body.style.top = ''
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0', 10) * -1)
+            }
         }
     }, [isMenuOpen, isSearchOpen])
 
-    // Auto-focus search input when opened
+    // Auto-focus search input when opened (with cleanup to prevent leak)
     useEffect(() => {
         if (isSearchOpen && searchInputRef.current) {
-            setTimeout(() => {
+            const timerId = setTimeout(() => {
                 searchInputRef.current?.focus()
             }, 100)
+            return () => clearTimeout(timerId)
         }
     }, [isSearchOpen])
 
     const safeCartCount = mounted ? cartCount : 0
     const safeIsAuthenticated = mounted ? isAuthenticated : false
 
-    const handleSearchSubmit = (e) => {
+    const handleSearchSubmit = useCallback((e) => {
         e?.preventDefault()
         if (searchQuery.trim()) {
             router.push(`/shop?search=${encodeURIComponent(searchQuery.trim())}`)
             setIsSearchOpen(false)
             setSearchQuery('')
         }
-    }
+    }, [searchQuery, router])
 
-    const handleQuickSearch = (keyword) => {
+    const handleQuickSearch = useCallback((keyword) => {
         router.push(`/shop?search=${encodeURIComponent(keyword)}`)
         setIsSearchOpen(false)
         setSearchQuery('')
-    }
+    }, [router])
 
     // Active state checkers
     const isHomeActive = pathname === '/' && !isMenuOpen && !isSearchOpen
@@ -139,7 +152,7 @@ export default function MobileBottomNav() {
                 className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/90 shadow-[0_-4px_25px_rgba(0,0,0,0.07)] transition-all select-none"
                 style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)' }}
             >
-                <div className="grid grid-cols-5 h-[60px] items-stretch max-w-md mx-auto">
+                <div className="grid grid-cols-5 h-[60px] items-stretch max-w-md mx-auto" style={{ touchAction: 'manipulation' }}>
                     
                     {/* 1. HOME */}
                     <Link
@@ -303,7 +316,7 @@ export default function MobileBottomNav() {
                         </div>
 
                         {/* Categories List / Grid */}
-                        <div className="overflow-y-auto px-4 py-3 max-h-[55vh] space-y-1.5">
+                        <div className="overflow-y-auto overscroll-contain px-4 py-3 max-h-[55vh] space-y-1.5">
                             {categories.map((cat) => {
                                 const IconComponent = categoryIcons[cat] || Tag
                                 return (

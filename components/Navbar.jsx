@@ -147,11 +147,27 @@ const Navbar = () => {
     // Body scroll lock when mobile menu is open
     useEffect(() => {
         if (mobileMenu) {
+            const scrollY = window.scrollY;
             document.body.classList.add('body-scroll-lock');
+            document.body.style.top = `-${scrollY}px`;
         } else {
+            const scrollY = document.body.style.top;
             document.body.classList.remove('body-scroll-lock');
+            document.body.style.top = '';
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0', 10) * -1);
+            }
+            // Reset sub-accordion state when menu closes to prevent stale state
+            setMobileCategoryOpen(false);
         }
-        return () => document.body.classList.remove('body-scroll-lock');
+        return () => {
+            const scrollY = document.body.style.top;
+            document.body.classList.remove('body-scroll-lock');
+            document.body.style.top = '';
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0', 10) * -1);
+            }
+        };
     }, [mobileMenu]);
 
     const closeMobileMenu = useCallback(() => setMobileMenu(false), []);
@@ -167,13 +183,13 @@ const Navbar = () => {
         closeMobileMenu();
     };
 
-    const handleLogout = () => {
+    const handleLogout = useCallback(() => {
         dispatch(logout());
         setUserDropdown(false);
         setMobileMenu(false);
         toast.success("লগআউট সফল হয়েছে");
         router.push("/login");
-    };
+    }, [dispatch, router]);
 
     return (
         <header className={`bg-white ${isSticky ? 'sticky top-0' : 'relative'} z-40 shadow-xs border-b border-slate-100`}>
@@ -395,7 +411,7 @@ const Navbar = () => {
 
                     {/* Mobile Header Icons */}
                     <div className="sm:hidden flex items-center gap-2">
-                        <Link href="/cart" className="relative flex items-center p-1.5 text-slate-600">
+                        <Link href="/cart" className="relative flex items-center p-1.5 text-slate-600" style={{ touchAction: 'manipulation' }}>
                             <ShoppingCart size={20} />
                             {safeCartCount > 0 && (
                                 <span className="absolute -top-1 -right-1 text-[9px] font-bold text-white bg-green-600 min-w-[18px] h-[18px] flex items-center justify-center px-1 rounded-full">
@@ -403,7 +419,7 @@ const Navbar = () => {
                                 </span>
                             )}
                         </Link>
-                        <button onClick={() => setMobileMenu(!mobileMenu)} className="text-slate-600 p-1.5 rounded-lg hover:bg-slate-100">
+                        <button onClick={() => setMobileMenu(!mobileMenu)} className="text-slate-600 p-1.5 rounded-lg hover:bg-slate-100" style={{ touchAction: 'manipulation' }}>
                             {mobileMenu ? <XIcon size={24} /> : <MenuIcon size={24} />}
                         </button>
                     </div>
@@ -416,10 +432,11 @@ const Navbar = () => {
                     {/* Backdrop */}
                     <div 
                         onClick={closeMobileMenu} 
-                        className="sm:hidden fixed inset-0 top-[57px] bg-black/30 backdrop-blur-xs z-40"
+                        className="sm:hidden fixed inset-0 top-[57px] bg-black/30 backdrop-blur-xs z-[45]"
+                        aria-hidden="true"
                     />
                     {/* Menu Panel */}
-                    <div className="sm:hidden fixed top-[57px] left-0 right-0 bottom-0 bg-white z-50 overflow-y-auto">
+                    <div className="sm:hidden fixed top-[57px] left-0 right-0 bottom-0 bg-white z-50 overflow-y-auto overscroll-contain" role="dialog" aria-modal="true" aria-label="Mobile navigation menu">
                         <div className="flex flex-col p-5 pb-8 gap-2 text-slate-600 text-sm">
                             {showSearch && (
                                 <form onSubmit={handleSearch} className="flex items-center gap-2 bg-slate-100 px-4 py-3 rounded-xl mb-2">
