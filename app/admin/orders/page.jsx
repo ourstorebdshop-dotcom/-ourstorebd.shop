@@ -79,7 +79,8 @@ export default function AdminOrders() {
             document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
             clearInterval(intervalId)
         }
-    }, [fetchOrders, orders.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [fetchOrders])
 
     // Escape key handler for modals
     useEffect(() => {

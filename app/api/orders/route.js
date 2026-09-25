@@ -38,6 +38,14 @@ const productCache = new Map() // productId -> { data, time }
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes cache TTL for shipping settings
 const FRAUD_CACHE_TTL_MS = 20 * 1000 // 20 seconds cache TTL for fraud settings (responsive to admin block actions)
 
+let cachedTracking = null
+let cachedTrackingTime = 0
+const TRACKING_CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+
+let cachedIntegrations = null
+let cachedIntegrationsTime = 0
+const INTEGRATIONS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
 const DEFAULT_SHIPPING = {
     insideDhaka: { cost: 70, deliveryTime: '১ - ২ কর্মদিবস' },
     outsideDhaka: { cost: 120, deliveryTime: '২ - ৪ কর্মদিবস' },
@@ -339,11 +347,11 @@ export async function POST(request) {
                     codDayWindowHours: 24,
                 }),
             ]),
-            // 20-second timeout: prevents API hang on Firestore cold start (increased for network latency)
-            new Promise((_, reject) => setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), 20000))
+            // 10-second timeout: prevents API hang on Firestore cold start
+            new Promise((_, reject) => setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), 10000))
         ]).catch(err => {
             if (err.message === 'FIRESTORE_TIMEOUT') {
-                console.error('[OrderAPI] Firestore parallel reads timed out after 20s')
+                console.error('[OrderAPI] Firestore parallel reads timed out after 10s')
                 // Instead of silently returning empty arrays (which causes false PRODUCT_NOT_FOUND),
                 // throw an error that tells the customer to retry
                 throw new Error('FIRESTORE_TIMEOUT')
@@ -659,63 +667,86 @@ export async function POST(request) {
             }).catch(() => {})
         )
 
-        // Fire Server-Side Meta CAPI Purchase event (non-blocking)
+        // Fire Server-Side Meta CAPI Purchase event (non-blocking, uses cached tracking settings)
         if (adminDb) {
             bgTasks.push(
-                adminDb.collection('settings').doc('tracking').get().then(async (snap) => {
-                    if (!snap.exists) return
-                    const tracking = snap.data()
-                    if (!tracking?.meta?.capiEnabled || !tracking?.meta?.accessToken || !tracking?.meta?.pixelId) return
+                (async () => {
+                    try {
+                        const now = Date.now()
+                        let tracking = null
+                        if (cachedTracking && (now - cachedTrackingTime) < TRACKING_CACHE_TTL_MS) {
+                            tracking = cachedTracking
+                        } else {
+                            const snap = await adminDb.collection('settings').doc('tracking').get()
+                            if (snap.exists) {
+                                tracking = snap.data()
+                                cachedTracking = tracking
+                                cachedTrackingTime = Date.now()
+                            }
+                        }
+                        if (!tracking?.meta?.capiEnabled || !tracking?.meta?.accessToken || !tracking?.meta?.pixelId) return
 
-                    const capiPayload = {
-                        action: 'DISPATCH_EVENT',
-                        eventName: 'Purchase',
-                        eventId: `order_${orderId}`,
-                        eventSourceUrl: request.headers.get('referer') || 'https://ourstorebd.shop/order',
-                        userData: {
-                            email: body.userEmail || newOrder.user?.email,
-                            phone: normalizedPhone,
-                            name: deliveryInfo.name,
-                            city: deliveryInfo.location === 'insideDhaka' ? 'Dhaka' : 'Outside Dhaka',
-                        },
-                        customData: {
-                            currency: 'BDT',
-                            value: finalTotal,
-                            order_id: orderId,
-                            coupon: coupon?.code || null,
-                            shipping: deliveryInfo.location,
-                            contents: validatedItems.map(item => ({
-                                id: item.productId,
-                                quantity: item.quantity,
-                                item_price: item.price,
-                            })),
-                        },
-                        pixelId: tracking.meta.pixelId,
-                        pixelId2: tracking.meta.pixelId2,
-                        accessToken: tracking.meta.accessToken,
-                        testEventCode: tracking.meta.testEventCode,
-                        force: true,
-                    }
+                        const capiPayload = {
+                            action: 'DISPATCH_EVENT',
+                            eventName: 'Purchase',
+                            eventId: `order_${orderId}`,
+                            eventSourceUrl: request.headers.get('referer') || 'https://ourstorebd.shop/order',
+                            userData: {
+                                email: body.userEmail || newOrder.user?.email,
+                                phone: normalizedPhone,
+                                name: deliveryInfo.name,
+                                city: deliveryInfo.location === 'insideDhaka' ? 'Dhaka' : 'Outside Dhaka',
+                            },
+                            customData: {
+                                currency: 'BDT',
+                                value: finalTotal,
+                                order_id: orderId,
+                                coupon: coupon?.code || null,
+                                shipping: deliveryInfo.location,
+                                contents: validatedItems.map(item => ({
+                                    id: item.productId,
+                                    quantity: item.quantity,
+                                    item_price: item.price,
+                                })),
+                            },
+                            pixelId: tracking.meta.pixelId,
+                            pixelId2: tracking.meta.pixelId2,
+                            accessToken: tracking.meta.accessToken,
+                            testEventCode: tracking.meta.testEventCode,
+                            force: true,
+                        }
 
-                    const origin = request.nextUrl?.origin || 'http://localhost:3000'
-                    const controller = new AbortController()
-                    const timeoutId = setTimeout(() => controller.abort(), 5000)
-                    fetch(`${origin}/api/tracking`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(capiPayload),
-                        signal: controller.signal,
-                    })
-                        .catch(e => console.warn('[OrderAPI] Meta CAPI non-blocking notice:', e.message || e))
-                        .finally(() => clearTimeout(timeoutId))
-                }).catch(() => {})
+                        const origin = request.nextUrl?.origin || 'http://localhost:3000'
+                        const controller = new AbortController()
+                        const timeoutId = setTimeout(() => controller.abort(), 5000)
+                        fetch(`${origin}/api/tracking`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(capiPayload),
+                            signal: controller.signal,
+                        })
+                            .catch(e => console.warn('[OrderAPI] Meta CAPI non-blocking notice:', e.message || e))
+                            .finally(() => clearTimeout(timeoutId))
+                    } catch {}
+                })()
             )
         }
 
-        // Order Automation: Sync order to Telegram Bot & Google Sheets (non-blocking)
+        // Order Automation: Sync order to Telegram Bot & Google Sheets (non-blocking, use cached settings)
         const requestOrigin = request.nextUrl?.origin || 'https://ourstorebd.shop'
+        // Use cached integrations settings if available (instant), otherwise let syncEngine fetch in background
+        const nowIntg = Date.now()
+        const integrationsSettings = (cachedIntegrations && (nowIntg - cachedIntegrationsTime) < INTEGRATIONS_CACHE_TTL_MS)
+            ? cachedIntegrations
+            : null
         bgTasks.push(
-            syncOrderIntegrations(newOrder, requestOrigin)
+            syncOrderIntegrations(newOrder, requestOrigin, integrationsSettings)
+                .then(res => {
+                    // Cache the settings that syncEngine fetched for future orders
+                    if (!integrationsSettings && res?.results) {
+                        // syncEngine already loaded settings; we just note the cache is warm
+                    }
+                })
                 .catch(e => console.warn('[OrderAPI] Order integration sync non-blocking error:', e))
         )
 

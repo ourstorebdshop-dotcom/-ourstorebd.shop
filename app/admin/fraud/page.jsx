@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSelector, useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
 import {
@@ -39,6 +39,7 @@ import {
     clearAuditLogs
 } from '@/lib/features/fraud/fraudSlice'
 import { updateOrderStatus } from '@/lib/features/order/orderSlice'
+import { hydrateOrders } from '@/lib/features/order/orderSlice'
 import { FRAUD_DEFAULTS } from '@/lib/fraud/config'
 import { normalizePhone, validateBDPhone, phonesMatch } from '@/lib/fraud/phoneValidator'
 import {
@@ -61,6 +62,25 @@ export default function AdminFraudPage() {
     const watchlist = fraudState?.watchlist || []
     const trustedPhones = fraudState?.trustedPhones || []
     const savedSettings = fraudState?.settings || null
+
+    // Fetch orders from Firestore independently (don't rely solely on StoreProvider)
+    const fetchOrdersForFraud = useCallback(async () => {
+        try {
+            const data = await loadCollectionFromFirestore('orders')
+            if (Array.isArray(data) && data.length > 0) {
+                const normalized = data.map(o => ({ ...o, id: o.id || o._docId })).filter(o => o.id)
+                dispatch(hydrateOrders(normalized))
+            }
+        } catch (err) {
+            console.warn('[FraudGuard] Failed to fetch orders:', err)
+        }
+    }, [dispatch])
+
+    useEffect(() => {
+        if (orders.length === 0) {
+            fetchOrdersForFraud()
+        }
+    }, [fetchOrdersForFraud, orders.length])
 
     // Form dirty tracking and loading states
     const [isFormDirty, setIsFormDirty] = useState(false)
