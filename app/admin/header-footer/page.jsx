@@ -29,6 +29,7 @@ import {
 } from '@/lib/features/headerFooter/headerFooterSlice'
 import toast from 'react-hot-toast'
 import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
+import { compressImage } from '@/lib/imageCompressor'
 import Link from 'next/link'
 import {
     LayoutTemplate,
@@ -598,17 +599,65 @@ export default function AdminHeaderFooterPage() {
                             </div>
                         ) : (
                             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                                <label className="block text-xs font-bold text-slate-700">কাস্টম ইমেজ লোগো URL (Image Logo URL):</label>
+                                <label className="block text-xs font-bold text-slate-700">লোগো ইমেজ আপলোড করুন অথবা URL দিন:</label>
+                                
+                                {/* File Upload Option */}
+                                <div className="flex flex-col sm:flex-row gap-3">
+                                    <label className="flex-1 flex items-center justify-center gap-2 p-3 bg-white border-2 border-dashed border-slate-300 hover:border-green-500 rounded-xl cursor-pointer transition text-xs font-semibold text-slate-600 hover:text-green-700">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                        ফাইল থেকে আপলোড করুন
+                                        <input
+                                            type="file"
+                                            accept="image/png,image/jpeg,image/webp,image/gif"
+                                            className="hidden"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                try {
+                                                    const compressed = await compressImage(file, 400, 400, 0.85);
+                                                    if (compressed) {
+                                                        setHeaderForm({ ...headerForm, logoImageUrl: compressed });
+                                                        setIsEditingHeader(true);
+                                                        toast.success('লোগো আপলোড সফল! Save চাপুন।');
+                                                    } else {
+                                                        toast.error('ইমেজ প্রসেস করা যায়নি।');
+                                                    }
+                                                } catch (err) {
+                                                    toast.error('ইমেজ আপলোড ব্যর্থ হয়েছে।');
+                                                }
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                    </label>
+                                </div>
+
+                                {/* OR: URL Input */}
+                                <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase">
+                                    <div className="flex-1 h-px bg-slate-200" />
+                                    অথবা URL দিন
+                                    <div className="flex-1 h-px bg-slate-200" />
+                                </div>
                                 <input
                                     type="text"
-                                    value={headerForm.logoImageUrl || ''}
-                                    onChange={(e) => setHeaderForm({ ...headerForm, logoImageUrl: e.target.value })}
+                                    value={headerForm.logoImageUrl?.startsWith('data:') ? '' : (headerForm.logoImageUrl || '')}
+                                    onChange={(e) => { setHeaderForm({ ...headerForm, logoImageUrl: e.target.value }); setIsEditingHeader(true); }}
                                     placeholder="https://example.com/logo.png"
                                     className="w-full p-2.5 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl outline-none focus:border-green-500 focus:ring-1 focus:ring-green-200"
                                 />
+
+                                {/* Preview */}
                                 {headerForm.logoImageUrl && (
-                                    <div className="p-3 bg-white border rounded-xl inline-block">
-                                        <img src={headerForm.logoImageUrl} alt="Logo preview" className="max-h-10 object-contain" />
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-3 bg-white border rounded-xl inline-block">
+                                            <img src={headerForm.logoImageUrl} alt="Logo preview" className="max-h-10 object-contain" />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setHeaderForm({ ...headerForm, logoImageUrl: '' }); setIsEditingHeader(true); }}
+                                            className="text-xs text-red-500 hover:text-red-700 font-semibold transition"
+                                        >
+                                            লোগো মুছুন
+                                        </button>
                                     </div>
                                 )}
                             </div>
