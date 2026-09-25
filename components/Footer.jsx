@@ -98,7 +98,7 @@ const SocialIconRenderer = ({ platform }) => {
 
 const Footer = () => {
     const footerSettings = useSelector(state => state.headerFooter?.footer) || {};
-    const headerSettings = useSelector(state => state.headerFooter?.header) || {};
+    const [footerLogoError, setFooterLogoError] = React.useState(false);
 
     // If footer is globally disabled by admin
     if (footerSettings.showFooter === false) {
@@ -107,12 +107,10 @@ const Footer = () => {
 
     const brand = footerSettings.brand || {};
     const showBrand = brand.showBrand !== false;
-    // Use Header logo as single source of truth; Footer's own logoUrl is fallback
-    const titlePrefix = headerSettings.logoTextPrefix !== undefined ? headerSettings.logoTextPrefix : (brand.titlePrefix !== undefined ? brand.titlePrefix : 'Our');
-    const titleMiddle = headerSettings.logoTextMiddle !== undefined ? headerSettings.logoTextMiddle : (brand.titleMiddle !== undefined ? brand.titleMiddle : 'Store');
-    const titleSuffix = headerSettings.logoTextSuffix !== undefined ? headerSettings.logoTextSuffix : (brand.titleSuffix !== undefined ? brand.titleSuffix : 'BD');
-    const logoType = headerSettings.logoType || 'text';
-    const logoUrl = headerSettings.logoImageUrl || brand.logoUrl || '';
+    const titlePrefix = brand.titlePrefix !== undefined ? brand.titlePrefix : 'Our';
+    const titleMiddle = brand.titleMiddle !== undefined ? brand.titleMiddle : 'Store';
+    const titleSuffix = brand.titleSuffix !== undefined ? brand.titleSuffix : 'BD';
+    const logoUrl = brand.logoUrl || '';
     const description = brand.description || 'Our Store BD is your trusted online electronics and gadgets shop in Bangladesh. We bring you 100% authentic tech products, smartphones, wireless earbuds, smartwatches, and lifestyle audio with fast nationwide home delivery across all 64 districts.';
 
     const social = footerSettings.social || {};
@@ -167,15 +165,14 @@ const Footer = () => {
                     {showBrand && (
                         <div className="max-w-md">
                             <Link href="/" className="text-2xl sm:text-3xl font-bold text-slate-800 tracking-tight flex items-center">
-                                {logoType === 'image' && logoUrl ? (
-                                    <>
-                                        <img src={logoUrl} alt={`${titlePrefix} ${titleMiddle} ${titleSuffix}`} className="h-8 sm:h-9 object-contain" onError={(e) => { e.target.style.display = 'none'; if (e.target.nextElementSibling) e.target.nextElementSibling.style.display = 'inline'; }} />
-                                        <span style={{ display: 'none' }}>
-                                            <span className="text-green-600">{titlePrefix}</span>{' '}
-                                            <span>{titleMiddle}</span>{' '}
-                                            <span className="text-green-600">{titleSuffix}</span>
-                                        </span>
-                                    </>
+                                {logoUrl && !footerLogoError ? (
+                                    <img 
+                                        src={logoUrl} 
+                                        alt={`${titlePrefix} ${titleMiddle} ${titleSuffix}`} 
+                                        className="h-8 sm:h-9 max-w-[160px] sm:max-w-[200px] object-contain" 
+                                        loading="eager"
+                                        onError={() => setFooterLogoError(true)}
+                                    />
                                 ) : (
                                     <>
                                         <span className="text-green-600">{titlePrefix}</span>{' '}
