@@ -3,10 +3,11 @@
 import OrdersAreaChart from "@/components/OrdersAreaChart"
 import { useSelector, useDispatch } from "react-redux"
 import { updateBanner, toggleBannerActive } from "@/lib/features/banner/bannerSlice"
-import { useState } from "react"
+import { hydrateOrders } from "@/lib/features/order/orderSlice"
+import { useState, useEffect } from "react"
 import toast from "react-hot-toast"
 import Link from "next/link"
-import { saveDocToFirestore, isFirebaseConfigured } from '@/lib/firestoreAdminApi'
+import { saveDocToFirestore, isFirebaseConfigured, loadCollectionFromFirestore } from '@/lib/firestoreAdminApi'
 import {
     CircleDollarSignIcon, ShoppingBasketIcon, TagsIcon,
     MegaphoneIcon, PencilIcon, XIcon, CheckIcon,
@@ -40,6 +41,18 @@ export default function AdminDashboard() {
     // Real-time data from Redux store
     const products = useSelector(state => state.product.list)
     const orders = useSelector(state => state.order.orders)
+
+    // Ensure orders are loaded if admin navigates directly to Dashboard
+    useEffect(() => {
+        if (orders.length === 0) {
+            loadCollectionFromFirestore('orders').then(data => {
+                if (Array.isArray(data)) {
+                    const normalized = data.map(o => ({ ...o, id: o.id || o._docId })).filter(o => o.id)
+                    dispatch(hydrateOrders(normalized))
+                }
+            }).catch(() => {})
+        }
+    }, [dispatch, orders.length])
 
     const totalProducts = products.length
     const totalOrders = orders.length

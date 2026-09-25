@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useSelector, useDispatch } from "react-redux"
 import toast from "react-hot-toast"
-import { updateOrderStatus as setOrderStatusRedux, deleteOrder as removeOrderRedux } from "@/lib/features/order/orderSlice"
+import { updateOrderStatus as setOrderStatusRedux, deleteOrder as removeOrderRedux, hydrateOrders } from "@/lib/features/order/orderSlice"
 import { 
     SearchIcon, 
     Trash2Icon, 
@@ -23,7 +23,7 @@ import {
 } from "lucide-react"
 import { blockPhone, unblockPhone } from "@/lib/features/fraud/fraudSlice"
 import { trackRefund } from "@/lib/tracking/clientTracker"
-import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured } from "@/lib/firestoreAdminApi"
+import { saveDocToFirestore, deleteDocFromFirestore, isFirebaseConfigured, loadCollectionFromFirestore } from "@/lib/firestoreAdminApi"
 
 export default function AdminOrders() {
     const currency = process.env.NEXT_PUBLIC_CURRENCY_SYMBOL || '৳'
@@ -31,6 +31,7 @@ export default function AdminOrders() {
     const orders = useSelector(state => state.order.orders)
     const blockedPhones = useSelector(state => state.fraud?.blockedPhones) || []
 
+    const [isLoading, setIsLoading] = useState(orders.length === 0)
     const [selectedOrder, setSelectedOrder] = useState(null)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [deletingOrderId, setDeletingOrderId] = useState(null)
@@ -38,6 +39,47 @@ export default function AdminOrders() {
     const [statusFilter, setStatusFilter] = useState("ALL")
     const [savingOrderId, setSavingOrderId] = useState(null)
     const [isDeletingOrder, setIsDeletingOrder] = useState(false)
+
+    // Fetch fresh orders from Firestore via admin proxy API
+    const fetchOrders = useCallback(async (showLoading = false) => {
+        if (showLoading) setIsLoading(true)
+        try {
+            const data = await loadCollectionFromFirestore('orders')
+            if (Array.isArray(data)) {
+                const normalized = data.map(o => ({ ...o, id: o.id || o._docId })).filter(o => o.id)
+                dispatch(hydrateOrders(normalized))
+            }
+        } catch (err) {
+            console.error('[AdminOrders] Failed to fetch orders:', err)
+        } finally {
+            if (showLoading) setIsLoading(false)
+        }
+    }, [dispatch])
+
+    // Load orders on mount, auto-refresh on window focus/tab visible, and poll every 10s
+    useEffect(() => {
+        fetchOrders(orders.length === 0)
+
+        const handleVisibilityOrFocus = () => {
+            if (document.visibilityState === 'visible') {
+                fetchOrders(false)
+            }
+        }
+        window.addEventListener('focus', handleVisibilityOrFocus)
+        document.addEventListener('visibilitychange', handleVisibilityOrFocus)
+
+        const intervalId = setInterval(() => {
+            if (document.visibilityState === 'visible') {
+                fetchOrders(false)
+            }
+        }, 10000)
+
+        return () => {
+            window.removeEventListener('focus', handleVisibilityOrFocus)
+            document.removeEventListener('visibilitychange', handleVisibilityOrFocus)
+            clearInterval(intervalId)
+        }
+    }, [fetchOrders, orders.length])
 
     // Escape key handler for modals
     useEffect(() => {
@@ -110,13 +152,18 @@ export default function AdminOrders() {
 
     // Filter and sort orders (newest first)
     const filteredOrders = orders.filter(order => {
-        const q = search.toLowerCase()
-        const matchesSearch = (order.user?.name || "").toLowerCase().includes(q) ||
+        const q = search.trim().toLowerCase()
+        const matchesSearch = !q ||
+                              (order.user?.name || "").toLowerCase().includes(q) ||
+                              (order.address?.name || "").toLowerCase().includes(q) ||
                               (order.user?.email || "").toLowerCase().includes(q) ||
                               (order.id || "").toLowerCase().includes(q) ||
                               (order.address?.phone || order.user?.phone || "").includes(q) ||
-                              (order.address?.normalizedPhone || "").includes(q)
-        const matchesStatus = statusFilter === "ALL" || order.status === statusFilter
+                              (order.address?.normalizedPhone || "").includes(q) ||
+                              (order.trxId || "").toLowerCase().includes(q) ||
+                              (order.bankTrxId || "").toLowerCase().includes(q)
+        const orderStatus = (order.status || "").toUpperCase()
+        const matchesStatus = statusFilter === "ALL" || orderStatus === statusFilter.toUpperCase()
         return matchesSearch && matchesStatus
     }).sort((a, b) => {
         const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
@@ -194,7 +241,11 @@ export default function AdminOrders() {
 
             {/* Orders Table */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-xs overflow-hidden">
-                {filteredOrders.length === 0 ? (
+                {isLoading && orders.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400">
+                        Loading orders...
+                    </div>
+                ) : filteredOrders.length === 0 ? (
                     <div className="text-center py-12 text-slate-400">
                         No orders match your filter criteria.
                     </div>

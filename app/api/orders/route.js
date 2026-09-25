@@ -35,14 +35,20 @@ let cachedCoupons = null
 let cachedCouponsTime = 0
 
 const productCache = new Map() // productId -> { data, time }
-const CACHE_TTL_MS = 60 * 1000 // 60 seconds
+const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes cache TTL for shipping settings
+const FRAUD_CACHE_TTL_MS = 20 * 1000 // 20 seconds cache TTL for fraud settings (responsive to admin block actions)
+
+const DEFAULT_SHIPPING = {
+    insideDhaka: { cost: 70, deliveryTime: '১ - ২ কর্মদিবস' },
+    outsideDhaka: { cost: 120, deliveryTime: '২ - ৪ কর্মদিবস' },
+}
 
 async function getCachedShipping(firebaseReady) {
     const now = Date.now()
     if (cachedShipping && (now - cachedShippingTime) < CACHE_TTL_MS) {
         return cachedShipping
     }
-    if (!firebaseReady || !adminDb) return null
+    if (!firebaseReady || !adminDb) return cachedShipping || DEFAULT_SHIPPING
     try {
         const snap = await adminDb.collection('settings').doc('shipping').get()
         if (snap.exists) {
@@ -51,17 +57,17 @@ async function getCachedShipping(firebaseReady) {
             return cachedShipping
         }
     } catch (e) {
-        if (cachedShipping) return cachedShipping
+        console.warn('[OrderAPI] Failed to fetch shipping settings, using fallback:', e.message || e)
     }
-    return null
+    return cachedShipping || DEFAULT_SHIPPING
 }
 
 async function getCachedFraudData(firebaseReady) {
     const now = Date.now()
-    if (cachedFraudData && (now - cachedFraudTime) < CACHE_TTL_MS) {
+    if (cachedFraudData && (now - cachedFraudTime) < FRAUD_CACHE_TTL_MS) {
         return cachedFraudData
     }
-    if (!firebaseReady || !adminDb) return null
+    if (!firebaseReady || !adminDb) return cachedFraudData || null
     try {
         const snap = await adminDb.collection('settings').doc('fraud').get()
         if (snap.exists) {
@@ -70,9 +76,9 @@ async function getCachedFraudData(firebaseReady) {
             return cachedFraudData
         }
     } catch (e) {
-        if (cachedFraudData) return cachedFraudData
+        console.warn('[OrderAPI] Failed to fetch fraud settings, using fallback:', e.message || e)
     }
-    return null
+    return cachedFraudData || null
 }
 
 async function getCachedCoupons(firebaseReady) {
@@ -80,7 +86,7 @@ async function getCachedCoupons(firebaseReady) {
     if (cachedCoupons && (now - cachedCouponsTime) < CACHE_TTL_MS) {
         return cachedCoupons
     }
-    if (!firebaseReady || !adminDb) return []
+    if (!firebaseReady || !adminDb) return cachedCoupons || []
     try {
         const snap = await adminDb.collection('coupons').get()
         cachedCoupons = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -113,7 +119,7 @@ async function getOrderProducts(productIds, firebaseReady) {
                         return prod
                     }
                 } catch (e) {
-                    console.warn(`[OrderAPI] Failed to fetch product ${strId} via Admin SDK:`, e)
+                    console.warn(`[OrderAPI] Failed to fetch product ${strId} via Admin SDK:`, e.message || e)
                 }
             }
             return null
@@ -121,14 +127,17 @@ async function getOrderProducts(productIds, firebaseReady) {
     ).then(products => products.filter(Boolean))
 }
 
-// In-memory idempotency store (prevents duplicate processing within the same serverless instance)
+// In-memory idempotency store & concurrency lock
+// inFlightOrders: key -> Promise<{ order, message, isDuplicate }>
+const inFlightOrders = new Map()
+// processedKeys: key -> { order, timestamp }
 const processedKeys = new Map()
 
-// On-demand cleanup of old idempotency keys (runs at start of each request, no setInterval)
+// On-demand cleanup of old idempotency keys (runs at start of each request)
 function pruneProcessedKeys() {
     const cutoff = Date.now() - 30 * 60 * 1000
-    for (const [key, timestamp] of processedKeys) {
-        if (timestamp < cutoff) processedKeys.delete(key)
+    for (const [key, entry] of processedKeys) {
+        if (!entry || entry.timestamp < cutoff) processedKeys.delete(key)
     }
 }
 
@@ -184,22 +193,43 @@ export async function POST(request) {
             signals.botDetected = true
         }
 
-        if (formLoadedAt) {
+        if (formLoadedAt && typeof formLoadedAt === 'number') {
             const elapsed = Date.now() - formLoadedAt
-            if (elapsed < 3000) { // default min time, overridden below if config loads
+            // Guard against clock skew: must be positive and under 800ms to be a bot
+            if (elapsed >= 0 && elapsed < 800) {
                 signals.botDetected = true
             }
         }
 
-        // ── 2. Idempotency Check (in-memory, instant) ───────────────────
+        // ── 2. Idempotency Check & Concurrency Lock (instant) ───────────
         if (idempotencyKey) {
-            if (processedKeys.has(idempotencyKey)) {
-                return NextResponse.json(
-                    { error: 'এই অর্ডারটি ইতিমধ্যে প্রসেস করা হয়েছে।', code: 'IDEMPOTENCY_DUPLICATE' },
-                    { status: 409 }
-                )
+            // Already processed? Return canonical existing order with HTTP 200
+            const processed = processedKeys.get(idempotencyKey)
+            if (processed?.order) {
+                return NextResponse.json({
+                    success: true,
+                    order: processed.order,
+                    message: 'অর্ডারটি ইতিমধ্যে সফলভাবে সম্পন্ন হয়েছে!',
+                    isDuplicate: true,
+                })
+            }
+
+            // Already in flight? Await existing promise so double-clicks don't duplicate
+            const inFlight = inFlightOrders.get(idempotencyKey)
+            if (inFlight) {
+                try {
+                    const result = await inFlight
+                    return NextResponse.json({
+                        ...result,
+                        isDuplicate: true,
+                    })
+                } catch (inFlightErr) {
+                    // If the other in-flight attempt failed, proceed to try fresh
+                }
             }
         }
+
+
 
         // ── 3. Basic Validation (no Firestore needed) ───────────────────
         if (!items || !Array.isArray(items) || items.length === 0) {
@@ -258,8 +288,30 @@ export async function POST(request) {
         // This reduces ~6 sequential round-trips to 1 parallel batch.
         // ══════════════════════════════════════════════════════════════════
 
+        let resolveInFlight = null
+        let rejectInFlight = null
+        if (idempotencyKey) {
+            const flightPromise = new Promise((resolve, reject) => {
+                resolveInFlight = resolve
+                rejectInFlight = reject
+            })
+            // Attach a catch handler to prevent unhandledRejection if aborted before another request awaits it
+            flightPromise.catch(() => {})
+            inFlightOrders.set(idempotencyKey, flightPromise)
+        }
+
+        const cleanupInFlight = (err) => {
+            if (idempotencyKey) {
+                if (rejectInFlight) {
+                    try { rejectInFlight(err || new Error('Order creation aborted')) } catch {}
+                }
+                inFlightOrders.delete(idempotencyKey)
+            }
+        }
+
         const productIds = items.map(i => i.productId)
         const firebaseReady = !!adminDb
+
 
         const [fraudData, serverProducts, shippingSettings, allCoupons, orderChecks] = await Promise.race([
             Promise.all([
@@ -287,11 +339,11 @@ export async function POST(request) {
                     codDayWindowHours: 24,
                 }),
             ]),
-            // 15-second timeout: prevents API hang on Firestore cold start (increased from 8s for BD network latency)
-            new Promise((_, reject) => setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), 15000))
+            // 20-second timeout: prevents API hang on Firestore cold start (increased for network latency)
+            new Promise((_, reject) => setTimeout(() => reject(new Error('FIRESTORE_TIMEOUT')), 20000))
         ]).catch(err => {
             if (err.message === 'FIRESTORE_TIMEOUT') {
-                console.error('[OrderAPI] Firestore parallel reads timed out after 15s')
+                console.error('[OrderAPI] Firestore parallel reads timed out after 20s')
                 // Instead of silently returning empty arrays (which causes false PRODUCT_NOT_FOUND),
                 // throw an error that tells the customer to retry
                 throw new Error('FIRESTORE_TIMEOUT')
@@ -302,23 +354,25 @@ export async function POST(request) {
         // ── Process fraud config (from cache/read) ──────────────────────
         const config = getFraudConfig(fraudData)
 
-        // Re-check bot detection with actual config
-        if (formLoadedAt) {
+        // Re-check bot detection with actual config (guarding against clock skew)
+        if (formLoadedAt && typeof formLoadedAt === 'number') {
             const elapsed = Date.now() - formLoadedAt
-            if (elapsed < config.minOrderSubmissionTimeMs) {
+            const minTime = Math.min(config.minOrderSubmissionTimeMs || 3000, 1500)
+            if (elapsed >= 0 && elapsed < minTime) {
                 signals.botDetected = true
             }
         }
 
         // ── Blocklist check (from same fraud doc, no extra read) ─────────
         if (fraudData) {
-            const blockedPhones = (fraudData.blockedPhones || []).map(p => normalizePhone(p))
-            const blockedIPs = fraudData.blockedIPs || []
+            const rawPhones = fraudData.blockedPhones || fraudData.settings?.blockedPhones || []
+            const blockedPhones = rawPhones.map(p => normalizePhone(p))
+            const rawIPs = fraudData.blockedIPs || fraudData.settings?.blockedIPs || []
 
             if (blockedPhones.includes(normalizedPhone)) {
                 signals.blockedPhone = true
             }
-            if (blockedIPs.includes(ip)) {
+            if (rawIPs.includes(ip)) {
                 signals.blockedIP = true
             }
         }
@@ -336,6 +390,7 @@ export async function POST(request) {
             const serverProduct = serverProducts.find(p => String(p.id || p._id) === String(item.productId))
             
             if (!serverProduct) {
+                cleanupInFlight()
                 return NextResponse.json(
                     { error: `পণ্য "${item.productId}" পাওয়া যায়নি।`, code: 'PRODUCT_NOT_FOUND' },
                     { status: 400 }
@@ -343,6 +398,7 @@ export async function POST(request) {
             }
 
             if (serverProduct.inStock === false) {
+                cleanupInFlight()
                 return NextResponse.json(
                     { error: `"${serverProduct.name || serverProduct.title || 'পণ্য'}" স্টকে নেই।`, code: 'OUT_OF_STOCK' },
                     { status: 400 }
@@ -413,17 +469,6 @@ export async function POST(request) {
         // ── 11. Duplicate & History checks (from preloaded data) ────────
         if (orderChecks.isDuplicate) {
             signals.duplicateOrder = true
-        } else if (finalTotal > 0 && Array.isArray(orderChecks.recentOrders)) {
-            // Re-check SAME_PHONE_SAME_AMOUNT using the verified final server total
-            const dupAmountOrder = orderChecks.recentOrders.find(
-                o => Math.abs((o.total || 0) - finalTotal) < 1
-            )
-            if (dupAmountOrder) {
-                signals.duplicateOrder = true
-                orderChecks.isDuplicate = true
-                orderChecks.matchedOrderId = dupAmountOrder.id
-                orderChecks.reason = 'SAME_PHONE_SAME_AMOUNT'
-            }
         }
 
         const history = orderChecks.history
@@ -451,6 +496,7 @@ export async function POST(request) {
 
         // ── 15. Decision ────────────────────────────────────────────────
         if (riskLevel === 'HIGH') {
+            cleanupInFlight()
             // Log the blocked attempt (non-blocking — don't await)
             logFraudEvent({
                 type: 'ORDER_BLOCKED',
@@ -476,6 +522,7 @@ export async function POST(request) {
 
         const newOrder = {
             id: orderId,
+            idempotencyKey: idempotencyKey || null,
             total: Number(finalTotal.toFixed(2)),
             amount: Number(finalTotal.toFixed(2)),
             subtotal: serverCalculatedSubtotal,
@@ -570,6 +617,7 @@ export async function POST(request) {
                     }).catch(err => console.warn('[OrderAPI] Coupon usedCount update notice:', err))
                 }
             } catch (error) {
+                cleanupInFlight(error)
                 console.error('[OrderAPI] Failed to save order to Firestore via Admin SDK:', error)
                 return NextResponse.json(
                     { error: 'অর্ডারটি ডাটাবেজে সংরক্ষণ করা যায়নি। অনুগ্রহ করে আবার চেষ্টা করুন।', code: 'DATABASE_WRITE_FAILED' },
@@ -578,9 +626,20 @@ export async function POST(request) {
             }
         }
 
-        // Mark idempotency key as processed only after successful Firestore save
+        // Prepare response payload
+        const responsePayload = {
+            success: true,
+            order: newOrder,
+            message: orderStatus === 'PENDING_REVIEW'
+                ? 'আপনার অর্ডারটি রিসিভ হয়েছে এবং পর্যালোচনাধীন আছে।'
+                : 'অর্ডারটি সফলভাবে সম্পন্ন হয়েছে!',
+        }
+
+        // Mark idempotency key as processed and resolve in-flight promise
         if (idempotencyKey) {
-            processedKeys.set(idempotencyKey, Date.now())
+            processedKeys.set(idempotencyKey, { order: newOrder, timestamp: Date.now() })
+            if (resolveInFlight) resolveInFlight(responsePayload)
+            inFlightOrders.delete(idempotencyKey)
         }
 
         // ── Non-blocking background tasks (don't delay the response) ────
@@ -675,15 +734,10 @@ export async function POST(request) {
         }
 
         // ── 17. Return the created order ────────────────────────────────
-        return NextResponse.json({
-            success: true,
-            order: newOrder,
-            message: orderStatus === 'PENDING_REVIEW'
-                ? 'আপনার অর্ডারটি রিসিভ হয়েছে এবং পর্যালোচনাধীন আছে।'
-                : 'অর্ডারটি সফলভাবে সম্পন্ন হয়েছে!',
-        })
+        return NextResponse.json(responsePayload)
 
     } catch (error) {
+        cleanupInFlight(error)
         console.error('[OrderAPI] Unexpected error:', error)
 
         logFraudEvent({

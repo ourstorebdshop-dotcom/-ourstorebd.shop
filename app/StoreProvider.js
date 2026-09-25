@@ -566,7 +566,8 @@ export default function StoreProvider({ children }) {
                     ]
 
                     // Admin-only collections — only fetched on admin pages (via secure Admin API)
-                    const adminFetches = isAdminPath ? [
+                    const currentIsAdmin = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+                    const adminFetches = currentIsAdmin ? [
                         loadAdminCollection('orders'),
                         loadAdminCollection('customers'),
                         loadAdminDoc('settings', 'fraud'),
@@ -592,12 +593,12 @@ export default function StoreProvider({ children }) {
                     ] = allResults.slice(0, 10)
 
                     // Map results — admin-only (indices 10+, only present on admin pages)
-                    const ordersRes = isAdminPath ? allResults[10] : { status: 'skipped' }
-                    const customersRes = isAdminPath ? allResults[11] : { status: 'skipped' }
-                    const fraudRes = isAdminPath ? allResults[12] : { status: 'skipped' }
-                    const cashflowRes = isAdminPath ? allResults[13] : { status: 'skipped' }
-                    const apiSettingsRes = isAdminPath ? allResults[14] : { status: 'skipped' }
-                    const integrationsRes = isAdminPath ? allResults[15] : { status: 'skipped' }
+                    const ordersRes = currentIsAdmin ? allResults[10] : { status: 'skipped' }
+                    const customersRes = currentIsAdmin ? allResults[11] : { status: 'skipped' }
+                    const fraudRes = currentIsAdmin ? allResults[12] : { status: 'skipped' }
+                    const cashflowRes = currentIsAdmin ? allResults[13] : { status: 'skipped' }
+                    const apiSettingsRes = currentIsAdmin ? allResults[14] : { status: 'skipped' }
+                    const integrationsRes = currentIsAdmin ? allResults[15] : { status: 'skipped' }
 
                     // --- 1. Products ---
                     if (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value)) {
@@ -638,7 +639,10 @@ export default function StoreProvider({ children }) {
 
                     // --- 4b. Orders ---
                     if (ordersRes.status === 'fulfilled' && Array.isArray(ordersRes.value)) {
-                        const fsOrders = ordersRes.value.filter(o => o && o.id)
+                        const fsOrders = ordersRes.value
+                            .filter(Boolean)
+                            .map(o => ({ ...o, id: o.id || o._docId }))
+                            .filter(o => o.id)
                         store.dispatch(hydrateOrders(fsOrders))
                         prevOrders = fsOrders
                         try { localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(fsOrders)) } catch (e) { /* ignore */ }
